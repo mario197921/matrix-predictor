@@ -8,7 +8,7 @@ import pytz
 # ==========================================
 # 🎨 UI: TOTAL MATRIX DESIGN (V65.1)
 # ==========================================
-st.set_page_config(page_title="The Matrix Predictor V65.1", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Matrix Bet", page_icon="🎯", layout="wide")
 
 st.markdown("""
     <style>
