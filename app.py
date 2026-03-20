@@ -6,9 +6,9 @@ from datetime import datetime, timezone, timedelta
 import pytz
 
 # ==========================================
-# 🎨 UI: TOTAL MATRIX DESIGN (V66.1 FULL)
+# 🎨 UI: TOTAL MATRIX DESIGN (V67.0)
 # ==========================================
-st.set_page_config(page_title="Matrix Bet", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Matrix Bet V67", page_icon="🎯", layout="wide")
 
 st.markdown("""
     <style>
@@ -25,10 +25,10 @@ st.markdown("""
     .form-box { letter-spacing: 2px; font-family: monospace; font-weight: bold; }
     .ritardo-testo { color: #e53e3e; font-size: 0.85em; font-weight: bold; }
     .dna-testo { color: #8e44ad; font-size: 0.85em; font-weight: bold; }
-    .streak-testo, .andata-testo, .mot-testo { font-size: 0.95em; font-weight: bold; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 5px; margin-right: 5px;}
-    .streak-testo { color: #e74c3c; background-color: #fceae9; }
-    .andata-testo { color: #2980b9; background-color: #ebf5fb; }
-    .mot-testo { color: #8e44ad; background-color: #f4ecf8; }
+    .streak-testo, .andata-testo, .mot-testo { font-size: 0.85em; font-weight: bold; padding: 3px 8px; border-radius: 5px; display: inline-block; margin-top: 5px; margin-right: 5px;}
+    .streak-testo { color: #e74c3c; background-color: #fceae9; border: 1px solid #fadbd8; }
+    .andata-testo { color: #2980b9; background-color: #ebf5fb; border: 1px solid #d6eaf8; }
+    .mot-testo { color: #1a1a1a; background-color: #fcf3cf; border: 1px solid #f1c40f; }
     .orario-match { color: #e67e22; font-weight: bold; font-family: monospace; font-size: 1.1em; }
     .quota-badge { background-color: #2ecc71; padding: 3px 8px; border-radius: 4px; font-size: 0.85em; color: #ffffff; margin-left: 5px; font-weight: bold;}
     .quota-badge-calc { background-color: #95a5a6; padding: 3px 8px; border-radius: 4px; font-size: 0.85em; color: #ffffff; margin-left: 5px;}
@@ -84,9 +84,7 @@ def get_player_minutes(player_id, season):
     except: return 0
 
 def analizza_infortuni_pesati(inf_list, partite_giocate_team):
-    malus = 0.0
-    t1_star, t2_rot, t3_ris = 0, 0, 0
-    visti = set()
+    malus = 0.0; t1_star, t2_rot, t3_ris = 0, 0, 0; visti = set()
     max_mins_possibili = max(1, partite_giocate_team * 90)
     for i in inf_list:
         p_id = i['player'].get('id')
@@ -246,7 +244,6 @@ def scarica_meteo(citta):
 def calcola_prob_poisson(xg, gol): return ((xg ** gol) * math.exp(-xg)) / math.factorial(gol)
 
 def calcola_tutti_i_mercati(xg_c, xg_t, tension_index):
-    # Ripristinate tutte le strutture V65.1
     p = {"1":0,"X":0,"2":0,"1X":0,"X2":0,"12":0,"Goal":0,"NoGoal":0, "Pari":0, "Dispari":0}
     mg = {"MG 1-3":0, "MG 1-4":0, "MG 2-3":0, "MG 2-4":0, "MG 2-5":0, "MG 3-4":0}
     uo_lines = [1.5, 2.5, 3.5, 4.5]
@@ -305,9 +302,9 @@ def calcola_tutti_i_mercati(xg_c, xg_t, tension_index):
     for ht in ["1", "X", "2"]:
         for ft in ["1", "X", "2"]: htft[f"HT/FT {ht}/{ft}"] = (ht_prob[ht] * p[ft]) 
 
-    # Integrazione Calcoli V66 (Cartellini e Angoli Proxy)
-    exp_corners = (xg_c + xg_t) * 3.8 + 1.5 
-    exp_cards = tension_index * 4.2
+    # Integrazione Calcoli Cartellini e Angoli (Proxy Alta Fedeltà x 7500 API)
+    exp_corners = (xg_c + xg_t) * 4.0 + 1.8 
+    exp_cards = tension_index * 4.5
     special = {
         "Over 8.5 Angoli": min(92.0, max(15.0, (exp_corners / 9.5) * 50)),
         "Over 4.5 Cartellini": min(88.0, max(20.0, (exp_cards / 5.0) * 50))
@@ -412,21 +409,29 @@ if btn_genera:
 
     for name in scelte:
         f_id = active_dict[name]
-        with st.spinner(f"Analisi Completa V66.1 {name}..."):
+        with st.spinner(f"Calcolo Punti e Motivazioni {name}..."):
             fix = requests.get("https://v3.football.api-sports.io/fixtures", headers=headers, params={'league': f_id, 'season': STAGIONE, 'from': start_str, 'to': end_str}).json()
             std = requests.get("https://v3.football.api-sports.io/standings", headers=headers, params={'league': f_id, 'season': STAGIONE}).json()
             
             if not fix.get('response'): continue
 
             db_stats = {}
+            punti_champions, punti_salvezza, tot_squadre, partite_totali_campionato = 0, 0, 20, 38
             if std.get('response') and len(std['response']) > 0 and 'league' in std['response'][0] and 'standings' in std['response'][0]['league']:
                 gruppo = std['response'][0]['league']['standings'][0]
                 tot_squadre = len(gruppo)
+                partite_totali_campionato = (tot_squadre - 1) * 2
+                
+                # Estraggo i punti di riferimento per le macro-zone
+                if tot_squadre >= 18:
+                    punti_champions = gruppo[3]['points'] # 4° posto
+                    punti_salvezza = gruppo[tot_squadre - 4]['points'] # Quartultimo posto
+                
                 for t in gruppo:
                     n = semplifica_nome(t['team']['name'])
                     db_stats[n] = {
-                        'id': t['team']['id'], 'rank': t['rank'], 'tot_teams': tot_squadre,
-                        'giocate': t['all']['played'], 
+                        'id': t['team']['id'], 'rank': t['rank'], 
+                        'giocate': t['all']['played'], 'punti': t['points'],
                         'ac': t['home']['goals']['for'] / max(1, t['home']['played']),
                         'dc': t['home']['goals']['against'] / max(1, t['home']['played']),
                         'at': t['away']['goals']['for'] / max(1, t['away']['played']),
@@ -475,36 +480,55 @@ if btn_genera:
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
                 
-                # Modulo Psicologia V66
+                # ========================================================
+                # V67 - MOTORE MATEMATICO MOTIVAZIONALE (PUNTI DISPONIBILI)
+                # ========================================================
                 is_coppa = name in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"]
-                is_ritorno_coppa = is_coppa and mese_attuale in [3, 4, 5]
                 m_mot_c, m_mot_t, tension_idx = 1.0, 1.0, 1.0
                 msg_mot = ""
 
-                if is_ritorno_coppa:
+                if is_coppa and mese_attuale in [3, 4, 5]:
                     m_mot_c, m_mot_t = 1.25, 1.25 
                     tension_idx += 0.3
                     msg_mot = "🔥 DENTRO O FUORI (Coppa)"
                 elif not is_coppa:
-                    rank_c, rank_t = db_stats[c_s]['rank'], db_stats[t_s]['rank']
-                    tot = db_stats[c_s]['tot_teams']
+                    punti_disp_c = (partite_totali_campionato - db_stats[c_s]['giocate']) * 3
+                    punti_disp_t = (partite_totali_campionato - db_stats[t_s]['giocate']) * 3
                     
-                    if rank_c >= tot - 5: m_mot_c = 1.15; msg_mot += "🆘 C. Disperata "
-                    elif rank_c <= 3 and mese_attuale >= 3: m_mot_c = 0.90; msg_mot += "🥶 C. Braccino "
-                    else: m_mot_c = 1.05
-                    
-                    if rank_t >= tot - 5: m_mot_t = 1.15; msg_mot += "🆘 O. Disperata"
-                    elif rank_t <= 3 and mese_attuale >= 3: m_mot_t = 0.90; msg_mot += "🥶 O. Braccino"
-                    else: m_mot_t = 1.05
+                    punti_c = db_stats[c_s]['punti']
+                    punti_t = db_stats[t_s]['punti']
+                    rank_c = db_stats[c_s]['rank']
+                    rank_t = db_stats[t_s]['rank']
 
-                    if (rank_c >= tot - 5) or (rank_t >= tot - 5): tension_idx += 0.2
-                    if abs(rank_c - rank_t) <= 2: tension_idx += 0.15
+                    # Analisi CASA
+                    if rank_c <= 5 or (punti_champions - punti_c) <= punti_disp_c and (punti_champions - punti_c) > 0:
+                        m_mot_c = 1.15; msg_mot += "🏆 C. Vertice "
+                    elif rank_c >= tot_squadre - 5 and (punti_salvezza - punti_c) <= punti_disp_c:
+                        m_mot_c = 1.20; msg_mot += "🆘 C. Disperata "
+                        tension_idx += 0.15
+                    elif mese_attuale >= 3 and (punti_c - punti_salvezza) > 12 and (punti_champions - punti_c) > 15:
+                        m_mot_c = 1.10; msg_mot += "🌴 C. Sgombra "
+                    
+                    # Analisi OSPITE
+                    if rank_t <= 5 or (punti_champions - punti_t) <= punti_disp_t and (punti_champions - punti_t) > 0:
+                        m_mot_t = 1.15; msg_mot += "🏆 O. Vertice"
+                    elif rank_t >= tot_squadre - 5 and (punti_salvezza - punti_t) <= punti_disp_t:
+                        m_mot_t = 1.20; msg_mot += "🆘 O. Disperata"
+                        tension_idx += 0.15
+                    elif mese_attuale >= 3 and (punti_t - punti_salvezza) > 12 and (punti_champions - punti_t) > 15:
+                        m_mot_t = 1.10; msg_mot += "🌴 O. Sgombra"
+
+                    if abs(rank_c - rank_t) <= 3: tension_idx += 0.2 # Scontro diretto in classifica
 
                 xg_base_c = math.sqrt(max(0.01, db_stats[c_s]['ac']) * max(0.01, db_stats[t_s]['dt'])) * m_f_c * m_st_c
                 xg_base_t = math.sqrt(max(0.01, db_stats[t_s]['at']) * max(0.01, db_stats[c_s]['dc'])) * m_f_t * m_st_t
                 
-                xg_c = xg_base_c * (1 - malus_c) * (1 + (malus_t * 0.5)) * m_h2h_c * b_and_c * m_mot_c
-                xg_t = xg_base_t * (1 - malus_t) * (1 + (malus_c * 0.5)) * m_h2h_t * b_and_t * m_mot_t
+                # Se una squadra è a mente sgombra, spingiamo leggermente gli xG della controparte per simulare disattenzioni difensive
+                se_sgombra_c = "C. Sgombra" in msg_mot
+                se_sgombra_t = "O. Sgombra" in msg_mot
+                
+                xg_c = xg_base_c * (1 - malus_c) * (1 + (malus_t * 0.5)) * m_h2h_c * b_and_c * m_mot_c * (1.10 if se_sgombra_t else 1.0)
+                xg_t = xg_base_t * (1 - malus_t) * (1 + (malus_c * 0.5)) * m_h2h_t * b_and_t * m_mot_t * (1.10 if se_sgombra_c else 1.0)
                 
                 msg_streak = ""
                 if streak_breaker_c: xg_c = max(1.15, xg_c * 1.45); msg_streak += "🔥 STREAK CASA "
@@ -520,19 +544,27 @@ if btn_genera:
 
                 full_tips = calcola_tutti_i_mercati(xg_c, xg_t, tension_idx)
                 
+                # Filtro di Sicurezza sui Segni Secchi (Nessun segno fisso se < 45%)
+                best_1x2_key = max(["1", "X", "2"], key=lambda k: full_tips[k])
+                if full_tips[best_1x2_key] < 45.0:
+                    best_1x2_key = "No Segno Fisso"
+                    best_1x2_prob = 0.0
+                    best_1x2_q = "-"
+                    best_1x2_real = False
+                else:
+                    best_1x2_prob = full_tips[best_1x2_key]
+                    best_1x2_q, best_1x2_real = get_quota_finale(best_1x2_key, best_1x2_prob, quote_reali_match)
+
                 for k,v in full_tips.items():
                     q_finale, is_real = get_quota_finale(k, v, quote_reali_match)
                     st.session_state.all_tips_global.append({
                         "Match": f"{c_u} vs {t_u}", "League": name, "Tip": k, 
                         "Prob": v, "Quota": q_finale, "Real": is_real, "Time": orario_ita
                     })
-                
-                best_1x2_key = max(["1", "X", "2"], key=lambda k: full_tips[k])
-                best_1x2_q, best_1x2_real = get_quota_finale(best_1x2_key, full_tips[best_1x2_key], quote_reali_match)
 
                 matches_list.append({
                     "orario": orario_ita, "c_u": c_u, "t_u": t_u, "c_s": c_s, "t_s": t_s, 
-                    "all_tips": full_tips, "best_1x2": (best_1x2_key, full_tips[best_1x2_key], best_1x2_q, best_1x2_real),
+                    "all_tips": full_tips, "best_1x2": (best_1x2_key, best_1x2_prob, best_1x2_q, best_1x2_real),
                     "quote_reali": quote_reali_match,
                     "xg_c": xg_c, "xg_t": xg_t, "arb": arb, "is_sev": is_sev,
                     "count_c": count_c, "t1_c": t1_c, "t2_c": t2_c, "t3_c": t3_c,
@@ -602,7 +634,7 @@ if st.session_state.data_master:
             st.markdown("</div>", unsafe_allow_html=True)
 
     with t2:
-        st.write(f"Partite UFFICIALI V66.1 per il periodo **{start_str} / {end_str}**.")
+        st.write(f"Partite UFFICIALI V67.0 per il periodo **{start_str} / {end_str}**.")
         for camp, matches in st.session_state.data_master.items():
             with st.expander(f"🏆 {camp}", expanded=False):
                 matches = sorted(matches, key=lambda x: x['orario'])
@@ -635,9 +667,12 @@ if st.session_state.data_master:
                             st.write(f"<span class='ritardo-testo'>Ritardi 🏠: {m['rit_c']} | ✈️: {m['rit_t']}</span>", unsafe_allow_html=True)
                             st.markdown(f"<div class='h2h-details'>{m['dettagli_h2h']}</div>", unsafe_allow_html=True)
                         
-                        badge_1x2_class = "quota-badge" if m['best_1x2'][3] else "quota-badge-calc"
-                        badge_1x2_text = "Ufficiale Bet365" if m['best_1x2'][3] else "Calibrata"
-                        st.markdown(f"<div class='pure-1x2'>👑 Miglior Segno Secco: <b>{m['best_1x2'][0]}</b> ({m['best_1x2'][1]:.1f}%) <span class='{badge_1x2_class}'>Quota {badge_1x2_text}: {m['best_1x2'][2]}</span></div>", unsafe_allow_html=True)
+                        if m['best_1x2'][0] == "No Segno Fisso":
+                            st.markdown(f"<div class='pure-1x2'>⚠️ <b>NESSUN SEGNO SECCO CONSIGLIATO</b>: Match troppo in equilibrio per l'1X2. Affidarsi ai mercati Goal o U/O.</div>", unsafe_allow_html=True)
+                        else:
+                            badge_1x2_class = "quota-badge" if m['best_1x2'][3] else "quota-badge-calc"
+                            badge_1x2_text = "Ufficiale Bet365" if m['best_1x2'][3] else "Calibrata"
+                            st.markdown(f"<div class='pure-1x2'>👑 Miglior Segno Secco: <b>{m['best_1x2'][0]}</b> ({m['best_1x2'][1]:.1f}%) <span class='{badge_1x2_class}'>Quota {badge_1x2_text}: {m['best_1x2'][2]}</span></div>", unsafe_allow_html=True)
                         
                         exclude_safe = ["U4.5", "O0.5", "O1.5", "Casa O0.5", "Ospite O0.5"]
                         filtered_tips = {k: v for k, v in m['all_tips'].items() if k not in exclude_safe}
@@ -661,7 +696,7 @@ if st.session_state.data_master:
         budget_perf = budget_totale * 0.30
         budget_azzardo = budget_totale * 0.10
         
-        testo_export = f"=== MATRIX V66.1: SCHEDINE ===\nPeriodo: {start_str} / {end_str}\n\n"
+        testo_export = f"=== MATRIX V67.0: SCHEDINE ===\nPeriodo: {start_str} / {end_str}\n\n"
         
         if len(st.session_state.all_tips_global) >= 4:
             st.markdown("<div class='strategy-box safety-bg'>", unsafe_allow_html=True)
