@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 import pytz
 
 # ==========================================
-# 🎨 UI: TOTAL MATRIX DESIGN (V67.0)
+# 🎨 UI: TOTAL MATRIX DESIGN (V67.2)
 # ==========================================
 st.set_page_config(page_title="Matrix Bet V67", page_icon="🎯", layout="wide")
 
@@ -328,21 +328,29 @@ def get_family(tip):
     if "Angoli" in tip or "Cartellini" in tip: return "SPECIAL"
     return "ALTRO"
 
-def costruisci_schedina_dinamica(pool, min_q, max_q, target_mult, max_match_q=5.0, max_righe=12, max_same_family=2):
+def costruisci_schedina_dinamica(pool, min_q, max_q, target_mult, escludi_match=None, max_match_q=5.0, max_righe=12, max_same_family=2):
+    if escludi_match is None: escludi_match = set()
     valid = [x for x in pool if min_q <= float(x['Quota']) <= max_q and float(x['Quota']) <= max_match_q]
     pool_ordinata = sorted(valid, key=lambda x: (x['Prob']/100) * float(x['Quota']), reverse=True)
-    selezionate, viste, family_counts = [], set(), {}
+    
+    selezionate, viste_locali, family_counts = [], set(), {}
     q_tot, prob_tot = 1.0, 1.0
+    
     for item in pool_ordinata:
         famiglia = get_family(item['Tip'])
-        if item['Match'] not in viste and family_counts.get(famiglia, 0) < max_same_family:
+        match_name = item['Match']
+        
+        # V67.2: Controlliamo che il match non sia mai stato usato né in questa schedina, né nelle altre!
+        if match_name not in viste_locali and match_name not in escludi_match and family_counts.get(famiglia, 0) < max_same_family:
             selezionate.append(item)
-            viste.add(item['Match'])
+            viste_locali.add(match_name)
             family_counts[famiglia] = family_counts.get(famiglia, 0) + 1
             q_tot *= float(item['Quota'])
             prob_tot *= (item['Prob'] / 100)
+            
         if q_tot >= target_mult or len(selezionate) >= max_righe: break
-    return selezionate, q_tot, prob_tot
+        
+    return selezionate, q_tot, prob_tot, viste_locali.union(escludi_match)
 
 # ==========================================
 # 🏠 LOGICA DI STATO E INTERFACCIA
@@ -367,23 +375,23 @@ st.sidebar.markdown("---")
 with st.sidebar.expander("🛠️ Personalizza Schedine", expanded=False):
     st.markdown("🟢 **Range SAFETY**")
     sc1, sc2 = st.columns(2)
-    safe_min = sc1.number_input("Min", 1.01, 2.00, 1.05, step=0.01, key="s_min")
-    safe_max = sc2.number_input("Max", safe_min, 3.00, 1.45, step=0.01, key="s_max")
+    safe_min = sc1.number_input("Min", 1.01, 2.00, 1.30, step=0.01, key="s_min")
+    safe_max = sc2.number_input("Max", safe_min, 3.00, 1.50, step=0.01, key="s_max")
     safe_target = st.number_input("Target Raddoppio", 1.5, 10.0, 2.0, step=0.5, key="st")
     
     st.markdown("---")
     st.markdown("🟠 **Range PERFORMANCE**")
     pc1, pc2 = st.columns(2)
-    perf_min = pc1.number_input("Min", 1.10, 3.00, 1.31, step=0.01, key="p_min")
+    perf_min = pc1.number_input("Min", 1.10, 3.00, 1.51, step=0.01, key="p_min")
     perf_max = pc2.number_input("Max", perf_min, 5.00, 1.80, step=0.01, key="p_max")
     perf_target = st.number_input("Target Moltiplicatore", 2.0, 20.0, 5.0, step=0.5, key="pt")
     
     st.markdown("---")
     st.markdown("🔴 **Range AZZARDO**")
     ac1, ac2 = st.columns(2)
-    azz_min = ac1.number_input("Min", 1.30, 5.00, 1.71, step=0.01, key="a_min")
-    azz_max = ac2.number_input("Max", azz_min, 20.00, 3.50, step=0.01, key="a_max")
-    azz_target = st.number_input("Target Quota Totale", 10.0, 200.0, 60.0, step=5.0, key="at")
+    azz_min = ac1.number_input("Min", 1.30, 5.00, 1.81, step=0.01, key="a_min")
+    azz_max = ac2.number_input("Max", azz_min, 20.00, 2.80, step=0.01, key="a_max")
+    azz_target = st.number_input("Target Quota Totale", 10.0, 200.0, 30.0, step=5.0, key="at")
 
 st.sidebar.markdown("---")
 
@@ -422,10 +430,9 @@ if btn_genera:
                 tot_squadre = len(gruppo)
                 partite_totali_campionato = (tot_squadre - 1) * 2
                 
-                # Estraggo i punti di riferimento per le macro-zone
                 if tot_squadre >= 18:
-                    punti_champions = gruppo[3]['points'] # 4° posto
-                    punti_salvezza = gruppo[tot_squadre - 4]['points'] # Quartultimo posto
+                    punti_champions = gruppo[3]['points'] 
+                    punti_salvezza = gruppo[tot_squadre - 4]['points'] 
                 
                 for t in gruppo:
                     n = semplifica_nome(t['team']['name'])
@@ -480,9 +487,6 @@ if btn_genera:
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
                 
-                # ========================================================
-                # V67 - MOTORE MATEMATICO MOTIVAZIONALE (PUNTI DISPONIBILI)
-                # ========================================================
                 is_coppa = name in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"]
                 m_mot_c, m_mot_t, tension_idx = 1.0, 1.0, 1.0
                 msg_mot = ""
@@ -500,7 +504,7 @@ if btn_genera:
                     rank_c = db_stats[c_s]['rank']
                     rank_t = db_stats[t_s]['rank']
 
-                                        # Analisi CASA (V67.1 Corretta)
+                    # Analisi CASA (V67.1 Corretta)
                     if rank_c <= 6 or (punti_champions - punti_c) <= 7 and (punti_champions - punti_c) > 0:
                         m_mot_c = 1.15; msg_mot += "🏆 C. Vertice "
                     elif rank_c >= tot_squadre - 6:
@@ -509,7 +513,7 @@ if btn_genera:
                     elif mese_attuale >= 3 and (punti_c - punti_salvezza) > 9 and (punti_champions - punti_c) > 10:
                         m_mot_c = 1.10; msg_mot += "🌴 C. Sgombra "
                     else:
-                        m_mot_c = 1.05 # Zona neutrale
+                        m_mot_c = 1.05
                     
                     # Analisi OSPITE (V67.1 Corretta)
                     if rank_t <= 6 or (punti_champions - punti_t) <= 7 and (punti_champions - punti_t) > 0:
@@ -520,15 +524,13 @@ if btn_genera:
                     elif mese_attuale >= 3 and (punti_t - punti_salvezza) > 9 and (punti_champions - punti_t) > 10:
                         m_mot_t = 1.10; msg_mot += "🌴 O. Sgombra"
                     else:
-                        m_mot_t = 1.05 # Zona neutrale
+                        m_mot_t = 1.05
 
-
-                    if abs(rank_c - rank_t) <= 3: tension_idx += 0.2 # Scontro diretto in classifica
+                    if abs(rank_c - rank_t) <= 3: tension_idx += 0.2
 
                 xg_base_c = math.sqrt(max(0.01, db_stats[c_s]['ac']) * max(0.01, db_stats[t_s]['dt'])) * m_f_c * m_st_c
                 xg_base_t = math.sqrt(max(0.01, db_stats[t_s]['at']) * max(0.01, db_stats[c_s]['dc'])) * m_f_t * m_st_t
                 
-                # Se una squadra è a mente sgombra, spingiamo leggermente gli xG della controparte per simulare disattenzioni difensive
                 se_sgombra_c = "C. Sgombra" in msg_mot
                 se_sgombra_t = "O. Sgombra" in msg_mot
                 
@@ -549,7 +551,6 @@ if btn_genera:
 
                 full_tips = calcola_tutti_i_mercati(xg_c, xg_t, tension_idx)
                 
-                # Filtro di Sicurezza sui Segni Secchi (Nessun segno fisso se < 45%)
                 best_1x2_key = max(["1", "X", "2"], key=lambda k: full_tips[k])
                 if full_tips[best_1x2_key] < 45.0:
                     best_1x2_key = "No Segno Fisso"
@@ -627,9 +628,9 @@ if st.session_state.data_master:
         col3, col4 = st.columns(2)
         with col3:
             st.markdown("<div class='table-container'>", unsafe_allow_html=True)
-            st.subheader("1X2 & Doppie Chance")
-            pool_1x2 = [x for x in st.session_state.all_tips_global if x['Tip'] in ["1", "X", "2", "1X", "X2"]]
-            if pool_1x2: st.dataframe(pd.DataFrame(pool_1x2).sort_values(by="Prob", ascending=False).head(10)[['Match', 'Tip', 'Prob', 'Quota']].style.format({"Prob": "{:.1f}%", "Quota": "{:.2f}"}), hide_index=True)
+            st.subheader("🛡️ Doppie Chance (1X, X2, 12)")
+            pool_dc = [x for x in st.session_state.all_tips_global if x['Tip'] in ["1X", "X2", "12"]]
+            if pool_dc: st.dataframe(pd.DataFrame(pool_dc).sort_values(by="Prob", ascending=False).head(10)[['Match', 'Tip', 'Prob', 'Quota']].style.format({"Prob": "{:.1f}%", "Quota": "{:.2f}"}), hide_index=True)
             st.markdown("</div>", unsafe_allow_html=True)
         with col4:
             st.markdown("<div class='table-container'>", unsafe_allow_html=True)
@@ -639,7 +640,7 @@ if st.session_state.data_master:
             st.markdown("</div>", unsafe_allow_html=True)
 
     with t2:
-        st.write(f"Partite UFFICIALI V67.0 per il periodo **{start_str} / {end_str}**.")
+        st.write(f"Partite UFFICIALI V67.2 per il periodo **{start_str} / {end_str}**.")
         for camp, matches in st.session_state.data_master.items():
             with st.expander(f"🏆 {camp}", expanded=False):
                 matches = sorted(matches, key=lambda x: x['orario'])
@@ -701,12 +702,12 @@ if st.session_state.data_master:
         budget_perf = budget_totale * 0.30
         budget_azzardo = budget_totale * 0.10
         
-        testo_export = f"=== MATRIX V67.0: SCHEDINE ===\nPeriodo: {start_str} / {end_str}\n\n"
+        testo_export = f"=== MATRIX V67.2: SCHEDINE ===\nPeriodo: {start_str} / {end_str}\n\n"
         
         if len(st.session_state.all_tips_global) >= 4:
             st.markdown("<div class='strategy-box safety-bg'>", unsafe_allow_html=True)
             st.subheader(f"🟢 Schedina SAFETY (Fascia {safe_min} - {safe_max}) | Puntata: {budget_safety:.2f}€")
-            s_slip, q_tot_s, prob_s = costruisci_schedina_dinamica(st.session_state.all_tips_global, safe_min, safe_max, target_mult=safe_target, max_righe=6, max_same_family=2)
+            s_slip, q_tot_s, prob_s, usate_safety = costruisci_schedina_dinamica(st.session_state.all_tips_global, safe_min, safe_max, target_mult=safe_target, max_righe=6, max_same_family=2, escludi_match=set())
             
             testo_export += f"🟢 SAFETY ({budget_safety:.2f}€) - {len(s_slip)} Eventi\n"
             for x in s_slip:
@@ -722,7 +723,7 @@ if st.session_state.data_master:
 
             st.markdown("<div class='strategy-box performance-bg'>", unsafe_allow_html=True)
             st.subheader(f"🟠 Schedina PERFORMANCE (Fascia {perf_min} - {perf_max}) | Puntata: {budget_perf:.2f}€")
-            p_slip, q_tot_p, prob_p = costruisci_schedina_dinamica(st.session_state.all_tips_global, perf_min, perf_max, target_mult=perf_target, max_righe=6, max_same_family=2)
+            p_slip, q_tot_p, prob_p, usate_perf = costruisci_schedina_dinamica(st.session_state.all_tips_global, perf_min, perf_max, target_mult=perf_target, max_righe=6, max_same_family=2, escludi_match=usate_safety)
             
             testo_export += f"🟠 PERFORMANCE ({budget_perf:.2f}€) - {len(p_slip)} Eventi\n"
             for x in p_slip:
@@ -738,7 +739,7 @@ if st.session_state.data_master:
 
             st.markdown("<div class='strategy-box risk-bg'>", unsafe_allow_html=True)
             st.subheader(f"🔴 Schedina AZZARDO (Fascia {azz_min} - {azz_max}) | Puntata: {budget_azzardo:.2f}€")
-            r_slip, q_tot_a, prob_a = costruisci_schedina_dinamica(st.session_state.all_tips_global, azz_min, azz_max, target_mult=azz_target, max_match_q=azz_max, max_righe=6, max_same_family=2)
+            r_slip, q_tot_a, prob_a, _ = costruisci_schedina_dinamica(st.session_state.all_tips_global, azz_min, azz_max, target_mult=azz_target, max_match_q=azz_max, max_righe=6, max_same_family=2, escludi_match=usate_perf)
             
             testo_export += f"🔴 AZZARDO ({budget_azzardo:.2f}€) - {len(r_slip)} Eventi\n"
             for x in r_slip:
