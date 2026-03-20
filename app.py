@@ -500,23 +500,28 @@ if btn_genera:
                     rank_c = db_stats[c_s]['rank']
                     rank_t = db_stats[t_s]['rank']
 
-                    # Analisi CASA
-                    if rank_c <= 5 or (punti_champions - punti_c) <= punti_disp_c and (punti_champions - punti_c) > 0:
+                                        # Analisi CASA (V67.1 Corretta)
+                    if rank_c <= 6 or (punti_champions - punti_c) <= 7 and (punti_champions - punti_c) > 0:
                         m_mot_c = 1.15; msg_mot += "🏆 C. Vertice "
-                    elif rank_c >= tot_squadre - 5 and (punti_salvezza - punti_c) <= punti_disp_c:
+                    elif rank_c >= tot_squadre - 6:
                         m_mot_c = 1.20; msg_mot += "🆘 C. Disperata "
                         tension_idx += 0.15
-                    elif mese_attuale >= 3 and (punti_c - punti_salvezza) > 12 and (punti_champions - punti_c) > 15:
+                    elif mese_attuale >= 3 and (punti_c - punti_salvezza) > 9 and (punti_champions - punti_c) > 10:
                         m_mot_c = 1.10; msg_mot += "🌴 C. Sgombra "
+                    else:
+                        m_mot_c = 1.05 # Zona neutrale
                     
-                    # Analisi OSPITE
-                    if rank_t <= 5 or (punti_champions - punti_t) <= punti_disp_t and (punti_champions - punti_t) > 0:
+                    # Analisi OSPITE (V67.1 Corretta)
+                    if rank_t <= 6 or (punti_champions - punti_t) <= 7 and (punti_champions - punti_t) > 0:
                         m_mot_t = 1.15; msg_mot += "🏆 O. Vertice"
-                    elif rank_t >= tot_squadre - 5 and (punti_salvezza - punti_t) <= punti_disp_t:
+                    elif rank_t >= tot_squadre - 6:
                         m_mot_t = 1.20; msg_mot += "🆘 O. Disperata"
                         tension_idx += 0.15
-                    elif mese_attuale >= 3 and (punti_t - punti_salvezza) > 12 and (punti_champions - punti_t) > 15:
+                    elif mese_attuale >= 3 and (punti_t - punti_salvezza) > 9 and (punti_champions - punti_t) > 10:
                         m_mot_t = 1.10; msg_mot += "🌴 O. Sgombra"
+                    else:
+                        m_mot_t = 1.05 # Zona neutrale
+
 
                     if abs(rank_c - rank_t) <= 3: tension_idx += 0.2 # Scontro diretto in classifica
 
