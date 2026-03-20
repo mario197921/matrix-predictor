@@ -6,9 +6,9 @@ from datetime import datetime, timezone, timedelta
 import pytz
 
 # ==========================================
-# 🎨 UI: TOTAL MATRIX DESIGN (V67.2)
+# 🎨 UI: TOTAL MATRIX DESIGN (V68.1)
 # ==========================================
-st.set_page_config(page_title="Matrix Bet V67", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Matrix Bet V68.1", page_icon="🎯", layout="wide")
 
 st.markdown("""
     <style>
@@ -35,12 +35,16 @@ st.markdown("""
     .pure-1x2 { margin-top: 15px; margin-bottom: 15px; padding: 10px; background-color: #fdfaf0; border-radius: 8px; border-left: 5px solid #f1c40f; font-size: 1.05em; }
     .star-testo { color: #c0392b; font-weight: bold; font-size: 0.85em; }
     .h2h-details { font-size: 0.75em; color: #555; margin-top: 8px; padding: 8px; background-color: #f8f9fa; border-radius: 5px; border-left: 3px solid #8e44ad; }
+    .stats-box { background-color: #f4f6f7; padding: 12px; border-radius: 8px; border-left: 4px solid #3498db; margin-top: 10px; font-size: 0.9em;}
+    .stile-orizzontale { color: #2980b9; font-weight: bold; }
+    .stile-verticale { color: #c0392b; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- CONFIGURAZIONE ---
 API_KEY_FOOTBALL = 'dc4d6488653c2d9a763290a44eb1613f'
 STAGIONE = "2025"
+HEADERS = {'x-apisports-key': API_KEY_FOOTBALL}
 
 MASTER_LEAGUES = {
     "🇪🇺 Champions League": 2, "🇪🇺 Europa League": 3, "🇪🇺 Conference League": 848,
@@ -57,15 +61,12 @@ MASTER_LEAGUES = {
 @st.cache_data(ttl=3600)
 def get_active_leagues(start_date, end_date):
     active_ids = set()
-    url = "https://v3.football.api-sports.io/fixtures"
-    headers = {'x-apisports-key': API_KEY_FOOTBALL}
     delta = end_date - start_date
-    days_to_check = min(delta.days + 1, 7) 
+    days = min(delta.days + 1, 7) 
     try:
-        for i in range(days_to_check):
+        for i in range(days):
             d_str = (start_date + timedelta(days=i)).strftime('%Y-%m-%d')
-            resp = requests.get(url, headers=headers, params={'date': d_str}).json()
-            if resp.get('errors'): return MASTER_LEAGUES
+            resp = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'date': d_str}).json()
             if 'response' in resp: active_ids.update({f['league']['id'] for f in resp['response']})
         return {k: v for k, v in MASTER_LEAGUES.items() if v in active_ids}
     except: return MASTER_LEAGUES
@@ -74,23 +75,19 @@ def get_active_leagues(start_date, end_date):
 def get_player_minutes(player_id, season):
     if not player_id: return 0
     try:
-        url = "https://v3.football.api-sports.io/players"
-        headers = {'x-apisports-key': API_KEY_FOOTBALL}
-        resp = requests.get(url, headers=headers, params={'id': player_id, 'season': season}).json()
-        if resp.get('response'):
-            stats = resp['response'][0]['statistics']
-            return sum(s['games']['minutes'] or 0 for s in stats if s['games']['minutes'])
+        resp = requests.get("https://v3.football.api-sports.io/players", headers=HEADERS, params={'id': player_id, 'season': season}).json()
+        if resp.get('response'): return sum(s['games']['minutes'] or 0 for s in resp['response'][0]['statistics'] if s['games']['minutes'])
         return 0
     except: return 0
 
 def analizza_infortuni_pesati(inf_list, partite_giocate_team):
     malus = 0.0; t1_star, t2_rot, t3_ris = 0, 0, 0; visti = set()
-    max_mins_possibili = max(1, partite_giocate_team * 90)
+    max_mins = max(1, partite_giocate_team * 90)
     for i in inf_list:
         p_id = i['player'].get('id')
         if not p_id or p_id in visti: continue
         visti.add(p_id)
-        ratio = get_player_minutes(p_id, STAGIONE) / max_mins_possibili
+        ratio = get_player_minutes(p_id, STAGIONE) / max_mins
         if ratio >= 0.50: malus += 0.15; t1_star += 1
         elif ratio >= 0.20: malus += 0.05; t2_rot += 1
         else: malus += 0.01; t3_ris += 1
@@ -99,9 +96,7 @@ def analizza_infortuni_pesati(inf_list, partite_giocate_team):
 @st.cache_data(ttl=3600)
 def scarica_quote_native(league_id, date_str):
     try:
-        url = "https://v3.football.api-sports.io/odds"
-        headers = {'x-apisports-key': API_KEY_FOOTBALL}
-        resp = requests.get(url, headers=headers, params={'league': league_id, 'season': STAGIONE, 'date': date_str, 'bookmaker': 8}).json()
+        resp = requests.get("https://v3.football.api-sports.io/odds", headers=HEADERS, params={'league': league_id, 'season': STAGIONE, 'date': date_str, 'bookmaker': 8}).json()
         quote_dict = {}
         for item in resp.get('response', []):
             fix_id = item['fixture']['id']
@@ -129,22 +124,51 @@ def scarica_quote_native(league_id, date_str):
         return quote_dict
     except: return {}
 
-def converti_prob_in_quota(prob_percentuale):
-    if prob_percentuale <= 0: return 50.0
-    if prob_percentuale > 98: return 1.05
-    quota_fair = 100 / prob_percentuale
-    return max(1.01, round(1.0 + ((quota_fair - 1.0) * 1.55), 2))
+# --- NUOVO MODULO V68 ---
+@st.cache_data(ttl=3600)
+def analizza_statistiche_avanzate(team_id):
+    try:
+        resp = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'team': team_id, 'last': 3, 'status': 'FT'}).json()
+        matches = resp.get('response', [])
+        tot_poss, tot_tiri, tot_gol, tot_corner, tot_cart = 0, 0, 0, 0, 0
+        match_v = 0
+        for m in matches:
+            fix_id = m['fixture']['id']
+            stats_resp = requests.get("https://v3.football.api-sports.io/fixtures/statistics", headers=HEADERS, params={'fixture': fix_id}).json()
+            if stats_resp.get('response'):
+                for t_stats in stats_resp['response']:
+                    if str(t_stats['team']['id']) == str(team_id):
+                        s_dict = {s['type']: s['value'] for s in t_stats['statistics']}
+                        poss = str(s_dict.get('Ball Possession', '50%')).replace('%', '')
+                        tot_poss += int(poss) if poss.isdigit() else 50
+                        tot_tiri += int(s_dict.get('Shots on Goal', 0) or 0)
+                        tot_corner += int(s_dict.get('Corner Kicks', 0) or 0)
+                        tot_cart += int(s_dict.get('Yellow Cards', 0) or 0) + int(s_dict.get('Red Cards', 0) or 0)
+                        is_home = str(m['teams']['home']['id']) == str(team_id)
+                        tot_gol += int(m['goals']['home'] if is_home else m['goals']['away'])
+                        match_v += 1
+        if match_v == 0: match_v = 1 
+        avg_poss = tot_poss / match_v
+        avg_tiri = tot_tiri / match_v
+        avg_corner = tot_corner / match_v
+        avg_cart = tot_cart / match_v
+        tiri_per_gol = avg_tiri / tot_gol if tot_gol > 0 else avg_tiri + 5 
+        
+        if avg_poss > 55 and avg_tiri < 4: stile = "Orizzontale (Tiki-Taka Sterile)"
+        elif avg_poss < 45 and avg_tiri > 4: stile = "Verticale (Contropiede)"
+        else: stile = "Bilanciato"
+        return avg_poss, avg_tiri, tiri_per_gol, avg_corner, avg_cart, stile
+    except: return 50.0, 4.0, 4.0, 4.5, 2.0, "Bilanciato"
 
 def get_quota_finale(tip, prob, quote_reali):
     if quote_reali and tip in quote_reali: return quote_reali[tip], True
-    return converti_prob_in_quota(prob), False
+    if prob <= 0: return 50.0, False
+    return max(1.01, round(1.0 + (((100 / prob) - 1.0) * 1.55), 2)), False
 
 @st.cache_data(ttl=3600)
 def analizza_squadra_globale(team_id):
     try:
-        url = "https://v3.football.api-sports.io/fixtures"
-        headers = {'x-apisports-key': API_KEY_FOOTBALL}
-        resp = requests.get(url, headers=headers, params={'team': team_id, 'last': 10, 'status': 'FT'}).json()
+        resp = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'team': team_id, 'last': 10, 'status': 'FT'}).json()
         matches = resp.get('response', [])
         if not matches: return 1.0, False, "N/D", 1.0, "Nessuno"
         
@@ -184,11 +208,8 @@ def analizza_squadra_globale(team_id):
 @st.cache_data(ttl=3600)
 def analizza_h2h_dna_e_andata(id_casa, id_trasf):
     try:
-        url = "https://v3.football.api-sports.io/fixtures/headtohead"
-        headers = {'x-apisports-key': API_KEY_FOOTBALL}
-        resp = requests.get(url, headers=headers, params={'h2h': f"{id_casa}-{id_trasf}", 'last': 5}).json()
+        resp = requests.get("https://v3.football.api-sports.io/fixtures/headtohead", headers=HEADERS, params={'h2h': f"{id_casa}-{id_trasf}", 'last': 5}).json()
         matches = resp.get('response', [])
-        
         if not matches: return 1.0, 1.0, 0, 0, "Nessun Precedente", 1.0, 1.0, "", "Nessun match."
         
         vittorie_c, vittorie_t, gol_c, gol_t = 0, 0, 0, 0
@@ -243,7 +264,7 @@ def scarica_meteo(citta):
 
 def calcola_prob_poisson(xg, gol): return ((xg ** gol) * math.exp(-xg)) / math.factorial(gol)
 
-def calcola_tutti_i_mercati(xg_c, xg_t, tension_index):
+def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev):
     p = {"1":0,"X":0,"2":0,"1X":0,"X2":0,"12":0,"Goal":0,"NoGoal":0, "Pari":0, "Dispari":0}
     mg = {"MG 1-3":0, "MG 1-4":0, "MG 2-3":0, "MG 2-4":0, "MG 2-5":0, "MG 3-4":0}
     uo_lines = [1.5, 2.5, 3.5, 4.5]
@@ -302,12 +323,13 @@ def calcola_tutti_i_mercati(xg_c, xg_t, tension_index):
     for ht in ["1", "X", "2"]:
         for ft in ["1", "X", "2"]: htft[f"HT/FT {ht}/{ft}"] = (ht_prob[ht] * p[ft]) 
 
-    # Integrazione Calcoli Cartellini e Angoli (Proxy Alta Fedeltà x 7500 API)
-    exp_corners = (xg_c + xg_t) * 4.0 + 1.8 
-    exp_cards = tension_index * 4.5
+    prob_corner_85 = min(92.0, max(15.0, (avg_corner_match / 9.5) * 55))
+    tension = avg_cart_match + (1.5 if is_sev else 0)
+    prob_cart_45 = min(88.0, max(20.0, (tension / 5.0) * 55))
+
     special = {
-        "Over 8.5 Angoli": min(92.0, max(15.0, (exp_corners / 9.5) * 50)),
-        "Over 4.5 Cartellini": min(88.0, max(20.0, (exp_cards / 5.0) * 50))
+        "Over 8.5 Angoli": prob_corner_85,
+        "Over 4.5 Cartellini": prob_cart_45
     }
 
     return {**p, **mg, **re_prob, **combos, **htft, **special}
@@ -340,7 +362,6 @@ def costruisci_schedina_dinamica(pool, min_q, max_q, target_mult, escludi_match=
         famiglia = get_family(item['Tip'])
         match_name = item['Match']
         
-        # V67.2: Controlliamo che il match non sia mai stato usato né in questa schedina, né nelle altre!
         if match_name not in viste_locali and match_name not in escludi_match and family_counts.get(famiglia, 0) < max_same_family:
             selezionate.append(item)
             viste_locali.add(match_name)
@@ -358,7 +379,7 @@ def costruisci_schedina_dinamica(pool, min_q, max_q, target_mult, escludi_match=
 if 'data_master' not in st.session_state: st.session_state.data_master = {}
 if 'all_tips_global' not in st.session_state: st.session_state.all_tips_global = []
 
-st.sidebar.header("⚙️ Centrale Operativa")
+st.sidebar.header("⚙️ Centrale Operativa V68.1")
 
 date_range = st.sidebar.date_input("Seleziona Periodo (Dal - Al):", [])
 if len(date_range) == 2: start_date, end_date = date_range[0], date_range[1]
@@ -410,16 +431,15 @@ btn_genera = st.sidebar.button("⚡ ESTRAI MATRIX EUROPEA")
 if btn_genera:
     st.session_state.data_master = {}
     st.session_state.all_tips_global = []
-    headers = {'x-apisports-key': API_KEY_FOOTBALL}
     now_utc = datetime.now(timezone.utc)
     tz_ita = pytz.timezone('Europe/Rome')
     mese_attuale = datetime.now().month
 
     for name in scelte:
         f_id = active_dict[name]
-        with st.spinner(f"Calcolo Punti e Motivazioni {name}..."):
-            fix = requests.get("https://v3.football.api-sports.io/fixtures", headers=headers, params={'league': f_id, 'season': STAGIONE, 'from': start_str, 'to': end_str}).json()
-            std = requests.get("https://v3.football.api-sports.io/standings", headers=headers, params={'league': f_id, 'season': STAGIONE}).json()
+        with st.spinner(f"Analisi Globale V68.1 {name} (Richiede 1 min)..."):
+            fix = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'league': f_id, 'season': STAGIONE, 'from': start_str, 'to': end_str}).json()
+            std = requests.get("https://v3.football.api-sports.io/standings", headers=HEADERS, params={'league': f_id, 'season': STAGIONE}).json()
             
             if not fix.get('response'): continue
 
@@ -429,7 +449,6 @@ if btn_genera:
                 gruppo = std['response'][0]['league']['standings'][0]
                 tot_squadre = len(gruppo)
                 partite_totali_campionato = (tot_squadre - 1) * 2
-                
                 if tot_squadre >= 18:
                     punti_champions = gruppo[3]['points'] 
                     punti_salvezza = gruppo[tot_squadre - 4]['points'] 
@@ -437,8 +456,7 @@ if btn_genera:
                 for t in gruppo:
                     n = semplifica_nome(t['team']['name'])
                     db_stats[n] = {
-                        'id': t['team']['id'], 'rank': t['rank'], 
-                        'giocate': t['all']['played'], 'punti': t['points'],
+                        'id': t['team']['id'], 'rank': t['rank'], 'giocate': t['all']['played'], 'punti': t['points'],
                         'ac': t['home']['goals']['for'] / max(1, t['home']['played']),
                         'dc': t['home']['goals']['against'] / max(1, t['home']['played']),
                         'at': t['away']['goals']['for'] / max(1, t['away']['played']),
@@ -450,7 +468,7 @@ if btn_genera:
             inj_cache = {}
             odds_cache = {}
             for d_match in date_giocate:
-                inj_cache[d_match] = requests.get("https://v3.football.api-sports.io/injuries", headers=headers, params={'league': f_id, 'season': STAGIONE, 'date': d_match}).json()
+                inj_cache[d_match] = requests.get("https://v3.football.api-sports.io/injuries", headers=HEADERS, params={'league': f_id, 'season': STAGIONE, 'date': d_match}).json()
                 odds_cache[d_match] = scarica_quote_native(f_id, d_match)
 
             for f in fix['response']:
@@ -487,6 +505,11 @@ if btn_genera:
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
                 
+                # Modulo Statistiche Reali V68
+                poss_c, tiri_c, conv_c, corn_c, cart_c, stile_c = analizza_statistiche_avanzate(db_stats[c_s]['id'])
+                poss_t, tiri_t, conv_t, corn_t, cart_t, stile_t = analizza_statistiche_avanzate(db_stats[t_s]['id'])
+                
+                # Modulo Psicologia V67.1
                 is_coppa = name in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"]
                 m_mot_c, m_mot_t, tension_idx = 1.0, 1.0, 1.0
                 msg_mot = ""
@@ -498,13 +521,11 @@ if btn_genera:
                 elif not is_coppa:
                     punti_disp_c = (partite_totali_campionato - db_stats[c_s]['giocate']) * 3
                     punti_disp_t = (partite_totali_campionato - db_stats[t_s]['giocate']) * 3
-                    
                     punti_c = db_stats[c_s]['punti']
                     punti_t = db_stats[t_s]['punti']
                     rank_c = db_stats[c_s]['rank']
                     rank_t = db_stats[t_s]['rank']
 
-                    # Analisi CASA (V67.1 Corretta)
                     if rank_c <= 6 or (punti_champions - punti_c) <= 7 and (punti_champions - punti_c) > 0:
                         m_mot_c = 1.15; msg_mot += "🏆 C. Vertice "
                     elif rank_c >= tot_squadre - 6:
@@ -512,10 +533,8 @@ if btn_genera:
                         tension_idx += 0.15
                     elif mese_attuale >= 3 and (punti_c - punti_salvezza) > 9 and (punti_champions - punti_c) > 10:
                         m_mot_c = 1.10; msg_mot += "🌴 C. Sgombra "
-                    else:
-                        m_mot_c = 1.05
+                    else: m_mot_c = 1.05
                     
-                    # Analisi OSPITE (V67.1 Corretta)
                     if rank_t <= 6 or (punti_champions - punti_t) <= 7 and (punti_champions - punti_t) > 0:
                         m_mot_t = 1.15; msg_mot += "🏆 O. Vertice"
                     elif rank_t >= tot_squadre - 6:
@@ -523,13 +542,18 @@ if btn_genera:
                         tension_idx += 0.15
                     elif mese_attuale >= 3 and (punti_t - punti_salvezza) > 9 and (punti_champions - punti_t) > 10:
                         m_mot_t = 1.10; msg_mot += "🌴 O. Sgombra"
-                    else:
-                        m_mot_t = 1.05
+                    else: m_mot_t = 1.05
 
                     if abs(rank_c - rank_t) <= 3: tension_idx += 0.2
 
                 xg_base_c = math.sqrt(max(0.01, db_stats[c_s]['ac']) * max(0.01, db_stats[t_s]['dt'])) * m_f_c * m_st_c
                 xg_base_t = math.sqrt(max(0.01, db_stats[t_s]['at']) * max(0.01, db_stats[c_s]['dc'])) * m_f_t * m_st_t
+                
+                # Modificatore Cinismo V68
+                if conv_c < 3.0: xg_base_c *= 1.15
+                elif conv_c > 7.0: xg_base_c *= 0.85
+                if conv_t < 3.0: xg_base_t *= 1.15
+                elif conv_t > 7.0: xg_base_t *= 0.85
                 
                 se_sgombra_c = "C. Sgombra" in msg_mot
                 se_sgombra_t = "O. Sgombra" in msg_mot
@@ -547,9 +571,11 @@ if btn_genera:
                 is_sev = any(s in str(arb) for s in ["Orsato", "Maresca", "Taylor", "Oliver", "Lahoz", "Hernandez"])
                 m_arb = 1.05 if is_sev else 1.0
                 xg_c *= m_arb; xg_t *= m_arb
-                if is_sev: tension_idx += 0.4
+                
+                avg_corner_match = corn_c + corn_t
+                avg_cart_match = cart_c + cart_t
 
-                full_tips = calcola_tutti_i_mercati(xg_c, xg_t, tension_idx)
+                full_tips = calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev)
                 
                 best_1x2_key = max(["1", "X", "2"], key=lambda k: full_tips[k])
                 if full_tips[best_1x2_key] < 45.0:
@@ -576,9 +602,11 @@ if btn_genera:
                     "count_c": count_c, "t1_c": t1_c, "t2_c": t2_c, "t3_c": t3_c,
                     "count_t": count_t, "t1_t": t1_t, "t2_t": t2_t, "t3_t": t3_t,
                     "meteo": d_met, "dna_h2h": str_h2h, "dettagli_h2h": dettagli_h2h_str, "streak_msg": msg_streak.strip(), "andata_msg": andata_msg, "msg_mot": msg_mot.strip(),
-                    "stan_c": "⚠️ Fatigue" if is_stanca_c else "✅ Riposo", 
-                    "stan_t": "⚠️ Fatigue" if is_stanca_t else "✅ Riposo", 
+                    "stan_c": "⚠️ Fatigue" if is_stanca_c else "✅ Riposo", "stan_t": "⚠️ Fatigue" if is_stanca_t else "✅ Riposo", 
                     "forma_c": forma_c, "forma_t": forma_t, "rit_c": rit_c, "rit_t": rit_t,
+                    "poss_c": poss_c, "tiri_c": tiri_c, "conv_c": conv_c, "stile_c": stile_c,
+                    "poss_t": poss_t, "tiri_t": tiri_t, "conv_t": conv_t, "stile_t": stile_t,
+                    "corn_tot": avg_corner_match, "cart_tot": avg_cart_match,
                 })
             if matches_list: st.session_state.data_master[name] = matches_list
 
@@ -595,7 +623,6 @@ if st.session_state.data_master:
 
         st.write("---")
         st.header("📊 Top 10 per Categorie Esclusive")
-        
         col_c1, col_c2 = st.columns(2)
         with col_c1:
             st.markdown("<div class='table-container'>", unsafe_allow_html=True)
@@ -603,7 +630,6 @@ if st.session_state.data_master:
             pool_combo = [x for x in st.session_state.all_tips_global if "+" in x['Tip']]
             if pool_combo: st.dataframe(pd.DataFrame(pool_combo).sort_values(by="Prob", ascending=False).head(10)[['Match', 'Tip', 'Prob', 'Quota']].style.format({"Prob": "{:.1f}%", "Quota": "{:.2f}"}), hide_index=True)
             st.markdown("</div>", unsafe_allow_html=True)
-            
         with col_c2:
             st.markdown("<div class='table-container'>", unsafe_allow_html=True)
             st.subheader("⚽ Mercati Multigol")
@@ -640,17 +666,31 @@ if st.session_state.data_master:
             st.markdown("</div>", unsafe_allow_html=True)
 
     with t2:
-        st.write(f"Partite UFFICIALI V67.2 per il periodo **{start_str} / {end_str}**.")
+        st.write(f"Partite UFFICIALI V68.1 per il periodo **{start_str} / {end_str}**.")
         for camp, matches in st.session_state.data_master.items():
             with st.expander(f"🏆 {camp}", expanded=False):
                 matches = sorted(matches, key=lambda x: x['orario'])
                 for m in matches:
                     with st.expander(f"🕒 {m['orario']} | 🏟️ {m['c_u']} vs {m['t_u']}", expanded=False):
-                        st.write(f"**Arbitro:** {m['arb']} | **VAR:** {'⚠️ Impatto Alto' if m['is_sev'] else '✅ Standard'} | **Clima:** {m['meteo']}")
+                        st.write(f"**Arbitro:** {m['arb']} | **VAR:** {'⚠️ Fiscale' if m['is_sev'] else '⚖️ Standard'} | **Clima:** {m['meteo']}")
                         
                         if m['msg_mot']: st.write(f"<span class='mot-testo'>{m['msg_mot']}</span>", unsafe_allow_html=True)
                         if m['andata_msg']: st.write(f"<span class='andata-testo'>{m['andata_msg']}</span>", unsafe_allow_html=True)
                         if m['streak_msg']: st.write(f"<span class='streak-testo'>{m['streak_msg']}</span>", unsafe_allow_html=True)
+                        
+                        st.markdown("<div class='stats-box'>", unsafe_allow_html=True)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write(f"🏠 **{m['c_s']}**")
+                            st.write(f"📊 Stile: <span class='{'stile-orizzontale' if 'Orizz' in m['stile_c'] else 'stile-verticale'}'>{m['stile_c']}</span>", unsafe_allow_html=True)
+                            st.write(f"⚽ Possesso: {m['poss_c']:.1f}% | Tiri in porta: {m['tiri_c']:.1f}")
+                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_c']:.1f} tiri**")
+                        with col2:
+                            st.write(f"✈️ **{m['t_s']}**")
+                            st.write(f"📊 Stile: <span class='{'stile-orizzontale' if 'Orizz' in m['stile_t'] else 'stile-verticale'}'>{m['stile_t']}</span>", unsafe_allow_html=True)
+                            st.write(f"⚽ Possesso: {m['poss_t']:.1f}% | Tiri in porta: {m['tiri_t']:.1f}")
+                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_t']:.1f} tiri**")
+                        st.markdown("</div>", unsafe_allow_html=True)
 
                         c1, c2, c3, c4 = st.columns(4)
                         with c1:
@@ -673,6 +713,10 @@ if st.session_state.data_master:
                             st.write(f"<span class='ritardo-testo'>Ritardi 🏠: {m['rit_c']} | ✈️: {m['rit_t']}</span>", unsafe_allow_html=True)
                             st.markdown(f"<div class='h2h-details'>{m['dettagli_h2h']}</div>", unsafe_allow_html=True)
                         
+                        cc1, cc2 = st.columns(2)
+                        cc1.metric("🚩 Media Corner Match", f"{m['corn_tot']:.1f}")
+                        cc2.metric("🟨 Media Cartellini Match", f"{m['cart_tot']:.1f}")
+
                         if m['best_1x2'][0] == "No Segno Fisso":
                             st.markdown(f"<div class='pure-1x2'>⚠️ <b>NESSUN SEGNO SECCO CONSIGLIATO</b>: Match troppo in equilibrio per l'1X2. Affidarsi ai mercati Goal o U/O.</div>", unsafe_allow_html=True)
                         else:
@@ -702,7 +746,7 @@ if st.session_state.data_master:
         budget_perf = budget_totale * 0.30
         budget_azzardo = budget_totale * 0.10
         
-        testo_export = f"=== MATRIX V67.2: SCHEDINE ===\nPeriodo: {start_str} / {end_str}\n\n"
+        testo_export = f"=== MATRIX V68.1: SCHEDINE ===\nPeriodo: {start_str} / {end_str}\n\n"
         
         if len(st.session_state.all_tips_global) >= 4:
             st.markdown("<div class='strategy-box safety-bg'>", unsafe_allow_html=True)
