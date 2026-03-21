@@ -41,6 +41,7 @@ st.markdown("""
     .stile-verticale { color: #c0392b; font-weight: bold; }
     .cs-testo { color: #27ae60; font-weight: bold; }
     .fts-testo { color: #c0392b; font-weight: bold; }
+    .budget-tag { font-size: 1.1em; font-weight: bold; color: #2c3e50; margin-bottom: 10px; display: inline-block; padding: 5px 10px; background-color: #ecf0f1; border-radius: 5px; border-left: 4px solid #34495e; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -182,7 +183,7 @@ def analizza_squadra_globale(team_id):
         m_stanchezza = 0.95 if is_stanca else 1.0
         
         forma_str, punti = "", 0
-        cs_count, fts_count = 0, 0 # V69: Clean Sheet e FTS
+        cs_count, fts_count = 0, 0
         
         for m in matches[:5]:
             is_home = str(m['teams']['home']['id']) == str(team_id)
@@ -410,30 +411,7 @@ start_str = start_date.strftime('%Y-%m-%d')
 end_str = end_date.strftime('%Y-%m-%d')
 
 st.sidebar.markdown("---")
-budget_totale = st.sidebar.number_input("Budget Totale (€):", min_value=5.0, value=50.0, step=5.0)
-st.sidebar.markdown("---")
-
-with st.sidebar.expander("🛠️ Personalizza Schedine", expanded=False):
-    st.markdown("🟢 **Range SAFETY**")
-    sc1, sc2 = st.columns(2)
-    safe_min = sc1.number_input("Min", 1.01, 2.00, 1.30, step=0.01, key="s_min")
-    safe_max = sc2.number_input("Max", safe_min, 3.00, 1.50, step=0.01, key="s_max")
-    safe_target = st.number_input("Target Raddoppio", 1.5, 10.0, 2.0, step=0.5, key="st")
-    
-    st.markdown("---")
-    st.markdown("🟠 **Range PERFORMANCE**")
-    pc1, pc2 = st.columns(2)
-    perf_min = pc1.number_input("Min", 1.10, 3.00, 1.51, step=0.01, key="p_min")
-    perf_max = pc2.number_input("Max", perf_min, 5.00, 1.80, step=0.01, key="p_max")
-    perf_target = st.number_input("Target Moltiplicatore", 2.0, 20.0, 5.0, step=0.5, key="pt")
-    
-    st.markdown("---")
-    st.markdown("🔴 **Range AZZARDO**")
-    ac1, ac2 = st.columns(2)
-    azz_min = ac1.number_input("Min", 1.30, 5.00, 1.81, step=0.01, key="a_min")
-    azz_max = ac2.number_input("Max", azz_min, 20.00, 2.80, step=0.01, key="a_max")
-    azz_target = st.number_input("Target Quota Totale", 10.0, 200.0, 30.0, step=5.0, key="at")
-
+budget_totale = st.sidebar.number_input("💰 Budget Totale da Investire (€):", min_value=5.0, value=50.0, step=5.0)
 st.sidebar.markdown("---")
 
 with st.sidebar:
@@ -457,7 +435,7 @@ if btn_genera:
 
     for name in scelte:
         f_id = active_dict[name]
-        with st.spinner(f"Analisi V69 (Clean Sheet & FTS) {name}..."):
+        with st.spinner(f"Analisi V69 (Calcolo Probabilità Pure) {name}..."):
             fix = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'league': f_id, 'season': STAGIONE, 'from': start_str, 'to': end_str}).json()
             std = requests.get("https://v3.football.api-sports.io/standings", headers=HEADERS, params={'league': f_id, 'season': STAGIONE}).json()
             
@@ -508,7 +486,6 @@ if btn_genera:
                 quote_reali_match = odds_cache.get(match_date_str, {}).get(fix_id, {})
                 inj = inj_cache.get(match_date_str, {})
 
-                # V69: Otteniamo rank, cs_perc, fts_perc
                 m_st_c, is_stanca_c, forma_c, m_f_c, rit_c, cs_c, fts_c = analizza_squadra_globale(db_stats[c_s]['id'])
                 m_st_t, is_stanca_t, forma_t, m_f_t, rit_t, cs_t, fts_t = analizza_squadra_globale(db_stats[t_s]['id'])
                 m_met, d_met = scarica_meteo(c_s)
@@ -573,9 +550,8 @@ if btn_genera:
                 if conv_t < 3.0: xg_base_t *= 1.15
                 elif conv_t > 7.0: xg_base_t *= 0.85
                 
-                # Modificatore FTS e CS (V69)
-                if fts_c > 35.0: xg_base_c *= 0.85 # Se non segna spesso, abbassa i suoi xG
-                if cs_t > 35.0: xg_base_c *= 0.85  # Se l'avversario ha una super difesa, abbassa i tuoi xG
+                if fts_c > 35.0: xg_base_c *= 0.85 
+                if cs_t > 35.0: xg_base_c *= 0.85  
                 if fts_t > 35.0: xg_base_t *= 0.85
                 if cs_c > 35.0: xg_base_t *= 0.85
                 
@@ -636,7 +612,7 @@ if btn_genera:
                 })
             if matches_list: st.session_state.data_master[name] = matches_list
 
-# --- DISPLAY DELLE 3 TAB (CON BET BUILDER INTEGRATO) 
+# --- DISPLAY DELLE 3 TAB ---
 if st.session_state.data_master:
     t1, t2, t3 = st.tabs(["🛒 TOP 10 & BUILDER", "🔬 ESPLORATORE PARTITE", "🏆 SCHEDINE AUTOMATICHE"])
     
@@ -669,17 +645,13 @@ if st.session_state.data_master:
             )
             return edited_df[edited_df["🛒"] == True].to_dict('records')
 
-        # === RICOSTRUZIONE DELLE TOP 10 SPECIALIZZATE ===
         sel_1 = mostra_tabella_interattiva("👑 Top 10 Assoluta (No U4.5/O0.5)", lambda tip: tip not in ["U4.5", "Casa O0.5", "Ospite O0.5"])
         sel_2 = mostra_tabella_interattiva("🛡️ Top 10 Doppie Chance", ["1X", "X2", "12"])
         sel_3 = mostra_tabella_interattiva("⚽ Top 10 Over / Under", lambda tip: tip.startswith("O") or tip.startswith("U"))
         sel_4 = mostra_tabella_interattiva("🎯 Top 10 Goal / NoGoal", ["Goal", "NoGoal"])
         sel_5 = mostra_tabella_interattiva("⏱️ Top 10 Primo Tempo / Finale (HT/FT)", lambda tip: "HT/FT" in tip)
-        
-        # === NUOVA CLASSIFICA: I CECCHINI (AZZARDO) ===
         sel_6 = mostra_tabella_interattiva("🧨 Top 10 Azzardi (Quote Alte >= 2.50)", lambda tip: True, min_q=2.50)
         
-        # === UNIONE DELLE SELEZIONI NEL CARRELLO ===
         tutte_selezionate = sel_1 + sel_2 + sel_3 + sel_4 + sel_5 + sel_6
         
         viste = set()
@@ -690,7 +662,6 @@ if st.session_state.data_master:
                 viste.add(chiave)
                 carrello_finale.append(item)
 
-        # === RIEPILOGO CARRELLO DINAMICO CON TASTO SALVA ===
         st.markdown("---")
         st.markdown("<div class='strategy-box builder-bg'>", unsafe_allow_html=True)
         st.header("🧾 IL TUO CARRELLO")
@@ -706,15 +677,14 @@ if st.session_state.data_master:
             
             testo_scontrino += f"\n📊 QUOTA TOTALE: {q_tot_b:.2f}\n"
             testo_scontrino += f"🎯 PROBABILITÀ CONGIUNTA: {p_tot_b*100:.2f}%\n"
-            testo_scontrino += f"💰 VINCITA STIMATA (su 10€): ~{10 * q_tot_b:.2f}€\n"
+            testo_scontrino += f"💰 VINCITA STIMATA (su {budget_totale}€): ~{budget_totale * q_tot_b:.2f}€\n"
             
             st.write("---")
             cb1, cb2, cb3 = st.columns(3)
             cb1.metric("Quota Totale", f"{q_tot_b:.2f}")
             cb2.metric("Probabilità Congiunta", f"{p_tot_b*100:.2f}%")
-            cb3.metric("Vincita Stimata (Su 10€)", f"~{10 * q_tot_b:.2f}€")
+            cb3.metric(f"Vincita (su Budget Tot. {budget_totale}€)", f"~{budget_totale * q_tot_b:.2f}€")
             
-            # IL TASTO MAGICO PER SALVARE LA SCHEDINA
             st.download_button(
                 label="💾 SCARICA / SALVA SCHEDINA (TXT)",
                 data=testo_scontrino,
@@ -803,17 +773,19 @@ if st.session_state.data_master:
                         st.markdown("</div>", unsafe_allow_html=True)
 
     with t3:
-        st.header("🏆 Generatore Ripartizione Budget Dinamico")
+        st.header("🏆 Generatore Automatico Ottimizzato (Senza Filtri Manuali)")
+        st.write("L'algoritmo ora sceglie in totale libertà, dando priorità assoluta alla probabilità matematica per massimizzare le tue chance, senza barriere di quota artificiali.")
+        
         budget_safety = budget_totale * 0.60
         budget_perf = budget_totale * 0.30
         budget_azzardo = budget_totale * 0.10
         
-        testo_export = f"=== MATRIX V69: SCHEDINE ===\nPeriodo: {start_str} / {end_str}\n\n"
-        
         if len(st.session_state.all_tips_global) >= 4:
+            # SAFETY: Da 1.12 a 1.50
             st.markdown("<div class='strategy-box safety-bg'>", unsafe_allow_html=True)
-            st.subheader(f"🟢 Schedina SAFETY (Fascia {safe_min} - {safe_max})")
-            s_slip, q_tot_s, prob_s, usate_safety = costruisci_schedina_dinamica(st.session_state.all_tips_global, safe_min, safe_max, target_mult=safe_target, max_righe=6, max_same_family=2, escludi_match=set())
+            st.subheader("🟢 Schedina SAFETY")
+            st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_safety:.2f}€ (60% del Budget)</span>", unsafe_allow_html=True)
+            s_slip, q_tot_s, prob_s, usate_safety = costruisci_schedina_dinamica(st.session_state.all_tips_global, 1.12, 1.50, target_mult=2.0, max_righe=6, max_same_family=2, escludi_match=set())
             for x in s_slip:
                 bc = "quota-badge" if x['Real'] else "quota-badge-calc"
                 st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{bc}'>Q: {x['Quota']}</span>", unsafe_allow_html=True)
@@ -822,9 +794,11 @@ if st.session_state.data_master:
             col_s2.metric("Probabilità Congiunta", f"{prob_s*100:.2f}%")
             st.markdown("</div>", unsafe_allow_html=True)
 
+            # PERFORMANCE: Da 1.51 a 2.20
             st.markdown("<div class='strategy-box performance-bg'>", unsafe_allow_html=True)
-            st.subheader(f"🟠 Schedina PERFORMANCE (Fascia {perf_min} - {perf_max})")
-            p_slip, q_tot_p, prob_p, usate_perf = costruisci_schedina_dinamica(st.session_state.all_tips_global, perf_min, perf_max, target_mult=perf_target, max_righe=6, max_same_family=2, escludi_match=usate_safety)
+            st.subheader("🟠 Schedina PERFORMANCE")
+            st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_perf:.2f}€ (30% del Budget)</span>", unsafe_allow_html=True)
+            p_slip, q_tot_p, prob_p, usate_perf = costruisci_schedina_dinamica(st.session_state.all_tips_global, 1.51, 2.20, target_mult=5.0, max_righe=6, max_same_family=2, escludi_match=usate_safety)
             for x in p_slip:
                 bc = "quota-badge" if x['Real'] else "quota-badge-calc"
                 st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{bc}'>Q: {x['Quota']}</span>", unsafe_allow_html=True)
@@ -833,9 +807,11 @@ if st.session_state.data_master:
             col_p2.metric("Probabilità Congiunta", f"{prob_p*100:.2f}%")
             st.markdown("</div>", unsafe_allow_html=True)
 
+            # AZZARDO: Da 2.21 a salire
             st.markdown("<div class='strategy-box risk-bg'>", unsafe_allow_html=True)
-            st.subheader(f"🔴 Schedina AZZARDO (Fascia {azz_min} - {azz_max})")
-            r_slip, q_tot_a, prob_a, _ = costruisci_schedina_dinamica(st.session_state.all_tips_global, azz_min, azz_max, target_mult=azz_target, max_match_q=azz_max, max_righe=6, max_same_family=2, escludi_match=usate_perf)
+            st.subheader("🔴 Schedina AZZARDO")
+            st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_azzardo:.2f}€ (10% del Budget)</span>", unsafe_allow_html=True)
+            r_slip, q_tot_a, prob_a, _ = costruisci_schedina_dinamica(st.session_state.all_tips_global, 2.21, 15.0, target_mult=30.0, max_match_q=15.0, max_righe=6, max_same_family=2, escludi_match=usate_perf)
             for x in r_slip:
                 bc = "quota-badge" if x['Real'] else "quota-badge-calc"
                 st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{bc}'>Q: {x['Quota']}</span>", unsafe_allow_html=True)
