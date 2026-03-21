@@ -641,28 +641,74 @@ if btn_genera:
 if st.session_state.data_master:
     t1, t2, t3, t4 = st.tabs(["🌟 CLASSIFICHE OMNI-MARKET", "🔬 ESPLORATORE PARTITE", "🏆 SCHEDINE AUTOMATICHE", "🛒 BET BUILDER (MANUALE)"])
     
-    with t1:
-        st.header("👑 Top 10 Assoluta d'Europa")
-        pool_absolute = [x for x in st.session_state.all_tips_global if x['Tip'] not in ["U4.5", "Casa O0.5", "Ospite O0.5"]]
-        df_all = pd.DataFrame(pool_absolute)
-        if not df_all.empty:
-            st.dataframe(df_all[['Time', 'Match', 'League', 'Tip', 'Prob', 'Quota']].sort_values(by="Prob", ascending=False).head(10).style.format({"Prob": "{:.1f}%", "Quota": "{:.2f}"}), hide_index=True, use_container_width=True)
+        with t1:
+        st.header("🛒 BET BUILDER & CLASSIFICHE OMNI-MARKET")
+        st.write("Spunta la casella '🛒' nelle tabelle qui sotto per aggiungere la partita al tuo Carrello (calcolato automaticamente a fine pagina).")
 
-        st.write("---")
-        st.header("📊 Top 10 per Categorie Esclusive")
-        col_c1, col_c2 = st.columns(2)
-        with col_c1:
-            st.markdown("<div class='table-container'>", unsafe_allow_html=True)
-            st.subheader("🧬 Migliori Combo (1X2 + U/O)")
-            pool_combo = [x for x in st.session_state.all_tips_global if "+" in x['Tip']]
-            if pool_combo: st.dataframe(pd.DataFrame(pool_combo).sort_values(by="Prob", ascending=False).head(10)[['Match', 'Tip', 'Prob', 'Quota']].style.format({"Prob": "{:.1f}%", "Quota": "{:.2f}"}), hide_index=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-        with col_c2:
-            st.markdown("<div class='table-container'>", unsafe_allow_html=True)
-            st.subheader("⚽ Mercati Multigol")
-            pool_mg = [x for x in st.session_state.all_tips_global if "MG " in x['Tip']]
-            if pool_mg: st.dataframe(pd.DataFrame(pool_mg).sort_values(by="Prob", ascending=False).head(10)[['Match', 'Tip', 'Prob', 'Quota']].style.format({"Prob": "{:.1f}%", "Quota": "{:.2f}"}), hide_index=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+        def mostra_tabella_interattiva(titolo, tip_filters, max_rows=10):
+            st.subheader(titolo)
+            pool = [x for x in st.session_state.all_tips_global if x['Tip'] in tip_filters or (callable(tip_filters) and tip_filters(x['Tip']))]
+            if not pool:
+                st.info("Nessun dato disponibile per questa categoria.")
+                return []
+            
+            df = pd.DataFrame(pool).sort_values(by="Prob", ascending=False).head(max_rows)
+            df = df[['Match', 'Tip', 'Prob', 'Quota', 'Time', 'League']]
+            df.insert(0, "🛒", False) 
+            
+            edited_df = st.data_editor(
+                df,
+                column_config={
+                    "🛒": st.column_config.CheckboxColumn("Seleziona", default=False),
+                    "Prob": st.column_config.NumberColumn("Probabilità (%)", format="%.1f%%"),
+                    "Quota": st.column_config.NumberColumn("Quota", format="%.2f")
+                },
+                hide_index=True,
+                use_container_width=True,
+                disabled=['Match', 'Tip', 'Prob', 'Quota', 'Time', 'League'],
+                key=f"editor_{titolo}"
+            )
+            return edited_df[edited_df["🛒"] == True].to_dict('records')
+
+        # === RICOSTRUZIONE DELLE TOP 10 SPECIALIZZATE ===
+        sel_1 = mostra_tabella_interattiva("👑 Top 10 Assoluta (No U4.5/O0.5)", lambda tip: tip not in ["U4.5", "Casa O0.5", "Ospite O0.5"])
+        sel_2 = mostra_tabella_interattiva("🛡️ Top 10 Doppie Chance", ["1X", "X2", "12"])
+        sel_3 = mostra_tabella_interattiva("⚽ Top 10 Over / Under", lambda tip: tip.startswith("O") or tip.startswith("U"))
+        sel_4 = mostra_tabella_interattiva("🎯 Top 10 Goal / NoGoal", ["Goal", "NoGoal"])
+        sel_5 = mostra_tabella_interattiva("⏱️ Top 10 Primo Tempo / Finale (HT/FT)", lambda tip: "HT/FT" in tip)
+        
+        # === UNIONE DELLE SELEZIONI NEL CARRELLO ===
+        tutte_selezionate = sel_1 + sel_2 + sel_3 + sel_4 + sel_5
+        
+        viste = set()
+        carrello_finale = []
+        for item in tutte_selezionate:
+            chiave = f"{item['Match']}_{item['Tip']}"
+            if chiave not in viste:
+                viste.add(chiave)
+                carrello_finale.append(item)
+
+        # === RIEPILOGO CARRELLO DINAMICO ===
+        st.markdown("---")
+        st.markdown("<div class='strategy-box builder-bg'>", unsafe_allow_html=True)
+        st.header("🧾 IL TUO CARRELLO")
+        if carrello_finale:
+            q_tot_b, p_tot_b = 1.0, 1.0
+            for pick in carrello_finale:
+                st.write(f"✅ {pick['Match']}: **{pick['Tip']}** (Quota {pick['Quota']:.2f})")
+                q_tot_b *= float(pick['Quota'])
+                p_tot_b *= (float(pick['Prob']) / 100)
+            
+            st.write("---")
+            cb1, cb2, cb3 = st.columns(3)
+            cb1.metric("Quota Totale", f"{q_tot_b:.2f}")
+            cb2.metric("Probabilità Congiunta", f"{p_tot_b*100:.2f}%")
+            cb3.metric("Vincita Stimata (Su 10€)", f"~{10 * q_tot_b:.2f}€")
+        else:
+            st.info("👆 Spunta qualche partita dalle classifiche qui sopra per costruire la schedina in tempo reale.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    
 
     with t2:
         st.write(f"Partite UFFICIALI V69 per il periodo **{start_str} / {end_str}**.")
