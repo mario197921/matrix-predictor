@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 import pytz
 
 # ==========================================
-# 🎨 UI: TOTAL MATRIX DESIGN (V69)
+# 🎨 UI: TOTAL MATRIX DESIGN (V69 ULTIMATE)
 # ==========================================
 st.set_page_config(page_title="Matrix Bet V69", page_icon="🎯", layout="wide")
 
@@ -63,7 +63,6 @@ MASTER_LEAGUES = {
 # ==========================================
 # 📡 MODULI API E CALCOLI MATEMATICI
 # ==========================================
-
 @st.cache_data(ttl=3600)
 def get_active_leagues(start_date, end_date):
     active_ids = set()
@@ -637,7 +636,7 @@ if btn_genera:
                 })
             if matches_list: st.session_state.data_master[name] = matches_list
 
-# --- DISPLAY DELLE 4 TAB ---
+# --- DISPLAY DELLE 3 TAB (CON BET BUILDER INTEGRATO) ---
 if st.session_state.data_master:
     t1, t2, t3 = st.tabs(["🛒 TOP 10 & BUILDER", "🔬 ESPLORATORE PARTITE", "🏆 SCHEDINE AUTOMATICHE"])
     
@@ -646,47 +645,8 @@ if st.session_state.data_master:
         st.write("Spunta la casella '🛒' nelle tabelle qui sotto per aggiungere la partita al tuo Carrello (calcolato automaticamente a fine pagina).")
 
         def mostra_tabella_interattiva(titolo, tip_filters, max_rows=10):
-                def mostra_tabella_interattiva(titolo, tip_filters, max_rows=10):
             st.subheader(titolo)
-            # Abbiamo ribaltato la logica per evitare il TypeError di Python
-            pool = [x for x in st.session_state.all_tips_global if (tip_filters(x['Tip']) if callable(tip_filters) else x['Tip'] in tip_filters)]
-            if not pool:
-                st.info("Nessun dato disponibile per questa categoria.")
-                return []
-            
-            df = pd.DataFrame(pool).sort_values(by="Prob", ascending=False).head(max_rows)
-            df = df[['Match', 'Tip', 'Prob', 'Quota', 'Time', 'League']]
-            df.insert(0, "🛒", False) 
-            
-            edited_df = st.data_editor(
-                df,
-                column_config={
-                    "🛒": st.column_config.CheckboxColumn("Seleziona", default=False),
-                    "Prob": st.column_config.NumberColumn("Probabilità (%)", format="%.1f%%"),
-                    "Quota": st.column_config.NumberColumn("Quota", format="%.2f")
-                },
-                hide_index=True,
-                use_container_width=True,
-                disabled=['Match', 'Tip', 'Prob', 'Quota', 'Time', 'League'],
-                key=f"editor_{titolo}"
-            )
-            return edited_df[edited_df["🛒"] == True].to_dict('records')
-
-        # === RICOSTRUZIONE DELLE TOP 10 SPECIALIZZATE ===
-        sel_1 = mostra_tabella_interattiva("👑 Top 10 Assoluta (No U4.5/O0.5)", lambda tip: tip not in ["U4.5", "Casa O0.5", "Ospite O0.5"])
-        sel_2 = mostra_tabella_interattiva("🛡️ Top 10 Doppie Chance", ["1X", "X2", "12"])
-        sel_3 = mostra_tabella_interattiva("⚽ Top 10 Over / Under", lambda tip: tip.startswith("O") or tip.startswith("U"))
-        sel_4 = mostra_tabella_interattiva("🎯 Top 10 Goal / NoGoal", ["Goal", "NoGoal"])
-        sel_5 = mostra_tabella_interattiva("⏱️ Top 10 Primo Tempo / Finale (HT/FT)", lambda tip: "HT/FT" in tip)
-        
-        # === UNIONE DELLE SELEZIONI NEL CARRELLO ===
-        tutte_selezionate = sel_1 + sel_2 + sel_3 + sel_4 + sel_5
-    with t1:
-        st.header("🛒 BET BUILDER & CLASSIFICHE OMNI-MARKET")
-        st.write("Spunta la casella '🛒' nelle tabelle qui sotto per aggiungere la partita al tuo Carrello (calcolato automaticamente a fine pagina).")
-
-        def mostra_tabella_interattiva(titolo, tip_filters, max_rows=10):
-            st.subheader(titolo)
+            # Fix del TypeError: prima controlla se è una funzione, poi se è una lista
             pool = [x for x in st.session_state.all_tips_global if (tip_filters(x['Tip']) if callable(tip_filters) else x['Tip'] in tip_filters)]
             if not pool:
                 st.info("Nessun dato disponibile per questa categoria.")
@@ -866,47 +826,3 @@ if st.session_state.data_master:
             col_a1.metric("Vincita Stimata", f"~{budget_azzardo * q_tot_a:.2f}€")
             col_a2.metric("Probabilità Congiunta", f"{prob_a*100:.2f}%")
             st.markdown("</div>", unsafe_allow_html=True)
-
-    with t4:
-        st.header("🛒 Schedina Personalizzata (Bet Builder)")
-        st.write("Scegli manualmente i pronostici partita per partita dal menu a tendina. L'algoritmo calcolerà quota e probabilità in tempo reale.")
-        st.markdown("<div class='strategy-box builder-bg'>", unsafe_allow_html=True)
-        
-        matches_grouped = {}
-        for item in st.session_state.all_tips_global:
-            m_name = f"[{item['Time']}] {item['Match']} ({item['League']})"
-            if m_name not in matches_grouped: matches_grouped[m_name] = []
-            matches_grouped[m_name].append(item)
-            
-        selected_picks = []
-        
-        for m_name, tips in matches_grouped.items():
-            tips_sorted = sorted(tips, key=lambda x: x['Prob'], reverse=True)
-            # Mostriamo solo le quote sensate (probabilità superiore al 30%) per non intasare il menu
-            options = ["❌ Nessuna Selezione"] + [f"{t['Tip']} (Prob: {t['Prob']:.1f}% | Quota: {t['Quota']})" for t in tips_sorted if t['Prob'] > 30.0]
-            choice = st.selectbox(m_name, options, key=f"bb_{m_name}")
-            
-            if choice != "❌ Nessuna Selezione":
-                tip_name = choice.split(" (Prob:")[0]
-                for t in tips_sorted:
-                    if t['Tip'] == tip_name:
-                        selected_picks.append(t)
-                        break
-                        
-        if selected_picks:
-            st.write("---")
-            st.subheader("🧾 Riepilogo Schedina Manuale")
-            q_tot_b, p_tot_b = 1.0, 1.0
-            for pick in selected_picks:
-                st.write(f"✅ {pick['Match']}: **{pick['Tip']}** (Quota {pick['Quota']})")
-                q_tot_b *= float(pick['Quota'])
-                p_tot_b *= (pick['Prob'] / 100)
-            
-            st.write("---")
-            cb1, cb2, cb3 = st.columns(3)
-            cb1.metric("Quota Totale", f"{q_tot_b:.2f}")
-            cb2.metric("Probabilità Congiunta", f"{p_tot_b*100:.2f}%")
-            cb3.metric("Vincita Stimata (Su 10€)", f"~{10 * q_tot_b:.2f}€")
-        else:
-            st.info("👆 Seleziona almeno un pronostico dal menu a tendina per costruire la tua schedina.")
-        st.markdown("</div>", unsafe_allow_html=True)
