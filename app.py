@@ -640,14 +640,14 @@ if btn_genera:
 if st.session_state.data_master:
     t1, t2, t3 = st.tabs(["🛒 TOP 10 & BUILDER", "🔬 ESPLORATORE PARTITE", "🏆 SCHEDINE AUTOMATICHE"])
     
-    with t1:
+        with t1:
         st.header("🛒 BET BUILDER & CLASSIFICHE OMNI-MARKET")
         st.write("Spunta la casella '🛒' nelle tabelle qui sotto per aggiungere la partita al tuo Carrello (calcolato automaticamente a fine pagina).")
 
-        def mostra_tabella_interattiva(titolo, tip_filters, max_rows=10):
+        def mostra_tabella_interattiva(titolo, tip_filters, min_q=1.01, max_rows=10):
             st.subheader(titolo)
-            # Fix del TypeError: prima controlla se è una funzione, poi se è una lista
-            pool = [x for x in st.session_state.all_tips_global if (tip_filters(x['Tip']) if callable(tip_filters) else x['Tip'] in tip_filters)]
+            # Aggiunto il filtro min_q per pescare gli Azzardi
+            pool = [x for x in st.session_state.all_tips_global if (tip_filters(x['Tip']) if callable(tip_filters) else x['Tip'] in tip_filters) and float(x['Quota']) >= min_q]
             if not pool:
                 st.info("Nessun dato disponibile per questa categoria.")
                 return []
@@ -677,8 +677,11 @@ if st.session_state.data_master:
         sel_4 = mostra_tabella_interattiva("🎯 Top 10 Goal / NoGoal", ["Goal", "NoGoal"])
         sel_5 = mostra_tabella_interattiva("⏱️ Top 10 Primo Tempo / Finale (HT/FT)", lambda tip: "HT/FT" in tip)
         
+        # === NUOVA CLASSIFICA: I CECCHINI (AZZARDO) ===
+        sel_6 = mostra_tabella_interattiva("🧨 Top 10 Azzardi (Quote Alte >= 2.50)", lambda tip: True, min_q=2.50)
+        
         # === UNIONE DELLE SELEZIONI NEL CARRELLO ===
-        tutte_selezionate = sel_1 + sel_2 + sel_3 + sel_4 + sel_5
+        tutte_selezionate = sel_1 + sel_2 + sel_3 + sel_4 + sel_5 + sel_6
         
         viste = set()
         carrello_finale = []
@@ -688,27 +691,42 @@ if st.session_state.data_master:
                 viste.add(chiave)
                 carrello_finale.append(item)
 
-        # === RIEPILOGO CARRELLO DINAMICO ===
+        # === RIEPILOGO CARRELLO DINAMICO CON TASTO SALVA ===
         st.markdown("---")
         st.markdown("<div class='strategy-box builder-bg'>", unsafe_allow_html=True)
         st.header("🧾 IL TUO CARRELLO")
         if carrello_finale:
             q_tot_b, p_tot_b = 1.0, 1.0
+            testo_scontrino = "=== RICEVUTA MATRIX V69 ===\n\n"
+            
             for pick in carrello_finale:
                 st.write(f"✅ {pick['Match']}: **{pick['Tip']}** (Quota {pick['Quota']:.2f})")
                 q_tot_b *= float(pick['Quota'])
                 p_tot_b *= (float(pick['Prob']) / 100)
+                testo_scontrino += f"[{pick['Time']}] {pick['Match']} -> {pick['Tip']} @ {pick['Quota']:.2f}\n"
+            
+            testo_scontrino += f"\n📊 QUOTA TOTALE: {q_tot_b:.2f}\n"
+            testo_scontrino += f"🎯 PROBABILITÀ CONGIUNTA: {p_tot_b*100:.2f}%\n"
+            testo_scontrino += f"💰 VINCITA STIMATA (su 10€): ~{10 * q_tot_b:.2f}€\n"
             
             st.write("---")
             cb1, cb2, cb3 = st.columns(3)
             cb1.metric("Quota Totale", f"{q_tot_b:.2f}")
             cb2.metric("Probabilità Congiunta", f"{p_tot_b*100:.2f}%")
             cb3.metric("Vincita Stimata (Su 10€)", f"~{10 * q_tot_b:.2f}€")
+            
+            # IL TASTO MAGICO PER SALVARE LA SCHEDINA
+            st.download_button(
+                label="💾 SCARICA / SALVA SCHEDINA (TXT)",
+                data=testo_scontrino,
+                file_name=f"Matrix_Ticket_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                mime="text/plain"
+            )
         else:
             st.info("👆 Spunta qualche partita dalle classifiche qui sopra per costruire la schedina in tempo reale.")
         st.markdown("</div>", unsafe_allow_html=True)
-
-    with t2:
+    
+with t2:
         st.write(f"Partite UFFICIALI V69 per il periodo **{start_str} / {end_str}**.")
         for camp, matches in st.session_state.data_master.items():
             with st.expander(f"🏆 {camp}", expanded=False):
