@@ -646,8 +646,10 @@ if st.session_state.data_master:
         st.write("Spunta la casella '🛒' nelle tabelle qui sotto per aggiungere la partita al tuo Carrello (calcolato automaticamente a fine pagina).")
 
         def mostra_tabella_interattiva(titolo, tip_filters, max_rows=10):
+                def mostra_tabella_interattiva(titolo, tip_filters, max_rows=10):
             st.subheader(titolo)
-            pool = [x for x in st.session_state.all_tips_global if x['Tip'] in tip_filters or (callable(tip_filters) and tip_filters(x['Tip']))]
+            # Abbiamo ribaltato la logica per evitare il TypeError di Python
+            pool = [x for x in st.session_state.all_tips_global if (tip_filters(x['Tip']) if callable(tip_filters) else x['Tip'] in tip_filters)]
             if not pool:
                 st.info("Nessun dato disponibile per questa categoria.")
                 return []
