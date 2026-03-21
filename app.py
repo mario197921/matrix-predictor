@@ -639,9 +639,9 @@ if btn_genera:
 
 # --- DISPLAY DELLE 4 TAB ---
 if st.session_state.data_master:
-    t1, t2, t3, t4 = st.tabs(["🌟 CLASSIFICHE OMNI-MARKET", "🔬 ESPLORATORE PARTITE", "🏆 SCHEDINE AUTOMATICHE", "🛒 BET BUILDER (MANUALE)"])
+    t1, t2, t3 = st.tabs(["🛒 TOP 10 & BUILDER", "🔬 ESPLORATORE PARTITE", "🏆 SCHEDINE AUTOMATICHE"])
     
-        with t1:
+    with t1:
         st.header("🛒 BET BUILDER & CLASSIFICHE OMNI-MARKET")
         st.write("Spunta la casella '🛒' nelle tabelle qui sotto per aggiungere la partita al tuo Carrello (calcolato automaticamente a fine pagina).")
 
@@ -708,7 +708,6 @@ if st.session_state.data_master:
             st.info("👆 Spunta qualche partita dalle classifiche qui sopra per costruire la schedina in tempo reale.")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    
 
     with t2:
         st.write(f"Partite UFFICIALI V69 per il periodo **{start_str} / {end_str}**.")
