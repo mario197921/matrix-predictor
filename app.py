@@ -681,6 +681,44 @@ if st.session_state.data_master:
         
         # === UNIONE DELLE SELEZIONI NEL CARRELLO ===
         tutte_selezionate = sel_1 + sel_2 + sel_3 + sel_4 + sel_5
+    with t1:
+        st.header("🛒 BET BUILDER & CLASSIFICHE OMNI-MARKET")
+        st.write("Spunta la casella '🛒' nelle tabelle qui sotto per aggiungere la partita al tuo Carrello (calcolato automaticamente a fine pagina).")
+
+        def mostra_tabella_interattiva(titolo, tip_filters, max_rows=10):
+            st.subheader(titolo)
+            pool = [x for x in st.session_state.all_tips_global if (tip_filters(x['Tip']) if callable(tip_filters) else x['Tip'] in tip_filters)]
+            if not pool:
+                st.info("Nessun dato disponibile per questa categoria.")
+                return []
+            
+            df = pd.DataFrame(pool).sort_values(by="Prob", ascending=False).head(max_rows)
+            df = df[['Match', 'Tip', 'Prob', 'Quota', 'Time', 'League']]
+            df.insert(0, "🛒", False) 
+            
+            edited_df = st.data_editor(
+                df,
+                column_config={
+                    "🛒": st.column_config.CheckboxColumn("Seleziona", default=False),
+                    "Prob": st.column_config.NumberColumn("Probabilità (%)", format="%.1f%%"),
+                    "Quota": st.column_config.NumberColumn("Quota", format="%.2f")
+                },
+                hide_index=True,
+                use_container_width=True,
+                disabled=['Match', 'Tip', 'Prob', 'Quota', 'Time', 'League'],
+                key=f"editor_{titolo}"
+            )
+            return edited_df[edited_df["🛒"] == True].to_dict('records')
+
+        # === RICOSTRUZIONE DELLE TOP 10 SPECIALIZZATE ===
+        sel_1 = mostra_tabella_interattiva("👑 Top 10 Assoluta (No U4.5/O0.5)", lambda tip: tip not in ["U4.5", "Casa O0.5", "Ospite O0.5"])
+        sel_2 = mostra_tabella_interattiva("🛡️ Top 10 Doppie Chance", ["1X", "X2", "12"])
+        sel_3 = mostra_tabella_interattiva("⚽ Top 10 Over / Under", lambda tip: tip.startswith("O") or tip.startswith("U"))
+        sel_4 = mostra_tabella_interattiva("🎯 Top 10 Goal / NoGoal", ["Goal", "NoGoal"])
+        sel_5 = mostra_tabella_interattiva("⏱️ Top 10 Primo Tempo / Finale (HT/FT)", lambda tip: "HT/FT" in tip)
+        
+        # === UNIONE DELLE SELEZIONI NEL CARRELLO ===
+        tutte_selezionate = sel_1 + sel_2 + sel_3 + sel_4 + sel_5
         
         viste = set()
         carrello_finale = []
@@ -709,7 +747,6 @@ if st.session_state.data_master:
         else:
             st.info("👆 Spunta qualche partita dalle classifiche qui sopra per costruire la schedina in tempo reale.")
         st.markdown("</div>", unsafe_allow_html=True)
-
 
     with t2:
         st.write(f"Partite UFFICIALI V69 per il periodo **{start_str} / {end_str}**.")
