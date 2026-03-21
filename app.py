@@ -51,8 +51,15 @@ MASTER_LEAGUES = {
     "🇮🇹 Serie A": 135, "🇮🇹 Serie B": 136, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": 39, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship": 40,
     "🇪🇸 La Liga": 140, "🇩🇪 Bundesliga": 78, "🇫🇷 Ligue 1": 61,
     "🇳🇱 Eredivisie": 88, "🇵🇹 Primeira Liga": 94, "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Prem.": 281,
-    "🇹🇷 Süper Lig": 203, "🇧🇪 Pro League": 144, "🇬🇷 Super League": 197
+    "🇹🇷 Süper Lig": 203, "🇧🇪 Pro League": 144, "🇬🇷 Super League": 197,
+    # 🧊 NUOVI CAMPIONATI NORD EUROPA E MINORI
+    "🇸🇪 Allsvenskan (Svezia)": 113,
+    "🇳🇴 Eliteserien (Norvegia)": 69,
+    "🇫🇮 Veikkausliiga (Finlandia)": 244,
+    "🇩🇰 Superliga (Danimarca)": 119,
+    "🇮🇪 Premier Division (Irlanda)": 357
 }
+
 
 # ==========================================
 # 📡 MODULI API E CALCOLI MATEMATICI
