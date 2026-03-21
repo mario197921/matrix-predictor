@@ -6,9 +6,9 @@ from datetime import datetime, timezone, timedelta
 import pytz
 
 # ==========================================
-# 🎨 UI: TOTAL MATRIX DESIGN (V68.1)
+# 🎨 UI: TOTAL MATRIX DESIGN (V69)
 # ==========================================
-st.set_page_config(page_title="Matrix Bet V68.1", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Matrix Bet V69", page_icon="🎯", layout="wide")
 
 st.markdown("""
     <style>
@@ -21,6 +21,7 @@ st.markdown("""
     .safety-bg { background-color: #f0fff4; border-color: #38a169; }
     .performance-bg { background-color: #fffaf0; border-color: #dd6b20; }
     .risk-bg { background-color: #fff5f5; border-color: #e53e3e; }
+    .builder-bg { background-color: #f5f0ff; border-color: #805ad5; }
     .table-container { background: #f8f9fa; padding: 15px; border-radius: 10px; border: 1px solid #eee; margin-bottom: 15px; }
     .form-box { letter-spacing: 2px; font-family: monospace; font-weight: bold; }
     .ritardo-testo { color: #e53e3e; font-size: 0.85em; font-weight: bold; }
@@ -38,10 +39,12 @@ st.markdown("""
     .stats-box { background-color: #f4f6f7; padding: 12px; border-radius: 8px; border-left: 4px solid #3498db; margin-top: 10px; font-size: 0.9em;}
     .stile-orizzontale { color: #2980b9; font-weight: bold; }
     .stile-verticale { color: #c0392b; font-weight: bold; }
+    .cs-testo { color: #27ae60; font-weight: bold; }
+    .fts-testo { color: #c0392b; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONFIGURAZIONE ---
+# --- CONFIGURAZIONE E CAMPIONATI V69 ---
 API_KEY_FOOTBALL = 'dc4d6488653c2d9a763290a44eb1613f'
 STAGIONE = "2025"
 HEADERS = {'x-apisports-key': API_KEY_FOOTBALL}
@@ -52,14 +55,10 @@ MASTER_LEAGUES = {
     "🇪🇸 La Liga": 140, "🇩🇪 Bundesliga": 78, "🇫🇷 Ligue 1": 61,
     "🇳🇱 Eredivisie": 88, "🇵🇹 Primeira Liga": 94, "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Prem.": 281,
     "🇹🇷 Süper Lig": 203, "🇧🇪 Pro League": 144, "🇬🇷 Super League": 197,
-    # 🧊 NUOVI CAMPIONATI NORD EUROPA E MINORI
-    "🇸🇪 Allsvenskan (Svezia)": 113,
-    "🇳🇴 Eliteserien (Norvegia)": 69,
-    "🇫🇮 Veikkausliiga (Finlandia)": 244,
-    "🇩🇰 Superliga (Danimarca)": 119,
-    "🇮🇪 Premier Division (Irlanda)": 357
+    "🇸🇪 Allsvenskan (Svezia)": 113, "🇳🇴 Eliteserien (Norvegia)": 69, "🇫🇮 Veikkausliiga (Finlandia)": 244,
+    "🇩🇰 Superliga (Danimarca)": 119, "🇮🇪 Premier Division (Irlanda)": 357,
+    "🇨🇭 Super League (Svizzera)": 207, "🇦🇹 Bundesliga (Austria)": 218
 }
-
 
 # ==========================================
 # 📡 MODULI API E CALCOLI MATEMATICI
@@ -131,7 +130,6 @@ def scarica_quote_native(league_id, date_str):
         return quote_dict
     except: return {}
 
-# --- NUOVO MODULO V68 ---
 @st.cache_data(ttl=3600)
 def analizza_statistiche_avanzate(team_id):
     try:
@@ -177,7 +175,7 @@ def analizza_squadra_globale(team_id):
     try:
         resp = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'team': team_id, 'last': 10, 'status': 'FT'}).json()
         matches = resp.get('response', [])
-        if not matches: return 1.0, False, "N/D", 1.0, "Nessuno"
+        if not matches: return 1.0, False, "N/D", 1.0, "Nessuno", 0.0, 0.0
         
         ultima_data = datetime.strptime(matches[0]['fixture']['date'][:10], '%Y-%m-%d')
         diff_giorni = (datetime.now() - ultima_data).days
@@ -185,6 +183,8 @@ def analizza_squadra_globale(team_id):
         m_stanchezza = 0.95 if is_stanca else 1.0
         
         forma_str, punti = "", 0
+        cs_count, fts_count = 0, 0 # V69: Clean Sheet e FTS
+        
         for m in matches[:5]:
             is_home = str(m['teams']['home']['id']) == str(team_id)
             gh, ga = m['goals']['home'], m['goals']['away']
@@ -195,22 +195,36 @@ def analizza_squadra_globale(team_id):
         m_forma = 0.9 + ((punti/15)*0.2)
         
         stats = {'W': 0, 'D': 0, 'L': 0, 'Over': 0, 'Goal': 0}
+        match_validi_reti = 0
         for m in matches:
             is_home = str(m['teams']['home']['id']) == str(team_id)
             gh, ga = m['goals']['home'], m['goals']['away']
-            if gh == ga: stats['D'] += 1
-            elif (is_home and gh > ga) or (not is_home and ga > ga): stats['W'] += 1
-            else: stats['L'] += 1
-            if (gh + ga) > 2: stats['Over'] += 1
-            if gh > 0 and ga > 0: stats['Goal'] += 1
+            if gh is not None and ga is not None:
+                match_validi_reti += 1
+                if is_home:
+                    if ga == 0: cs_count += 1
+                    if gh == 0: fts_count += 1
+                else:
+                    if gh == 0: cs_count += 1
+                    if ga == 0: fts_count += 1
+
+                if gh == ga: stats['D'] += 1
+                elif (is_home and gh > ga) or (not is_home and ga > gh): stats['W'] += 1
+                else: stats['L'] += 1
+                if (gh + ga) > 2: stats['Over'] += 1
+                if gh > 0 and ga > 0: stats['Goal'] += 1
             
         ritardi = []
         if stats['D'] == 0: ritardi.append("X")
         if stats['W'] == 0: ritardi.append("Vittoria")
         if stats['Over'] == 0: ritardi.append("Over 2.5")
         if stats['Goal'] == 0: ritardi.append("Goal")
-        return m_stanchezza, is_stanca, forma_str, m_forma, (", ".join(ritardi) if ritardi else "Nessuno")
-    except: return 1.0, False, "N/D", 1.0, "Nessuno"
+        
+        cs_perc = (cs_count / max(1, match_validi_reti)) * 100
+        fts_perc = (fts_count / max(1, match_validi_reti)) * 100
+
+        return m_stanchezza, is_stanca, forma_str, m_forma, (", ".join(ritardi) if ritardi else "Nessuno"), cs_perc, fts_perc
+    except: return 1.0, False, "N/D", 1.0, "Nessuno", 0.0, 0.0
 
 @st.cache_data(ttl=3600)
 def analizza_h2h_dna_e_andata(id_casa, id_trasf):
@@ -300,7 +314,7 @@ def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev
             if 1 <= tot <= 4: mg["MG 1-4"] += prob
             if 2 <= tot <= 3: mg["MG 2-3"] += prob
             if 2 <= tot <= 4: mg["MG 2-4"] += prob
-            if 2 <= tot <= 5: mg["MG 2-5"] += prob
+            if 2 <= tot <= 5: mg["MG 3-5"] += prob
             if 3 <= tot <= 4: mg["MG 3-4"] += prob
             
             if gc <= 4 and gt <= 4: re_prob[f"Risultato {gc}-{gt}"] = prob
@@ -386,7 +400,7 @@ def costruisci_schedina_dinamica(pool, min_q, max_q, target_mult, escludi_match=
 if 'data_master' not in st.session_state: st.session_state.data_master = {}
 if 'all_tips_global' not in st.session_state: st.session_state.all_tips_global = []
 
-st.sidebar.header("⚙️ Centrale Operativa V68.1")
+st.sidebar.header("⚙️ Centrale Operativa V69")
 
 date_range = st.sidebar.date_input("Seleziona Periodo (Dal - Al):", [])
 if len(date_range) == 2: start_date, end_date = date_range[0], date_range[1]
@@ -433,7 +447,7 @@ active_dict = st.session_state['active_leagues']
 if not active_dict: st.sidebar.warning("Nessun campionato supportato attivo.")
 scelte = st.sidebar.multiselect("Campionati in campo:", list(active_dict.keys()), default=list(active_dict.keys()))
 
-btn_genera = st.sidebar.button("⚡ ESTRAI MATRIX EUROPEA")
+btn_genera = st.sidebar.button("⚡ ESTRAI MATRIX V69")
 
 if btn_genera:
     st.session_state.data_master = {}
@@ -444,7 +458,7 @@ if btn_genera:
 
     for name in scelte:
         f_id = active_dict[name]
-        with st.spinner(f"Analisi Globale V68.1 {name} (Richiede 1 min)..."):
+        with st.spinner(f"Analisi V69 (Clean Sheet & FTS) {name}..."):
             fix = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'league': f_id, 'season': STAGIONE, 'from': start_str, 'to': end_str}).json()
             std = requests.get("https://v3.football.api-sports.io/standings", headers=HEADERS, params={'league': f_id, 'season': STAGIONE}).json()
             
@@ -495,8 +509,9 @@ if btn_genera:
                 quote_reali_match = odds_cache.get(match_date_str, {}).get(fix_id, {})
                 inj = inj_cache.get(match_date_str, {})
 
-                m_st_c, is_stanca_c, forma_c, m_f_c, rit_c = analizza_squadra_globale(db_stats[c_s]['id'])
-                m_st_t, is_stanca_t, forma_t, m_f_t, rit_t = analizza_squadra_globale(db_stats[t_s]['id'])
+                # V69: Otteniamo rank, cs_perc, fts_perc
+                m_st_c, is_stanca_c, forma_c, m_f_c, rit_c, cs_c, fts_c = analizza_squadra_globale(db_stats[c_s]['id'])
+                m_st_t, is_stanca_t, forma_t, m_f_t, rit_t, cs_t, fts_t = analizza_squadra_globale(db_stats[t_s]['id'])
                 m_met, d_met = scarica_meteo(c_s)
                 
                 m_h2h_c, m_h2h_t, gol_h2h_c, gol_h2h_t, str_h2h, b_and_c, b_and_t, andata_msg, dettagli_h2h_str = analizza_h2h_dna_e_andata(db_stats[c_s]['id'], db_stats[t_s]['id'])
@@ -512,11 +527,9 @@ if btn_genera:
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
                 
-                # Modulo Statistiche Reali V68
                 poss_c, tiri_c, conv_c, corn_c, cart_c, stile_c = analizza_statistiche_avanzate(db_stats[c_s]['id'])
                 poss_t, tiri_t, conv_t, corn_t, cart_t, stile_t = analizza_statistiche_avanzate(db_stats[t_s]['id'])
                 
-                # Modulo Psicologia V67.1
                 is_coppa = name in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"]
                 m_mot_c, m_mot_t, tension_idx = 1.0, 1.0, 1.0
                 msg_mot = ""
@@ -556,11 +569,16 @@ if btn_genera:
                 xg_base_c = math.sqrt(max(0.01, db_stats[c_s]['ac']) * max(0.01, db_stats[t_s]['dt'])) * m_f_c * m_st_c
                 xg_base_t = math.sqrt(max(0.01, db_stats[t_s]['at']) * max(0.01, db_stats[c_s]['dc'])) * m_f_t * m_st_t
                 
-                # Modificatore Cinismo V68
                 if conv_c < 3.0: xg_base_c *= 1.15
                 elif conv_c > 7.0: xg_base_c *= 0.85
                 if conv_t < 3.0: xg_base_t *= 1.15
                 elif conv_t > 7.0: xg_base_t *= 0.85
+                
+                # Modificatore FTS e CS (V69)
+                if fts_c > 35.0: xg_base_c *= 0.85 # Se non segna spesso, abbassa i suoi xG
+                if cs_t > 35.0: xg_base_c *= 0.85  # Se l'avversario ha una super difesa, abbassa i tuoi xG
+                if fts_t > 35.0: xg_base_t *= 0.85
+                if cs_c > 35.0: xg_base_t *= 0.85
                 
                 se_sgombra_c = "C. Sgombra" in msg_mot
                 se_sgombra_t = "O. Sgombra" in msg_mot
@@ -603,6 +621,8 @@ if btn_genera:
 
                 matches_list.append({
                     "orario": orario_ita, "c_u": c_u, "t_u": t_u, "c_s": c_s, "t_s": t_s, 
+                    "rank_c": db_stats[c_s]['rank'], "rank_t": db_stats[t_s]['rank'],
+                    "cs_c": cs_c, "fts_c": fts_c, "cs_t": cs_t, "fts_t": fts_t,
                     "all_tips": full_tips, "best_1x2": (best_1x2_key, best_1x2_prob, best_1x2_q, best_1x2_real),
                     "quote_reali": quote_reali_match,
                     "xg_c": xg_c, "xg_t": xg_t, "arb": arb, "is_sev": is_sev,
@@ -617,12 +637,12 @@ if btn_genera:
                 })
             if matches_list: st.session_state.data_master[name] = matches_list
 
-# --- DISPLAY DELLE TAB COMPLETAMENTE RIPRISTINATO ---
+# --- DISPLAY DELLE 4 TAB ---
 if st.session_state.data_master:
-    t1, t2, t3 = st.tabs(["🌟 CLASSIFICHE OMNI-MARKET", "🔬 ESPLORATORE PARTITE", "🏆 SCHEDINE VALUE DINAMICHE"])
+    t1, t2, t3, t4 = st.tabs(["🌟 CLASSIFICHE OMNI-MARKET", "🔬 ESPLORATORE PARTITE", "🏆 SCHEDINE AUTOMATICHE", "🛒 BET BUILDER (MANUALE)"])
     
     with t1:
-        st.header("👑 Top 10 Assoluta d'Europa (Probabilità Pura)")
+        st.header("👑 Top 10 Assoluta d'Europa")
         pool_absolute = [x for x in st.session_state.all_tips_global if x['Tip'] not in ["U4.5", "Casa O0.5", "Ospite O0.5"]]
         df_all = pd.DataFrame(pool_absolute)
         if not df_all.empty:
@@ -643,37 +663,9 @@ if st.session_state.data_master:
             pool_mg = [x for x in st.session_state.all_tips_global if "MG " in x['Tip']]
             if pool_mg: st.dataframe(pd.DataFrame(pool_mg).sort_values(by="Prob", ascending=False).head(10)[['Match', 'Tip', 'Prob', 'Quota']].style.format({"Prob": "{:.1f}%", "Quota": "{:.2f}"}), hide_index=True)
             st.markdown("</div>", unsafe_allow_html=True)
-            
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("<div class='table-container'>", unsafe_allow_html=True)
-            st.subheader("🎯 Risultati Esatti & HT/FT")
-            pool_re = [x for x in st.session_state.all_tips_global if "Risultato" in x['Tip'] or "HT/FT" in x['Tip']]
-            if pool_re: st.dataframe(pd.DataFrame(pool_re).sort_values(by="Prob", ascending=False).head(10)[['Match', 'Tip', 'Prob', 'Quota']].style.format({"Prob": "{:.1f}%", "Quota": "{:.2f}"}), hide_index=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-        with col2:
-            st.markdown("<div class='table-container'>", unsafe_allow_html=True)
-            st.subheader("⚖️ Pari / Dispari")
-            pool_pd = [x for x in st.session_state.all_tips_global if x['Tip'] in ["Pari", "Dispari"]]
-            if pool_pd: st.dataframe(pd.DataFrame(pool_pd).sort_values(by="Prob", ascending=False).head(10)[['Match', 'Tip', 'Prob', 'Quota']].style.format({"Prob": "{:.1f}%", "Quota": "{:.2f}"}), hide_index=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        col3, col4 = st.columns(2)
-        with col3:
-            st.markdown("<div class='table-container'>", unsafe_allow_html=True)
-            st.subheader("🛡️ Doppie Chance (1X, X2, 12)")
-            pool_dc = [x for x in st.session_state.all_tips_global if x['Tip'] in ["1X", "X2", "12"]]
-            if pool_dc: st.dataframe(pd.DataFrame(pool_dc).sort_values(by="Prob", ascending=False).head(10)[['Match', 'Tip', 'Prob', 'Quota']].style.format({"Prob": "{:.1f}%", "Quota": "{:.2f}"}), hide_index=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-        with col4:
-            st.markdown("<div class='table-container'>", unsafe_allow_html=True)
-            st.subheader("Under / Over & Goal")
-            pool_uo = [x for x in st.session_state.all_tips_global if x['Tip'] in ["U1.5", "O1.5", "U2.5", "O2.5", "U3.5", "Goal", "NoGoal", "Over 8.5 Angoli", "Over 4.5 Cartellini"]]
-            if pool_uo: st.dataframe(pd.DataFrame(pool_uo).sort_values(by="Prob", ascending=False).head(10)[['Match', 'Tip', 'Prob', 'Quota']].style.format({"Prob": "{:.1f}%", "Quota": "{:.2f}"}), hide_index=True)
-            st.markdown("</div>", unsafe_allow_html=True)
 
     with t2:
-        st.write(f"Partite UFFICIALI V68.1 per il periodo **{start_str} / {end_str}**.")
+        st.write(f"Partite UFFICIALI V69 per il periodo **{start_str} / {end_str}**.")
         for camp, matches in st.session_state.data_master.items():
             with st.expander(f"🏆 {camp}", expanded=False):
                 matches = sorted(matches, key=lambda x: x['orario'])
@@ -688,15 +680,17 @@ if st.session_state.data_master:
                         st.markdown("<div class='stats-box'>", unsafe_allow_html=True)
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.write(f"🏠 **{m['c_s']}**")
+                            st.write(f"🏠 **{m['c_s']}** (Pos: {m['rank_c']}ª)")
                             st.write(f"📊 Stile: <span class='{'stile-orizzontale' if 'Orizz' in m['stile_c'] else 'stile-verticale'}'>{m['stile_c']}</span>", unsafe_allow_html=True)
                             st.write(f"⚽ Possesso: {m['poss_c']:.1f}% | Tiri in porta: {m['tiri_c']:.1f}")
                             st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_c']:.1f} tiri**")
+                            st.write(f"🛡️ Clean Sheet: <span class='cs-testo'>{m['cs_c']:.0f}%</span> | ❌ A secco: <span class='fts-testo'>{m['fts_c']:.0f}%</span>", unsafe_allow_html=True)
                         with col2:
-                            st.write(f"✈️ **{m['t_s']}**")
+                            st.write(f"✈️ **{m['t_s']}** (Pos: {m['rank_t']}ª)")
                             st.write(f"📊 Stile: <span class='{'stile-orizzontale' if 'Orizz' in m['stile_t'] else 'stile-verticale'}'>{m['stile_t']}</span>", unsafe_allow_html=True)
                             st.write(f"⚽ Possesso: {m['poss_t']:.1f}% | Tiri in porta: {m['tiri_t']:.1f}")
                             st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_t']:.1f} tiri**")
+                            st.write(f"🛡️ Clean Sheet: <span class='cs-testo'>{m['cs_t']:.0f}%</span> | ❌ A secco: <span class='fts-testo'>{m['fts_t']:.0f}%</span>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
 
                         c1, c2, c3, c4 = st.columns(4)
@@ -725,7 +719,7 @@ if st.session_state.data_master:
                         cc2.metric("🟨 Media Cartellini Match", f"{m['cart_tot']:.1f}")
 
                         if m['best_1x2'][0] == "No Segno Fisso":
-                            st.markdown(f"<div class='pure-1x2'>⚠️ <b>NESSUN SEGNO SECCO CONSIGLIATO</b>: Match troppo in equilibrio per l'1X2. Affidarsi ai mercati Goal o U/O.</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div class='pure-1x2'>⚠️ <b>NESSUN SEGNO SECCO CONSIGLIATO</b></div>", unsafe_allow_html=True)
                         else:
                             badge_1x2_class = "quota-badge" if m['best_1x2'][3] else "quota-badge-calc"
                             badge_1x2_text = "Ufficiale Bet365" if m['best_1x2'][3] else "Calibrata"
@@ -753,55 +747,82 @@ if st.session_state.data_master:
         budget_perf = budget_totale * 0.30
         budget_azzardo = budget_totale * 0.10
         
-        testo_export = f"=== MATRIX V68.1: SCHEDINE ===\nPeriodo: {start_str} / {end_str}\n\n"
+        testo_export = f"=== MATRIX V69: SCHEDINE ===\nPeriodo: {start_str} / {end_str}\n\n"
         
         if len(st.session_state.all_tips_global) >= 4:
             st.markdown("<div class='strategy-box safety-bg'>", unsafe_allow_html=True)
-            st.subheader(f"🟢 Schedina SAFETY (Fascia {safe_min} - {safe_max}) | Puntata: {budget_safety:.2f}€")
+            st.subheader(f"🟢 Schedina SAFETY (Fascia {safe_min} - {safe_max})")
             s_slip, q_tot_s, prob_s, usate_safety = costruisci_schedina_dinamica(st.session_state.all_tips_global, safe_min, safe_max, target_mult=safe_target, max_righe=6, max_same_family=2, escludi_match=set())
-            
-            testo_export += f"🟢 SAFETY ({budget_safety:.2f}€) - {len(s_slip)} Eventi\n"
             for x in s_slip:
-                badge_class = "quota-badge" if x['Real'] else "quota-badge-calc"
-                st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{badge_class}'>Quota: {x['Quota']}</span>", unsafe_allow_html=True)
-                testo_export += f"[{x['Time']}] {x['Match']} -> {x['Tip']} (Q: {x['Quota']})\n"
-            st.write("---")
+                bc = "quota-badge" if x['Real'] else "quota-badge-calc"
+                st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{bc}'>Q: {x['Quota']}</span>", unsafe_allow_html=True)
             col_s1, col_s2 = st.columns(2)
             col_s1.metric("Vincita Stimata", f"~{budget_safety * q_tot_s:.2f}€")
             col_s2.metric("Probabilità Congiunta", f"{prob_s*100:.2f}%")
             st.markdown("</div>", unsafe_allow_html=True)
-            testo_export += f"Vincita: {budget_safety * q_tot_s:.2f}€\n\n"
 
             st.markdown("<div class='strategy-box performance-bg'>", unsafe_allow_html=True)
-            st.subheader(f"🟠 Schedina PERFORMANCE (Fascia {perf_min} - {perf_max}) | Puntata: {budget_perf:.2f}€")
+            st.subheader(f"🟠 Schedina PERFORMANCE (Fascia {perf_min} - {perf_max})")
             p_slip, q_tot_p, prob_p, usate_perf = costruisci_schedina_dinamica(st.session_state.all_tips_global, perf_min, perf_max, target_mult=perf_target, max_righe=6, max_same_family=2, escludi_match=usate_safety)
-            
-            testo_export += f"🟠 PERFORMANCE ({budget_perf:.2f}€) - {len(p_slip)} Eventi\n"
             for x in p_slip:
-                badge_class = "quota-badge" if x['Real'] else "quota-badge-calc"
-                st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{badge_class}'>Quota: {x['Quota']}</span>", unsafe_allow_html=True)
-                testo_export += f"[{x['Time']}] {x['Match']} -> {x['Tip']} (Q: {x['Quota']})\n"
-            st.write("---")
+                bc = "quota-badge" if x['Real'] else "quota-badge-calc"
+                st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{bc}'>Q: {x['Quota']}</span>", unsafe_allow_html=True)
             col_p1, col_p2 = st.columns(2)
             col_p1.metric("Vincita Stimata", f"~{budget_perf * q_tot_p:.2f}€")
             col_p2.metric("Probabilità Congiunta", f"{prob_p*100:.2f}%")
             st.markdown("</div>", unsafe_allow_html=True)
-            testo_export += f"Vincita: {budget_perf * q_tot_p:.2f}€\n\n"
 
             st.markdown("<div class='strategy-box risk-bg'>", unsafe_allow_html=True)
-            st.subheader(f"🔴 Schedina AZZARDO (Fascia {azz_min} - {azz_max}) | Puntata: {budget_azzardo:.2f}€")
+            st.subheader(f"🔴 Schedina AZZARDO (Fascia {azz_min} - {azz_max})")
             r_slip, q_tot_a, prob_a, _ = costruisci_schedina_dinamica(st.session_state.all_tips_global, azz_min, azz_max, target_mult=azz_target, max_match_q=azz_max, max_righe=6, max_same_family=2, escludi_match=usate_perf)
-            
-            testo_export += f"🔴 AZZARDO ({budget_azzardo:.2f}€) - {len(r_slip)} Eventi\n"
             for x in r_slip:
-                badge_class = "quota-badge" if x['Real'] else "quota-badge-calc"
-                st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{badge_class}'>Quota: {x['Quota']}</span>", unsafe_allow_html=True)
-                testo_export += f"[{x['Time']}] {x['Match']} -> {x['Tip']} (Q: {x['Quota']})\n"
-            st.write("---")
+                bc = "quota-badge" if x['Real'] else "quota-badge-calc"
+                st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{bc}'>Q: {x['Quota']}</span>", unsafe_allow_html=True)
             col_a1, col_a2 = st.columns(2)
             col_a1.metric("Vincita Stimata", f"~{budget_azzardo * q_tot_a:.2f}€")
             col_a2.metric("Probabilità Congiunta", f"{prob_a*100:.2f}%")
             st.markdown("</div>", unsafe_allow_html=True)
-            testo_export += f"Vincita: {budget_azzardo * q_tot_a:.2f}€\n"
+
+    with t4:
+        st.header("🛒 Schedina Personalizzata (Bet Builder)")
+        st.write("Scegli manualmente i pronostici partita per partita dal menu a tendina. L'algoritmo calcolerà quota e probabilità in tempo reale.")
+        st.markdown("<div class='strategy-box builder-bg'>", unsafe_allow_html=True)
+        
+        matches_grouped = {}
+        for item in st.session_state.all_tips_global:
+            m_name = f"[{item['Time']}] {item['Match']} ({item['League']})"
+            if m_name not in matches_grouped: matches_grouped[m_name] = []
+            matches_grouped[m_name].append(item)
             
-            st.download_button(label="📥 Scarica Schedine per WhatsApp", data=testo_export, file_name="matrix_schedine.txt", mime="text/plain")
+        selected_picks = []
+        
+        for m_name, tips in matches_grouped.items():
+            tips_sorted = sorted(tips, key=lambda x: x['Prob'], reverse=True)
+            # Mostriamo solo le quote sensate (probabilità superiore al 30%) per non intasare il menu
+            options = ["❌ Nessuna Selezione"] + [f"{t['Tip']} (Prob: {t['Prob']:.1f}% | Quota: {t['Quota']})" for t in tips_sorted if t['Prob'] > 30.0]
+            choice = st.selectbox(m_name, options, key=f"bb_{m_name}")
+            
+            if choice != "❌ Nessuna Selezione":
+                tip_name = choice.split(" (Prob:")[0]
+                for t in tips_sorted:
+                    if t['Tip'] == tip_name:
+                        selected_picks.append(t)
+                        break
+                        
+        if selected_picks:
+            st.write("---")
+            st.subheader("🧾 Riepilogo Schedina Manuale")
+            q_tot_b, p_tot_b = 1.0, 1.0
+            for pick in selected_picks:
+                st.write(f"✅ {pick['Match']}: **{pick['Tip']}** (Quota {pick['Quota']})")
+                q_tot_b *= float(pick['Quota'])
+                p_tot_b *= (pick['Prob'] / 100)
+            
+            st.write("---")
+            cb1, cb2, cb3 = st.columns(3)
+            cb1.metric("Quota Totale", f"{q_tot_b:.2f}")
+            cb2.metric("Probabilità Congiunta", f"{p_tot_b*100:.2f}%")
+            cb3.metric("Vincita Stimata (Su 10€)", f"~{10 * q_tot_b:.2f}€")
+        else:
+            st.info("👆 Seleziona almeno un pronostico dal menu a tendina per costruire la tua schedina.")
+        st.markdown("</div>", unsafe_allow_html=True)
