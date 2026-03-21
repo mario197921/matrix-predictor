@@ -636,17 +636,16 @@ if btn_genera:
                 })
             if matches_list: st.session_state.data_master[name] = matches_list
 
-# --- DISPLAY DELLE 3 TAB (CON BET BUILDER INTEGRATO) ---
+# --- DISPLAY DELLE 3 TAB (CON BET BUILDER INTEGRATO) 
 if st.session_state.data_master:
     t1, t2, t3 = st.tabs(["🛒 TOP 10 & BUILDER", "🔬 ESPLORATORE PARTITE", "🏆 SCHEDINE AUTOMATICHE"])
     
-        with t1:
+    with t1:
         st.header("🛒 BET BUILDER & CLASSIFICHE OMNI-MARKET")
         st.write("Spunta la casella '🛒' nelle tabelle qui sotto per aggiungere la partita al tuo Carrello (calcolato automaticamente a fine pagina).")
 
         def mostra_tabella_interattiva(titolo, tip_filters, min_q=1.01, max_rows=10):
             st.subheader(titolo)
-            # Aggiunto il filtro min_q per pescare gli Azzardi
             pool = [x for x in st.session_state.all_tips_global if (tip_filters(x['Tip']) if callable(tip_filters) else x['Tip'] in tip_filters) and float(x['Quota']) >= min_q]
             if not pool:
                 st.info("Nessun dato disponibile per questa categoria.")
@@ -725,8 +724,8 @@ if st.session_state.data_master:
         else:
             st.info("👆 Spunta qualche partita dalle classifiche qui sopra per costruire la schedina in tempo reale.")
         st.markdown("</div>", unsafe_allow_html=True)
-    
-with t2:
+
+    with t2:
         st.write(f"Partite UFFICIALI V69 per il periodo **{start_str} / {end_str}**.")
         for camp, matches in st.session_state.data_master.items():
             with st.expander(f"🏆 {camp}", expanded=False):
