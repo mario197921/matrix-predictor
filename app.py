@@ -811,7 +811,7 @@ if st.session_state.data_master:
             st.markdown("<div class='strategy-box risk-bg'>", unsafe_allow_html=True)
             st.subheader("🔴 Schedina AZZARDO")
             st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_azzardo:.2f}€ (10% del Budget)</span>", unsafe_allow_html=True)
-            r_slip, q_tot_a, prob_a, _ = costruisci_schedina_dinamica(st.session_state.all_tips_global, 2.21, 15.0, target_mult=30.0, max_match_q=15.0, max_righe=6, max_same_family=2, escludi_match=usate_perf)
+            r_slip, q_tot_a, prob_a, _ = costruisci_schedina_dinamica(st.session_state.all_tips_global, 2.21, 4.50, target_mult=30.0, max_match_q=15.0, max_righe=6, max_same_family=2, escludi_match=usate_perf)
             for x in r_slip:
                 bc = "quota-badge" if x['Real'] else "quota-badge-calc"
                 st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{bc}'>Q: {x['Quota']}</span>", unsafe_allow_html=True)
