@@ -314,7 +314,7 @@ def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev
             if 1 <= tot <= 4: mg["MG 1-4"] += prob
             if 2 <= tot <= 3: mg["MG 2-3"] += prob
             if 2 <= tot <= 4: mg["MG 2-4"] += prob
-            if 2 <= tot <= 5: mg["MG 3-5"] += prob
+            if 2 <= tot <= 5: mg["MG 2-5"] += prob
             if 3 <= tot <= 4: mg["MG 3-4"] += prob
             
             if gc <= 4 and gt <= 4: re_prob[f"Risultato {gc}-{gt}"] = prob
