@@ -772,7 +772,7 @@ if st.session_state.data_master:
                         col_c.write(f"<span class='bronze-medal'>🥉 {top_3[2][0]}</span> ({top_3[2][1]:.1f}%) <span class='quota-badge-calc'>Quota: {q3}</span>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
 
-        with t3:
+            with t3:
         st.header("🏆 Generatore Automatico Ottimizzato (Senza Filtri Manuali)")
         st.write("L'algoritmo ora sceglie in totale libertà, dando priorità assoluta alla probabilità matematica per massimizzare le tue chance, senza barriere di quota artificiali.")
         
