@@ -772,7 +772,7 @@ if st.session_state.data_master:
                         col_c.write(f"<span class='bronze-medal'>🥉 {top_3[2][0]}</span> ({top_3[2][1]:.1f}%) <span class='quota-badge-calc'>Quota: {q3}</span>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
 
-            with t3:
+    with t3:
         st.header("🏆 Generatore Automatico Ottimizzato (Senza Filtri Manuali)")
         st.write("L'algoritmo ora sceglie in totale libertà, dando priorità assoluta alla probabilità matematica per massimizzare le tue chance, senza barriere di quota artificiali.")
         
@@ -781,10 +781,8 @@ if st.session_state.data_master:
         budget_azzardo = budget_totale * 0.10
         
         if len(st.session_state.all_tips_global) >= 4:
-            # Prepariamo il testo per lo scontrino
             testo_export = f"=== MATRIX V69: SCHEDINE AUTOMATICHE ===\nPeriodo: {start_str} / {end_str}\n\n"
             
-            # SAFETY: Da 1.12 a 1.50
             st.markdown("<div class='strategy-box safety-bg'>", unsafe_allow_html=True)
             st.subheader("🟢 Schedina SAFETY")
             st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_safety:.2f}€ (60% del Budget)</span>", unsafe_allow_html=True)
@@ -800,7 +798,6 @@ if st.session_state.data_master:
             testo_export += f"Totale Quota: {q_tot_s:.2f} | Probabilità: {prob_s*100:.2f}% | Vincita: ~{budget_safety * q_tot_s:.2f}€\n\n"
             st.markdown("</div>", unsafe_allow_html=True)
 
-            # PERFORMANCE: Da 1.51 a 2.20
             st.markdown("<div class='strategy-box performance-bg'>", unsafe_allow_html=True)
             st.subheader("🟠 Schedina PERFORMANCE")
             st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_perf:.2f}€ (30% del Budget)</span>", unsafe_allow_html=True)
@@ -816,7 +813,6 @@ if st.session_state.data_master:
             testo_export += f"Totale Quota: {q_tot_p:.2f} | Probabilità: {prob_p*100:.2f}% | Vincita: ~{budget_perf * q_tot_p:.2f}€\n\n"
             st.markdown("</div>", unsafe_allow_html=True)
 
-            # AZZARDO: Da 2.21 a 4.50 (Max quota singola)
             st.markdown("<div class='strategy-box risk-bg'>", unsafe_allow_html=True)
             st.subheader("🔴 Schedina AZZARDO")
             st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_azzardo:.2f}€ (10% del Budget)</span>", unsafe_allow_html=True)
@@ -832,7 +828,6 @@ if st.session_state.data_master:
             testo_export += f"Totale Quota: {q_tot_a:.2f} | Probabilità: {prob_a*100:.2f}% | Vincita: ~{budget_azzardo * q_tot_a:.2f}€\n\n"
             st.markdown("</div>", unsafe_allow_html=True)
             
-            # TASTO DOWNLOAD GLOBALE PER LA TAB 3
             st.download_button(
                 label="💾 SCARICA TUTTE LE 3 SCHEDINE (TXT)",
                 data=testo_export,
