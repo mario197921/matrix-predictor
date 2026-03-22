@@ -772,7 +772,7 @@ if st.session_state.data_master:
                         col_c.write(f"<span class='bronze-medal'>🥉 {top_3[2][0]}</span> ({top_3[2][1]:.1f}%) <span class='quota-badge-calc'>Quota: {q3}</span>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
 
-    with t3:
+        with t3:
         st.header("🏆 Generatore Automatico Ottimizzato (Senza Filtri Manuali)")
         st.write("L'algoritmo ora sceglie in totale libertà, dando priorità assoluta alla probabilità matematica per massimizzare le tue chance, senza barriere di quota artificiali.")
         
@@ -781,17 +781,23 @@ if st.session_state.data_master:
         budget_azzardo = budget_totale * 0.10
         
         if len(st.session_state.all_tips_global) >= 4:
+            # Prepariamo il testo per lo scontrino
+            testo_export = f"=== MATRIX V69: SCHEDINE AUTOMATICHE ===\nPeriodo: {start_str} / {end_str}\n\n"
+            
             # SAFETY: Da 1.12 a 1.50
             st.markdown("<div class='strategy-box safety-bg'>", unsafe_allow_html=True)
             st.subheader("🟢 Schedina SAFETY")
             st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_safety:.2f}€ (60% del Budget)</span>", unsafe_allow_html=True)
             s_slip, q_tot_s, prob_s, usate_safety = costruisci_schedina_dinamica(st.session_state.all_tips_global, 1.12, 1.50, target_mult=2.0, max_righe=6, max_same_family=2, escludi_match=set())
+            testo_export += f"🟢 SAFETY (Puntata: {budget_safety:.2f}€)\n"
             for x in s_slip:
                 bc = "quota-badge" if x['Real'] else "quota-badge-calc"
                 st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{bc}'>Q: {x['Quota']}</span>", unsafe_allow_html=True)
+                testo_export += f"- [{x['Time']}] {x['Match']} -> {x['Tip']} @ {x['Quota']:.2f}\n"
             col_s1, col_s2 = st.columns(2)
             col_s1.metric("Vincita Stimata", f"~{budget_safety * q_tot_s:.2f}€")
             col_s2.metric("Probabilità Congiunta", f"{prob_s*100:.2f}%")
+            testo_export += f"Totale Quota: {q_tot_s:.2f} | Probabilità: {prob_s*100:.2f}% | Vincita: ~{budget_safety * q_tot_s:.2f}€\n\n"
             st.markdown("</div>", unsafe_allow_html=True)
 
             # PERFORMANCE: Da 1.51 a 2.20
@@ -799,23 +805,37 @@ if st.session_state.data_master:
             st.subheader("🟠 Schedina PERFORMANCE")
             st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_perf:.2f}€ (30% del Budget)</span>", unsafe_allow_html=True)
             p_slip, q_tot_p, prob_p, usate_perf = costruisci_schedina_dinamica(st.session_state.all_tips_global, 1.51, 2.20, target_mult=5.0, max_righe=6, max_same_family=2, escludi_match=usate_safety)
+            testo_export += f"🟠 PERFORMANCE (Puntata: {budget_perf:.2f}€)\n"
             for x in p_slip:
                 bc = "quota-badge" if x['Real'] else "quota-badge-calc"
                 st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{bc}'>Q: {x['Quota']}</span>", unsafe_allow_html=True)
+                testo_export += f"- [{x['Time']}] {x['Match']} -> {x['Tip']} @ {x['Quota']:.2f}\n"
             col_p1, col_p2 = st.columns(2)
             col_p1.metric("Vincita Stimata", f"~{budget_perf * q_tot_p:.2f}€")
             col_p2.metric("Probabilità Congiunta", f"{prob_p*100:.2f}%")
+            testo_export += f"Totale Quota: {q_tot_p:.2f} | Probabilità: {prob_p*100:.2f}% | Vincita: ~{budget_perf * q_tot_p:.2f}€\n\n"
             st.markdown("</div>", unsafe_allow_html=True)
 
-            # AZZARDO: Da 2.21 a salire
+            # AZZARDO: Da 2.21 a 4.50 (Max quota singola)
             st.markdown("<div class='strategy-box risk-bg'>", unsafe_allow_html=True)
             st.subheader("🔴 Schedina AZZARDO")
             st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_azzardo:.2f}€ (10% del Budget)</span>", unsafe_allow_html=True)
-            r_slip, q_tot_a, prob_a, _ = costruisci_schedina_dinamica(st.session_state.all_tips_global, 2.21, 4.50, target_mult=30.0, max_match_q=15.0, max_righe=6, max_same_family=2, escludi_match=usate_perf)
+            r_slip, q_tot_a, prob_a, _ = costruisci_schedina_dinamica(st.session_state.all_tips_global, 2.21, 4.50, target_mult=30.0, max_match_q=4.50, max_righe=6, max_same_family=2, escludi_match=usate_perf)
+            testo_export += f"🔴 AZZARDO (Puntata: {budget_azzardo:.2f}€)\n"
             for x in r_slip:
                 bc = "quota-badge" if x['Real'] else "quota-badge-calc"
                 st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{bc}'>Q: {x['Quota']}</span>", unsafe_allow_html=True)
+                testo_export += f"- [{x['Time']}] {x['Match']} -> {x['Tip']} @ {x['Quota']:.2f}\n"
             col_a1, col_a2 = st.columns(2)
             col_a1.metric("Vincita Stimata", f"~{budget_azzardo * q_tot_a:.2f}€")
             col_a2.metric("Probabilità Congiunta", f"{prob_a*100:.2f}%")
+            testo_export += f"Totale Quota: {q_tot_a:.2f} | Probabilità: {prob_a*100:.2f}% | Vincita: ~{budget_azzardo * q_tot_a:.2f}€\n\n"
             st.markdown("</div>", unsafe_allow_html=True)
+            
+            # TASTO DOWNLOAD GLOBALE PER LA TAB 3
+            st.download_button(
+                label="💾 SCARICA TUTTE LE 3 SCHEDINE (TXT)",
+                data=testo_export,
+                file_name=f"Matrix_Auto_Tickets_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                mime="text/plain"
+            )
