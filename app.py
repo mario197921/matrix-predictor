@@ -6,9 +6,9 @@ from datetime import datetime, timezone, timedelta
 import pytz
 
 # ==========================================
-# 🎨 UI: TOTAL MATRIX DESIGN (V70 ULTIMATE)
+# 🎨 UI: TOTAL MATRIX DESIGN (V80 PRO-QUANT)
 # ==========================================
-st.set_page_config(page_title="Matrix Bet V70", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Matrix Bet V80", page_icon="🎯", layout="wide")
 
 st.markdown("""
     <style>
@@ -44,7 +44,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONFIGURAZIONE E CAMPIONATI V70 ---
+# --- CONFIGURAZIONE E CAMPIONATI V80 ---
 API_KEY_FOOTBALL = 'dc4d6488653c2d9a763290a44eb1613f'
 STAGIONE = "2025"
 HEADERS = {'x-apisports-key': API_KEY_FOOTBALL}
@@ -60,7 +60,7 @@ MASTER_LEAGUES = {
 }
 
 # ==========================================
-# 📡 MODULI API E CALCOLI MATEMATICI (V70)
+# 📡 MODULI API E CALCOLI MATEMATICI (V80)
 # ==========================================
 @st.cache_data(ttl=3600)
 def get_active_leagues(start_date, end_date):
@@ -92,7 +92,6 @@ def analizza_infortuni_pesati(inf_list, partite_giocate_team):
         if not p_id or p_id in visti: continue
         visti.add(p_id)
         
-        # V70: Intercetta Squalifiche/Cartellini Rossi
         motivo = str(i.get('type', '')).lower()
         if 'suspend' in motivo or 'red card' in motivo or 'card' in motivo:
             squalificati += 1
@@ -134,7 +133,6 @@ def scarica_quote_native(league_id, date_str):
         return quote_dict
     except: return {}
 
-# V70: STATISTICHE STAGIONALI PURE
 @st.cache_data(ttl=86400)
 def analizza_statistiche_stagionali(league_id, team_id):
     try:
@@ -153,14 +151,17 @@ def analizza_statistiche_stagionali(league_id, team_id):
         return cs_perc, fts_perc
     except: return 0.0, 0.0
 
+# V80: STATISTICHE AVANZATE PRO-QUANT (Tocchi area, Parate, Falli)
 @st.cache_data(ttl=3600)
-def analizza_statistiche_avanzate(team_id):
+def analizza_statistiche_avanzate_pro(team_id):
     try:
-        # V70: Allargato il campione a 10 partite per evitare anomalie sul Cinismo
         resp = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'team': team_id, 'last': 10, 'status': 'FT'}).json()
         matches = resp.get('response', [])
-        tot_poss, tot_tiri, tot_gol, tot_corner, tot_cart = 0, 0, 0, 0, 0
+        
+        tot_poss, tot_tiri, tot_tiri_area, tot_gol, tot_corner = 0, 0, 0, 0, 0
+        tot_cart, tot_falli, tot_parate = 0, 0, 0
         match_v = 0
+        
         for m in matches:
             fix_id = m['fixture']['id']
             stats_resp = requests.get("https://v3.football.api-sports.io/fixtures/statistics", headers=HEADERS, params={'fixture': fix_id}).json()
@@ -171,23 +172,34 @@ def analizza_statistiche_avanzate(team_id):
                         poss = str(s_dict.get('Ball Possession', '50%')).replace('%', '')
                         tot_poss += int(poss) if poss.isdigit() else 50
                         tot_tiri += int(s_dict.get('Shots on Goal', 0) or 0)
+                        tot_tiri_area += int(s_dict.get('Shots insidebox', 0) or 0)
                         tot_corner += int(s_dict.get('Corner Kicks', 0) or 0)
+                        tot_falli += int(s_dict.get('Fouls', 0) or 0)
+                        tot_parate += int(s_dict.get('Goalkeeper Saves', 0) or 0)
                         tot_cart += int(s_dict.get('Yellow Cards', 0) or 0) + int(s_dict.get('Red Cards', 0) or 0)
+                        
                         is_home = str(m['teams']['home']['id']) == str(team_id)
                         tot_gol += int(m['goals']['home'] if is_home else m['goals']['away'])
                         match_v += 1
+                        
         if match_v == 0: match_v = 1 
+        
         avg_poss = tot_poss / match_v
         avg_tiri = tot_tiri / match_v
+        avg_tiri_area = tot_tiri_area / match_v
         avg_corner = tot_corner / match_v
         avg_cart = tot_cart / match_v
-        tiri_per_gol = avg_tiri / tot_gol if tot_gol > 0 else avg_tiri + 5 
+        avg_falli = tot_falli / match_v
+        avg_parate = tot_parate / match_v
         
-        if avg_poss > 55 and avg_tiri < 4: stile = "Orizzontale (Tiki-Taka Sterile)"
-        elif avg_poss < 45 and avg_tiri > 4: stile = "Verticale (Contropiede)"
+        tiri_area_per_gol = avg_tiri_area / tot_gol if tot_gol > 0 else avg_tiri_area + 5 
+        
+        if avg_poss > 55 and avg_tiri_area < 4: stile = "Tiki-Taka Sterile"
+        elif avg_poss < 45 and avg_tiri_area > 4: stile = "Verticale Diretto"
         else: stile = "Bilanciato"
-        return avg_poss, avg_tiri, tiri_per_gol, avg_corner, avg_cart, stile
-    except: return 50.0, 4.0, 4.0, 4.5, 2.0, "Bilanciato"
+        
+        return avg_poss, avg_tiri, avg_tiri_area, tiri_area_per_gol, avg_corner, avg_cart, avg_falli, avg_parate, stile
+    except: return 50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5, "Bilanciato"
 
 def get_quota_finale(tip, prob, quote_reali):
     if quote_reali and tip in quote_reali: return quote_reali[tip], True
@@ -296,7 +308,7 @@ def scarica_meteo(citta):
 
 def calcola_prob_poisson(xg, gol): return ((xg ** gol) * math.exp(-xg)) / math.factorial(gol)
 
-def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev):
+def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev, tot_falli_match):
     p = {"1":0,"X":0,"2":0,"1X":0,"X2":0,"12":0,"Goal":0,"NoGoal":0, "Pari":0, "Dispari":0}
     mg = {"MG 1-3":0, "MG 1-4":0, "MG 2-3":0, "MG 2-4":0, "MG 2-5":0, "MG 3-4":0}
     uo_lines = [1.5, 2.5, 3.5, 4.5]
@@ -356,7 +368,9 @@ def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev
         for ft in ["1", "X", "2"]: htft[f"HT/FT {ht}/{ft}"] = (ht_prob[ht] * p[ft]) 
 
     prob_corner_85 = min(92.0, max(15.0, (avg_corner_match / 9.5) * 55))
-    tension = avg_cart_match + (1.5 if is_sev else 0)
+    
+    # V80: Incremento probabilità cartellini per fallosità media
+    tension = avg_cart_match + (1.5 if is_sev else 0) + (tot_falli_match / 20.0) 
     prob_cart_45 = min(88.0, max(20.0, (tension / 5.0) * 55))
 
     special = {
@@ -411,7 +425,7 @@ def costruisci_schedina_dinamica(pool, min_q, max_q, target_mult, escludi_match=
 if 'data_master' not in st.session_state: st.session_state.data_master = {}
 if 'all_tips_global' not in st.session_state: st.session_state.all_tips_global = []
 
-st.sidebar.header("⚙️ Centrale Operativa V70")
+st.sidebar.header("⚙️ Centrale Operativa V80")
 
 date_range = st.sidebar.date_input("Seleziona Periodo (Dal - Al):", [])
 if len(date_range) == 2: start_date, end_date = date_range[0], date_range[1]
@@ -435,7 +449,7 @@ active_dict = st.session_state['active_leagues']
 if not active_dict: st.sidebar.warning("Nessun campionato supportato attivo.")
 scelte = st.sidebar.multiselect("Campionati in campo:", list(active_dict.keys()), default=list(active_dict.keys()))
 
-btn_genera = st.sidebar.button("⚡ ESTRAI MATRIX V70")
+btn_genera = st.sidebar.button("⚡ ESTRAI MATRIX V80")
 
 if btn_genera:
     st.session_state.data_master = {}
@@ -446,7 +460,7 @@ if btn_genera:
 
     for name in scelte:
         f_id = active_dict[name]
-        with st.spinner(f"Analisi V70 (Calcolo Probabilità Pure) {name}..."):
+        with st.spinner(f"Analisi V80 (Motore Quantitativo) {name}..."):
             fix = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'league': f_id, 'season': STAGIONE, 'from': start_str, 'to': end_str}).json()
             std = requests.get("https://v3.football.api-sports.io/standings", headers=HEADERS, params={'league': f_id, 'season': STAGIONE}).json()
             
@@ -500,7 +514,6 @@ if btn_genera:
                 m_st_c, is_stanca_c, forma_c, m_f_c, rit_c = analizza_squadra_globale(db_stats[c_s]['id'])
                 m_st_t, is_stanca_t, forma_t, m_f_t, rit_t = analizza_squadra_globale(db_stats[t_s]['id'])
                 
-                # V70: CS e FTS Stagionali
                 cs_c, fts_c = analizza_statistiche_stagionali(f_id, db_stats[c_s]['id'])
                 cs_t, fts_t = analizza_statistiche_stagionali(f_id, db_stats[t_s]['id'])
                 
@@ -518,8 +531,9 @@ if btn_genera:
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
                 
-                poss_c, tiri_c, conv_c, corn_c, cart_c, stile_c = analizza_statistiche_avanzate(db_stats[c_s]['id'])
-                poss_t, tiri_t, conv_t, corn_t, cart_t, stile_t = analizza_statistiche_avanzate(db_stats[t_s]['id'])
+                # V80: Caricamento Dati Avanzati
+                poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c, parate_c, stile_c = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
+                poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t, parate_t, stile_t = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
                 
                 is_coppa = name in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"]
                 m_mot_c, m_mot_t, tension_idx = 1.0, 1.0, 1.0
@@ -560,19 +574,37 @@ if btn_genera:
                 xg_base_c = math.sqrt(max(0.01, db_stats[c_s]['ac']) * max(0.01, db_stats[t_s]['dt'])) * m_f_c * m_st_c
                 xg_base_t = math.sqrt(max(0.01, db_stats[t_s]['at']) * max(0.01, db_stats[c_s]['dc'])) * m_f_t * m_st_t
                 
-                # V70: Profilazione League (Anti-Trappola)
                 malus_league = 1.0
-                if name in ["🇬🇷 Super League", "🇫🇷 Ligue 1", "🇮🇹 Serie B"]:
-                    malus_league = 0.85 
-
+                if name in ["🇬🇷 Super League", "🇫🇷 Ligue 1", "🇮🇹 Serie B"]: malus_league = 0.85 
                 xg_base_c *= malus_league
                 xg_base_t *= malus_league
 
+                # V80: Elaborazione Dati Pro-Quant
+                
+                # 1. Modifica Cinismo tramite Tiri in Area
                 if conv_c < 3.0: xg_base_c *= 1.15
                 elif conv_c > 7.0: xg_base_c *= 0.85
                 if conv_t < 3.0: xg_base_t *= 1.15
                 elif conv_t > 7.0: xg_base_t *= 0.85
                 
+                # 2. Grandi occasioni e Tocchi in area (Boost Pressione)
+                boost_box_c = min(1.20, 1.0 + (box_c / 15.0) * 0.15)
+                boost_box_t = min(1.20, 1.0 + (box_t / 15.0) * 0.15)
+                xg_base_c *= boost_box_c
+                xg_base_t *= boost_box_t
+                
+                # 3. Parate del Portiere (Riduzione xG avversario)
+                malus_portiere_c = min(0.25, (parate_c / 6.0) * 0.20)
+                malus_portiere_t = min(0.25, (parate_t / 6.0) * 0.20)
+                xg_base_c *= (1 - malus_portiere_t)
+                xg_base_t *= (1 - malus_portiere_c)
+                
+                # 4. Fallosità e Spezzettamento Gioco (Riduzione totale per favorire gli Under)
+                tot_falli_match = falli_c + falli_t
+                if tot_falli_match > 28:
+                    xg_base_c *= 0.90
+                    xg_base_t *= 0.90
+
                 if fts_c > 35.0: xg_base_c *= 0.85 
                 if cs_t > 35.0: xg_base_c *= 0.85  
                 if fts_t > 35.0: xg_base_t *= 0.85
@@ -598,7 +630,7 @@ if btn_genera:
                 avg_corner_match = corn_c + corn_t
                 avg_cart_match = cart_c + cart_t
 
-                full_tips = calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev)
+                full_tips = calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev, tot_falli_match)
                 
                 best_1x2_key = max(["1", "X", "2"], key=lambda k: full_tips[k])
                 if full_tips[best_1x2_key] < 45.0:
@@ -630,8 +662,10 @@ if btn_genera:
                     "stan_c": "⚠️ Fatigue" if is_stanca_c else "✅ Riposo", "stan_t": "⚠️ Fatigue" if is_stanca_t else "✅ Riposo", 
                     "forma_c": forma_c, "forma_t": forma_t, "rit_c": rit_c, "rit_t": rit_t,
                     "poss_c": poss_c, "tiri_c": tiri_c, "conv_c": conv_c, "stile_c": stile_c,
+                    "box_c": box_c, "falli_c": falli_c, "parate_c": parate_c,
                     "poss_t": poss_t, "tiri_t": tiri_t, "conv_t": conv_t, "stile_t": stile_t,
-                    "corn_tot": avg_corner_match, "cart_tot": avg_cart_match,
+                    "box_t": box_t, "falli_t": falli_t, "parate_t": parate_t,
+                    "corn_tot": avg_corner_match, "cart_tot": avg_cart_match, "falli_tot": tot_falli_match
                 })
             if matches_list: st.session_state.data_master[name] = matches_list
 
@@ -690,7 +724,7 @@ if st.session_state.data_master:
         st.header("🧾 IL TUO CARRELLO")
         if carrello_finale:
             q_tot_b, p_tot_b = 1.0, 1.0
-            testo_scontrino = "=== RICEVUTA MATRIX V70 ===\n\n"
+            testo_scontrino = "=== RICEVUTA MATRIX V80 ===\n\n"
             
             for pick in carrello_finale:
                 st.write(f"✅ {pick['Match']}: **{pick['Tip']}** (Quota {pick['Quota']:.2f})")
@@ -719,7 +753,7 @@ if st.session_state.data_master:
         st.markdown("</div>", unsafe_allow_html=True)
 
     with t2:
-        st.write(f"Partite UFFICIALI V70 per il periodo **{start_str} / {end_str}**.")
+        st.write(f"Partite UFFICIALI V80 per il periodo **{start_str} / {end_str}**.")
         for camp, matches in st.session_state.data_master.items():
             with st.expander(f"🏆 {camp}", expanded=False):
                 matches = sorted(matches, key=lambda x: x['orario'])
@@ -736,15 +770,17 @@ if st.session_state.data_master:
                         with col1:
                             st.write(f"🏠 **{m['c_s']}** (Pos: {m['rank_c']}ª)")
                             st.write(f"📊 Stile (10gg): <span class='{'stile-orizzontale' if 'Orizz' in m['stile_c'] else 'stile-verticale'}'>{m['stile_c']}</span>", unsafe_allow_html=True)
-                            st.write(f"⚽ Possesso: {m['poss_c']:.1f}% | Tiri in porta: {m['tiri_c']:.1f}")
-                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_c']:.1f} tiri**")
-                            st.write(f"🛡️ Clean Sheet (Stagione): <span class='cs-testo'>{m['cs_c']:.0f}%</span> | ❌ A secco: <span class='fts-testo'>{m['fts_c']:.0f}%</span>", unsafe_allow_html=True)
+                            st.write(f"⚽ Possesso: {m['poss_c']:.1f}% | 🎯 Tiri Area/match: {m['box_c']:.1f}")
+                            st.write(f"🧤 Parate/match: {m['parate_c']:.1f} | 🛑 Falli/match: {m['falli_c']:.1f}")
+                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_c']:.1f} tiri in area**")
+                            st.write(f"🛡️ Clean Sheet: <span class='cs-testo'>{m['cs_c']:.0f}%</span> | ❌ A secco: <span class='fts-testo'>{m['fts_c']:.0f}%</span>", unsafe_allow_html=True)
                         with col2:
                             st.write(f"✈️ **{m['t_s']}** (Pos: {m['rank_t']}ª)")
                             st.write(f"📊 Stile (10gg): <span class='{'stile-orizzontale' if 'Orizz' in m['stile_t'] else 'stile-verticale'}'>{m['stile_t']}</span>", unsafe_allow_html=True)
-                            st.write(f"⚽ Possesso: {m['poss_t']:.1f}% | Tiri in porta: {m['tiri_t']:.1f}")
-                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_t']:.1f} tiri**")
-                            st.write(f"🛡️ Clean Sheet (Stagione): <span class='cs-testo'>{m['cs_t']:.0f}%</span> | ❌ A secco: <span class='fts-testo'>{m['fts_t']:.0f}%</span>", unsafe_allow_html=True)
+                            st.write(f"⚽ Possesso: {m['poss_t']:.1f}% | 🎯 Tiri Area/match: {m['box_t']:.1f}")
+                            st.write(f"🧤 Parate/match: {m['parate_t']:.1f} | 🛑 Falli/match: {m['falli_t']:.1f}")
+                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_t']:.1f} tiri in area**")
+                            st.write(f"🛡️ Clean Sheet: <span class='cs-testo'>{m['cs_t']:.0f}%</span> | ❌ A secco: <span class='fts-testo'>{m['fts_t']:.0f}%</span>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
 
                         c1, c2, c3, c4 = st.columns(4)
@@ -770,9 +806,10 @@ if st.session_state.data_master:
                             st.write(f"<span class='ritardo-testo'>Ritardi 🏠: {m['rit_c']} | ✈️: {m['rit_t']}</span>", unsafe_allow_html=True)
                             st.markdown(f"<div class='h2h-details'>{m['dettagli_h2h']}</div>", unsafe_allow_html=True)
                         
-                        cc1, cc2 = st.columns(2)
-                        cc1.metric("🚩 Media Corner Match", f"{m['corn_tot']:.1f}")
-                        cc2.metric("🟨 Media Cartellini Match", f"{m['cart_tot']:.1f}")
+                        cc1, cc2, cc3 = st.columns(3)
+                        cc1.metric("🚩 Corner / Match", f"{m['corn_tot']:.1f}")
+                        cc2.metric("🟨 Cartellini / Match", f"{m['cart_tot']:.1f}")
+                        cc3.metric("🛑 Falli Totali / Match", f"{m['falli_tot']:.1f}")
 
                         if m['best_1x2'][0] == "No Segno Fisso":
                             st.markdown(f"<div class='pure-1x2'>⚠️ <b>NESSUN SEGNO SECCO CONSIGLIATO</b></div>", unsafe_allow_html=True)
@@ -798,21 +835,20 @@ if st.session_state.data_master:
                         st.markdown("</div>", unsafe_allow_html=True)
 
     with t3:
-        st.header("🏆 Generatore Automatico Ottimizzato (V70)")
-        st.write("L'algoritmo ora possiede il 'Muro di Berlino' per la Safety (niente mercati Goal o Over rischiosi) e calcola i CS/FTS sull'intera stagione.")
+        st.header("🏆 Generatore Automatico Ottimizzato (V80)")
+        st.write("L'algoritmo calcola pressioni offensive, parate e fallosità. Muro di Berlino attivo sulla Safety.")
         
         budget_safety = budget_totale * 0.60
         budget_perf = budget_totale * 0.30
         budget_azzardo = budget_totale * 0.10
         
         if len(st.session_state.all_tips_global) >= 4:
-            testo_export = f"=== MATRIX V70: SCHEDINE AUTOMATICHE ===\nPeriodo: {start_str} / {end_str}\n\n"
+            testo_export = f"=== MATRIX V80: SCHEDINE AUTOMATICHE ===\nPeriodo: {start_str} / {end_str}\n\n"
             
             st.markdown("<div class='strategy-box safety-bg'>", unsafe_allow_html=True)
             st.subheader("🟢 Schedina SAFETY (Muro di Berlino Attivo)")
             st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_safety:.2f}€ (60% del Budget)</span>", unsafe_allow_html=True)
             
-            # V70: IL MURO DI BERLINO PER LA SAFETY (Bannati Goal e Over larghi)
             vietati_safety = ["Goal", "O1.5", "O2.5", "O3.5", "O4.5"]
             pool_safety = [x for x in st.session_state.all_tips_global if x['Tip'] not in vietati_safety]
             
@@ -861,6 +897,6 @@ if st.session_state.data_master:
             st.download_button(
                 label="💾 SCARICA TUTTE LE 3 SCHEDINE (TXT)",
                 data=testo_export,
-                file_name=f"Matrix_V70_Tickets_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                file_name=f"Matrix_V80_Tickets_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                 mime="text/plain"
             )
