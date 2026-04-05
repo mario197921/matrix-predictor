@@ -758,11 +758,12 @@ if st.session_state.data_master:
                             st.write(f"✈️ <span class='form-box'>{m['forma_t']}</span> | {m['stan_t']}", unsafe_allow_html=True)
                         with c3:
                             st.markdown("<p class='label-bold'>Assenti & Squalificati</p>", unsafe_allow_html=True)
-                            # V70: Segnalino per gli squalificati
-                            sq_c_badge = f" (<span class='star-testo'>{m['sq_c']} 🟥</span>)" if m['sq_c'] > 0 else ""
-                            sq_t_badge = f" (<span class='star-testo'>{m['sq_t']} 🟥</span>)" if m['sq_t'] > 0 else ""
-                            st.write(f"🏠 🚑 {m['count_c']} Assenti{sq_c_badge}", unsafe_allow_html=True)
-                            st.write(f"✈️ 🚑 {m['count_t']} Assenti{sq_t_badge}", unsafe_allow_html=True)
+                            c_star = f" (<span class='star-testo'>{m['t1_c']} Star</span>)" if m['t1_c'] > 0 else ""
+                            t_star = f" (<span class='star-testo'>{m['t1_t']} Star</span>)" if m['t1_t'] > 0 else ""
+                            sq_c_badge = f" <span class='star-testo'>[{m['sq_c']} 🟥]</span>" if m['sq_c'] > 0 else ""
+                            sq_t_badge = f" <span class='star-testo'>[{m['sq_t']} 🟥]</span>" if m['sq_t'] > 0 else ""
+                            st.write(f"🏠 🚑 {m['count_c']} Assenti{c_star}{sq_c_badge}", unsafe_allow_html=True)
+                            st.write(f"✈️ 🚑 {m['count_t']} Assenti{t_star}{sq_t_badge}", unsafe_allow_html=True)
                         with c4: 
                             st.markdown("<p class='label-bold'>DNA Storico & Ritardi</p>", unsafe_allow_html=True)
                             st.write(f"<span class='dna-testo'>{m['dna_h2h']}</span>", unsafe_allow_html=True)
