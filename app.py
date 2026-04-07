@@ -6,9 +6,9 @@ from datetime import datetime, timezone, timedelta
 import pytz
 
 # ==========================================
-# 🎨 UI: TOTAL MATRIX DESIGN (V80 PRO-QUANT)
+# 🎨 UI: TOTAL MATRIX DESIGN (V90 QUANTUM)
 # ==========================================
-st.set_page_config(page_title="Matrix Bet V80", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Matrix Bet V90", page_icon="🎯", layout="wide")
 
 st.markdown("""
     <style>
@@ -44,7 +44,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONFIGURAZIONE E CAMPIONATI V80 ---
+# --- CONFIGURAZIONE E CAMPIONATI V90 ---
 API_KEY_FOOTBALL = 'dc4d6488653c2d9a763290a44eb1613f'
 STAGIONE = "2025"
 HEADERS = {'x-apisports-key': API_KEY_FOOTBALL}
@@ -60,7 +60,7 @@ MASTER_LEAGUES = {
 }
 
 # ==========================================
-# 📡 MODULI API E CALCOLI MATEMATICI (V80)
+# 📡 MODULI API E CALCOLI MATEMATICI (V90)
 # ==========================================
 @st.cache_data(ttl=3600)
 def get_active_leagues(start_date, end_date):
@@ -75,18 +75,33 @@ def get_active_leagues(start_date, end_date):
         return {k: v for k, v in MASTER_LEAGUES.items() if v in active_ids}
     except: return MASTER_LEAGUES
 
-@st.cache_data(ttl=86400) 
-def get_player_minutes(player_id, season):
-    if not player_id: return 0
+# V90: ESTRAZIONE DATI SINGOLO GIOCATORE (Rating, Posizione, Gol, Assist)
+@st.cache_data(ttl=86400)
+def get_player_advanced_stats(player_id, season):
+    if not player_id: return "Unknown", 0, 0, 6.0, 0
     try:
         resp = requests.get("https://v3.football.api-sports.io/players", headers=HEADERS, params={'id': player_id, 'season': season}).json()
-        if resp.get('response'): return sum(s['games']['minutes'] or 0 for s in resp['response'][0]['statistics'] if s['games']['minutes'])
-        return 0
-    except: return 0
+        if resp.get('response'):
+            stats = resp['response'][0]['statistics'][0]
+            pos = stats['games']['position']
+            mins = stats['games']['minutes'] or 0
+            rating = float(stats['games']['rating'] or 6.0)
+            goals = stats['goals']['total'] or 0
+            assists = stats['goals']['assists'] or 0
+            return pos, goals, assists, rating, mins
+    except: pass
+    return "Unknown", 0, 0, 6.0, 0
 
-def analizza_infortuni_pesati(inf_list, partite_giocate_team):
-    malus = 0.0; t1_star, t2_rot, t3_ris, squalificati = 0, 0, 0, 0; visti = set()
+# V90: IL NUOVO MOTORE ASSENTI AGNOSTICO
+def analizza_infortuni_pesati_v90(inf_list, partite_giocate_team):
+    malus_att = 0.0  # Danno all'attacco (riduce i propri xG)
+    boost_opp = 0.0  # Danno alla difesa (aumenta gli xG avversari)
+    t1_star, t2_rot, t3_ris, squalificati = 0, 0, 0, 0
+    difensori_out = 0
+    portiere_titolare_out = False
+    visti = set()
     max_mins = max(1, partite_giocate_team * 90)
+
     for i in inf_list:
         p_id = i['player'].get('id')
         if not p_id or p_id in visti: continue
@@ -96,11 +111,41 @@ def analizza_infortuni_pesati(inf_list, partite_giocate_team):
         if 'suspend' in motivo or 'red card' in motivo or 'card' in motivo:
             squalificati += 1
 
-        ratio = get_player_minutes(p_id, STAGIONE) / max_mins
-        if ratio >= 0.50: malus += 0.15; t1_star += 1
-        elif ratio >= 0.20: malus += 0.05; t2_rot += 1
-        else: malus += 0.01; t3_ris += 1
-    return min(0.40, malus), t1_star, t2_rot, t3_ris, len(visti), squalificati
+        # Chiamata chirurgica per il giocatore assente
+        pos, gol, assist, rating, mins = get_player_advanced_stats(p_id, STAGIONE)
+        ratio = mins / max_mins
+
+        if ratio >= 0.50: t1_star += 1
+        elif ratio >= 0.20: t2_rot += 1
+        else: t3_ris += 1
+
+        is_star = ratio >= 0.50 or rating >= 7.0
+
+        # L'IMPATTO AGNOSTICO SULL'ATTACCO (Chiunque faccia gol o assist)
+        if gol >= 5 or assist >= 5 or (pos in ["Attacker", "Midfielder"] and is_star):
+            malus_att += 0.15
+            if gol >= 10: malus_att += 0.10 # Super-bomber assente
+            if assist >= 8: malus_att += 0.10 # Super-assistman assente
+            if rating >= 7.3: malus_att += 0.10 # Fuoriclasse assoluto
+
+        # L'IMPATTO STRUTTURALE SULLA DIFESA (Portieri e Difensori)
+        if pos == "Defender":
+            if is_star:
+                boost_opp += 0.15
+                difensori_out += 1
+            elif ratio >= 0.20:
+                boost_opp += 0.05
+                difensori_out += 1
+        elif pos == "Goalkeeper":
+            if is_star: # Portiere titolare
+                portiere_titolare_out = True
+                boost_opp += 0.25 # Boost enorme all'avversario
+
+    # EFFETTO REPARTO SMANTELLATO
+    if difensori_out >= 2:
+        boost_opp += 0.20 # La difesa perde le distanze
+
+    return min(0.60, malus_att), min(0.60, boost_opp), t1_star, t2_rot, t3_ris, len(visti), squalificati, portiere_titolare_out, difensori_out
 
 @st.cache_data(ttl=3600)
 def scarica_quote_native(league_id, date_str):
@@ -151,7 +196,6 @@ def analizza_statistiche_stagionali(league_id, team_id):
         return cs_perc, fts_perc
     except: return 0.0, 0.0
 
-# V80: STATISTICHE AVANZATE PRO-QUANT (Tocchi area, Parate, Falli)
 @st.cache_data(ttl=3600)
 def analizza_statistiche_avanzate_pro(team_id):
     try:
@@ -368,8 +412,6 @@ def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev
         for ft in ["1", "X", "2"]: htft[f"HT/FT {ht}/{ft}"] = (ht_prob[ht] * p[ft]) 
 
     prob_corner_85 = min(92.0, max(15.0, (avg_corner_match / 9.5) * 55))
-    
-    # V80: Incremento probabilità cartellini per fallosità media
     tension = avg_cart_match + (1.5 if is_sev else 0) + (tot_falli_match / 20.0) 
     prob_cart_45 = min(88.0, max(20.0, (tension / 5.0) * 55))
 
@@ -425,7 +467,7 @@ def costruisci_schedina_dinamica(pool, min_q, max_q, target_mult, escludi_match=
 if 'data_master' not in st.session_state: st.session_state.data_master = {}
 if 'all_tips_global' not in st.session_state: st.session_state.all_tips_global = []
 
-st.sidebar.header("⚙️ Centrale Operativa V80")
+st.sidebar.header("⚙️ Centrale Operativa V90")
 
 date_range = st.sidebar.date_input("Seleziona Periodo (Dal - Al):", [])
 if len(date_range) == 2: start_date, end_date = date_range[0], date_range[1]
@@ -449,7 +491,7 @@ active_dict = st.session_state['active_leagues']
 if not active_dict: st.sidebar.warning("Nessun campionato supportato attivo.")
 scelte = st.sidebar.multiselect("Campionati in campo:", list(active_dict.keys()), default=list(active_dict.keys()))
 
-btn_genera = st.sidebar.button("⚡ ESTRAI MATRIX V80")
+btn_genera = st.sidebar.button("⚡ ESTRAI MATRIX V90")
 
 if btn_genera:
     st.session_state.data_master = {}
@@ -460,7 +502,7 @@ if btn_genera:
 
     for name in scelte:
         f_id = active_dict[name]
-        with st.spinner(f"Analisi V80 (Motore Quantitativo) {name}..."):
+        with st.spinner(f"Analisi V90 (Motore Giocatori & Rating) {name}..."):
             fix = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'league': f_id, 'season': STAGIONE, 'from': start_str, 'to': end_str}).json()
             std = requests.get("https://v3.football.api-sports.io/standings", headers=HEADERS, params={'league': f_id, 'season': STAGIONE}).json()
             
@@ -525,13 +567,13 @@ if btn_genera:
                 inf_c_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == c_s]
                 inf_t_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == t_s]
                 
-                malus_c, t1_c, t2_c, t3_c, count_c, sq_c = analizza_infortuni_pesati(inf_c_list, db_stats[c_s]['giocate'])
-                malus_t, t1_t, t2_t, t3_t, count_t, sq_t = analizza_infortuni_pesati(inf_t_list, db_stats[t_s]['giocate'])
+                # V90: Calcolo Impatto Giocatori Agnostico
+                malus_att_c, boost_opp_c, t1_c, t2_c, t3_c, count_c, sq_c, gk_out_c, def_out_c = analizza_infortuni_pesati_v90(inf_c_list, db_stats[c_s]['giocate'])
+                malus_att_t, boost_opp_t, t1_t, t2_t, t3_t, count_t, sq_t, gk_out_t, def_out_t = analizza_infortuni_pesati_v90(inf_t_list, db_stats[t_s]['giocate'])
                 
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
                 
-                # V80: Caricamento Dati Avanzati
                 poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c, parate_c, stile_c = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
                 poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t, parate_t, stile_t = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
                 
@@ -579,27 +621,21 @@ if btn_genera:
                 xg_base_c *= malus_league
                 xg_base_t *= malus_league
 
-                # V80: Elaborazione Dati Pro-Quant
-                
-                # 1. Modifica Cinismo tramite Tiri in Area
                 if conv_c < 3.0: xg_base_c *= 1.15
                 elif conv_c > 7.0: xg_base_c *= 0.85
                 if conv_t < 3.0: xg_base_t *= 1.15
                 elif conv_t > 7.0: xg_base_t *= 0.85
                 
-                # 2. Grandi occasioni e Tocchi in area (Boost Pressione)
                 boost_box_c = min(1.20, 1.0 + (box_c / 15.0) * 0.15)
                 boost_box_t = min(1.20, 1.0 + (box_t / 15.0) * 0.15)
                 xg_base_c *= boost_box_c
                 xg_base_t *= boost_box_t
                 
-                # 3. Parate del Portiere (Riduzione xG avversario)
                 malus_portiere_c = min(0.25, (parate_c / 6.0) * 0.20)
                 malus_portiere_t = min(0.25, (parate_t / 6.0) * 0.20)
                 xg_base_c *= (1 - malus_portiere_t)
                 xg_base_t *= (1 - malus_portiere_c)
                 
-                # 4. Fallosità e Spezzettamento Gioco (Riduzione totale per favorire gli Under)
                 tot_falli_match = falli_c + falli_t
                 if tot_falli_match > 28:
                     xg_base_c *= 0.90
@@ -613,8 +649,11 @@ if btn_genera:
                 se_sgombra_c = "C. Sgombra" in msg_mot
                 se_sgombra_t = "O. Sgombra" in msg_mot
                 
-                xg_c = xg_base_c * (1 - malus_c) * (1 + (malus_t * 0.5)) * m_h2h_c * b_and_c * m_mot_c * (1.10 if se_sgombra_t else 1.0)
-                xg_t = xg_base_t * (1 - malus_t) * (1 + (malus_c * 0.5)) * m_h2h_t * b_and_t * m_mot_t * (1.10 if se_sgombra_c else 1.0)
+                # V90: INCROCIO TOTALE xG. 
+                # Casa perde xG se manca il suo bomber (malus_att_c). 
+                # Casa guadagna xG se manca il difensore avversario (boost_opp_t)
+                xg_c = xg_base_c * (1 - malus_att_c) * (1 + boost_opp_t) * m_h2h_c * b_and_c * m_mot_c * (1.10 if se_sgombra_t else 1.0)
+                xg_t = xg_base_t * (1 - malus_att_t) * (1 + boost_opp_c) * m_h2h_t * b_and_t * m_mot_t * (1.10 if se_sgombra_c else 1.0)
                 
                 msg_streak = ""
                 if streak_breaker_c: xg_c = max(1.15, xg_c * 1.45); msg_streak += "🔥 STREAK CASA "
@@ -656,8 +695,8 @@ if btn_genera:
                     "all_tips": full_tips, "best_1x2": (best_1x2_key, best_1x2_prob, best_1x2_q, best_1x2_real),
                     "quote_reali": quote_reali_match,
                     "xg_c": xg_c, "xg_t": xg_t, "arb": arb, "is_sev": is_sev,
-                    "count_c": count_c, "sq_c": sq_c, "t1_c": t1_c, "t2_c": t2_c, "t3_c": t3_c,
-                    "count_t": count_t, "sq_t": sq_t, "t1_t": t1_t, "t2_t": t2_t, "t3_t": t3_t,
+                    "count_c": count_c, "sq_c": sq_c, "t1_c": t1_c, "t2_c": t2_c, "t3_c": t3_c, "gk_out_c": gk_out_c, "def_out_c": def_out_c,
+                    "count_t": count_t, "sq_t": sq_t, "t1_t": t1_t, "t2_t": t2_t, "t3_t": t3_t, "gk_out_t": gk_out_t, "def_out_t": def_out_t,
                     "meteo": d_met, "dna_h2h": str_h2h, "dettagli_h2h": dettagli_h2h_str, "streak_msg": msg_streak.strip(), "andata_msg": andata_msg, "msg_mot": msg_mot.strip(),
                     "stan_c": "⚠️ Fatigue" if is_stanca_c else "✅ Riposo", "stan_t": "⚠️ Fatigue" if is_stanca_t else "✅ Riposo", 
                     "forma_c": forma_c, "forma_t": forma_t, "rit_c": rit_c, "rit_t": rit_t,
@@ -724,7 +763,7 @@ if st.session_state.data_master:
         st.header("🧾 IL TUO CARRELLO")
         if carrello_finale:
             q_tot_b, p_tot_b = 1.0, 1.0
-            testo_scontrino = "=== RICEVUTA MATRIX V80 ===\n\n"
+            testo_scontrino = "=== RICEVUTA MATRIX V90 ===\n\n"
             
             for pick in carrello_finale:
                 st.write(f"✅ {pick['Match']}: **{pick['Tip']}** (Quota {pick['Quota']:.2f})")
@@ -753,7 +792,7 @@ if st.session_state.data_master:
         st.markdown("</div>", unsafe_allow_html=True)
 
     with t2:
-        st.write(f"Partite UFFICIALI V80 per il periodo **{start_str} / {end_str}**.")
+        st.write(f"Partite UFFICIALI V90 per il periodo **{start_str} / {end_str}**.")
         for camp, matches in st.session_state.data_master.items():
             with st.expander(f"🏆 {camp}", expanded=False):
                 matches = sorted(matches, key=lambda x: x['orario'])
@@ -768,14 +807,17 @@ if st.session_state.data_master:
                         st.markdown("<div class='stats-box'>", unsafe_allow_html=True)
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.write(f"🏠 **{m['c_s']}** (Pos: {m['rank_c']}ª)")
+                            # Nascondiamo la Posizione Classifica nelle Coppe per non confondere
+                            mostra_rank_c = "" if camp in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"] else f" (Pos: {m['rank_c']}ª)"
+                            st.write(f"🏠 **{m['c_s']}**{mostra_rank_c}")
                             st.write(f"📊 Stile (10gg): <span class='{'stile-orizzontale' if 'Orizz' in m['stile_c'] else 'stile-verticale'}'>{m['stile_c']}</span>", unsafe_allow_html=True)
                             st.write(f"⚽ Possesso: {m['poss_c']:.1f}% | 🎯 Tiri Area/match: {m['box_c']:.1f}")
                             st.write(f"🧤 Parate/match: {m['parate_c']:.1f} | 🛑 Falli/match: {m['falli_c']:.1f}")
                             st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_c']:.1f} tiri in area**")
                             st.write(f"🛡️ Clean Sheet: <span class='cs-testo'>{m['cs_c']:.0f}%</span> | ❌ A secco: <span class='fts-testo'>{m['fts_c']:.0f}%</span>", unsafe_allow_html=True)
                         with col2:
-                            st.write(f"✈️ **{m['t_s']}** (Pos: {m['rank_t']}ª)")
+                            mostra_rank_t = "" if camp in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"] else f" (Pos: {m['rank_t']}ª)"
+                            st.write(f"✈️ **{m['t_s']}**{mostra_rank_t}")
                             st.write(f"📊 Stile (10gg): <span class='{'stile-orizzontale' if 'Orizz' in m['stile_t'] else 'stile-verticale'}'>{m['stile_t']}</span>", unsafe_allow_html=True)
                             st.write(f"⚽ Possesso: {m['poss_t']:.1f}% | 🎯 Tiri Area/match: {m['box_t']:.1f}")
                             st.write(f"🧤 Parate/match: {m['parate_t']:.1f} | 🛑 Falli/match: {m['falli_t']:.1f}")
@@ -793,13 +835,19 @@ if st.session_state.data_master:
                             st.write(f"🏠 <span class='form-box'>{m['forma_c']}</span> | {m['stan_c']}", unsafe_allow_html=True)
                             st.write(f"✈️ <span class='form-box'>{m['forma_t']}</span> | {m['stan_t']}", unsafe_allow_html=True)
                         with c3:
-                            st.markdown("<p class='label-bold'>Assenti & Squalificati</p>", unsafe_allow_html=True)
+                            st.markdown("<p class='label-bold'>Assenti & V90 Radar</p>", unsafe_allow_html=True)
+                            # V90: Icone specifiche per Portiere e Difesa
                             c_star = f" (<span class='star-testo'>{m['t1_c']} Star</span>)" if m['t1_c'] > 0 else ""
                             t_star = f" (<span class='star-testo'>{m['t1_t']} Star</span>)" if m['t1_t'] > 0 else ""
                             sq_c_badge = f" <span class='star-testo'>[{m['sq_c']} 🟥]</span>" if m['sq_c'] > 0 else ""
                             sq_t_badge = f" <span class='star-testo'>[{m['sq_t']} 🟥]</span>" if m['sq_t'] > 0 else ""
-                            st.write(f"🏠 🚑 {m['count_c']} Assenti{c_star}{sq_c_badge}", unsafe_allow_html=True)
-                            st.write(f"✈️ 🚑 {m['count_t']} Assenti{t_star}{sq_t_badge}", unsafe_allow_html=True)
+                            gk_badge_c = " 🧤🚫" if m['gk_out_c'] else ""
+                            gk_badge_t = " 🧤🚫" if m['gk_out_t'] else ""
+                            def_badge_c = " 🧱⚠️" if m['def_out_c'] >= 2 else ""
+                            def_badge_t = " 🧱⚠️" if m['def_out_t'] >= 2 else ""
+                            
+                            st.write(f"🏠 🚑 {m['count_c']} Assenti{c_star}{sq_c_badge}{gk_badge_c}{def_badge_c}", unsafe_allow_html=True)
+                            st.write(f"✈️ 🚑 {m['count_t']} Assenti{t_star}{sq_t_badge}{gk_badge_t}{def_badge_t}", unsafe_allow_html=True)
                         with c4: 
                             st.markdown("<p class='label-bold'>DNA Storico & Ritardi</p>", unsafe_allow_html=True)
                             st.write(f"<span class='dna-testo'>{m['dna_h2h']}</span>", unsafe_allow_html=True)
@@ -835,15 +883,15 @@ if st.session_state.data_master:
                         st.markdown("</div>", unsafe_allow_html=True)
 
     with t3:
-        st.header("🏆 Generatore Automatico Ottimizzato (V80)")
-        st.write("L'algoritmo calcola pressioni offensive, parate e fallosità. Muro di Berlino attivo sulla Safety.")
+        st.header("🏆 Generatore Automatico Ottimizzato (V90)")
+        st.write("Motore Giocatori V90 Attivo: Calcola Rating individuali, Danno di Reparto, e Portieri Titolari Assenti.")
         
         budget_safety = budget_totale * 0.60
         budget_perf = budget_totale * 0.30
         budget_azzardo = budget_totale * 0.10
         
         if len(st.session_state.all_tips_global) >= 4:
-            testo_export = f"=== MATRIX V80: SCHEDINE AUTOMATICHE ===\nPeriodo: {start_str} / {end_str}\n\n"
+            testo_export = f"=== MATRIX V90: SCHEDINE AUTOMATICHE ===\nPeriodo: {start_str} / {end_str}\n\n"
             
             st.markdown("<div class='strategy-box safety-bg'>", unsafe_allow_html=True)
             st.subheader("🟢 Schedina SAFETY (Muro di Berlino Attivo)")
@@ -897,6 +945,6 @@ if st.session_state.data_master:
             st.download_button(
                 label="💾 SCARICA TUTTE LE 3 SCHEDINE (TXT)",
                 data=testo_export,
-                file_name=f"Matrix_V80_Tickets_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                file_name=f"Matrix_V90_Tickets_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                 mime="text/plain"
             )
