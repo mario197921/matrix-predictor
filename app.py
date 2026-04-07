@@ -236,13 +236,14 @@ def analizza_statistiche_avanzate_pro(team_id):
         avg_falli = tot_falli / match_v
         avg_parate = tot_parate / match_v
         
-        tiri_area_per_gol = avg_tiri_area / tot_gol if tot_gol > 0 else avg_tiri_area + 5 
+       # V90 Fix: Cinismo calcolato sui Tiri in Porta totali (include missili da fuori)
+        tiri_per_gol = tot_tiri / tot_gol if tot_gol > 0 else 10.0 
         
         if avg_poss > 55 and avg_tiri_area < 4: stile = "Tiki-Taka Sterile"
         elif avg_poss < 45 and avg_tiri_area > 4: stile = "Verticale Diretto"
         else: stile = "Bilanciato"
         
-        return avg_poss, avg_tiri, avg_tiri_area, tiri_area_per_gol, avg_corner, avg_cart, avg_falli, avg_parate, stile
+        return avg_poss, avg_tiri, avg_tiri_area, tiri_per_gol, avg_corner, avg_cart, avg_falli, avg_parate, stile
     except: return 50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5, "Bilanciato"
 
 def get_quota_finale(tip, prob, quote_reali):
