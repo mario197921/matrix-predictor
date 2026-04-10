@@ -50,14 +50,25 @@ STAGIONE = "2025"
 HEADERS = {'x-apisports-key': API_KEY_FOOTBALL}
 
 MASTER_LEAGUES = {
+    # --- COPPE EUROPEE ---
     "🇪🇺 Champions League": 2, "🇪🇺 Europa League": 3, "🇪🇺 Conference League": 848,
-    "🇮🇹 Serie A": 135, "🇮🇹 Serie B": 136, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": 39, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship": 40,
+    
+    # --- TOP 5 EUROPEI & SECONDE LINEE ---
+    "🇮🇹 Serie A": 135, "🇮🇹 Serie B": 136, 
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": 39, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship": 40,
     "🇪🇸 La Liga": 140, "🇩🇪 Bundesliga": 78, "🇫🇷 Ligue 1": 61,
+    
+    # --- NUOVI TIER 2 EUROPEI (Miniera d'oro) ---
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 League One": 41, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 League Two": 42,
+    "🇳🇱 Eerste Divisie": 89, "🇩🇪 2. Bundesliga": 79, "🇪🇸 La Liga 2": 141,
+    
+    # --- ALTRI CAMPIONATI EUROPEI TRACCIATI ---
     "🇳🇱 Eredivisie": 88, "🇵🇹 Primeira Liga": 94, "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Prem.": 281,
     "🇹🇷 Süper Lig": 203, "🇧🇪 Pro League": 144, "🇬🇷 Super League": 197,
-    "🇸🇪 Allsvenskan": 113, "🇳🇴 Eliteserien": 69, "🇫🇮 Veikkausliiga": 244,
+    "🇸🇪 Allsvenskan": 113, "🇳🇴 Eliteserien": 71, "🇫🇮 Veikkausliiga": 244,
     "🇩🇰 Superliga": 119, "🇨🇭 Super League": 207, "🇦🇹 Bundesliga": 218
 }
+
 
 # ==========================================
 # 📡 MODULI API E CALCOLI MATEMATICI (V90)
