@@ -260,9 +260,28 @@ def analizza_statistiche_avanzate_pro(team_id):
     return avg_poss, tot_tiri / match_v, avg_tiri_area, tiri_per_gol, tot_corner / match_v, tot_cart / match_v, tot_falli / match_v, tot_parate / match_v, stile
 
 def get_quota_finale(tip, prob, quote_reali):
-    if quote_reali and tip in quote_reali: return quote_reali[tip], True
+    # 1. QUOTA REALE BET365: Se l'API ce la fornisce, la usiamo al 100% (Targhetta Verde)
+    if quote_reali and tip in quote_reali: 
+        return quote_reali[tip], True
+    
     if prob <= 0: return 50.0, False
-    return max(1.01, round(1.0 + (((100 / prob) - 1.0) * 1.55), 2)), False
+    
+    # 2. CALCOLATORE QUOTE (Per Combo, Multigol o partite senza quote API)
+    quota_fair = 100.0 / prob
+    
+    if "+" in tip or "MG" in tip:
+        # Le Combo e i Multigol hanno un moltiplicatore naturale di rischio/rendimento.
+        # Usiamo un coefficiente 1.18 (realistico per simulare il palinsesto Bet365)
+        # invece del 1.55 "folle" della V90.
+        quota_mercato = 1.0 + ((quota_fair - 1.0) * 1.18)
+    else:
+        # Per un segno singolo mancante, simuliamo l'aggio standard del bookmaker (taglio 5%)
+        quota_mercato = quota_fair * 0.95
+        
+    # Tetto massimo a quota 30.00 per evitare numeri irrealistici
+    quota_calibrata = min(30.0, max(1.01, quota_mercato))
+    
+    return round(quota_calibrata, 2), False
 
 @st.cache_data(ttl=3600)
 def analizza_squadra_globale(team_id):
