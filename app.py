@@ -753,8 +753,8 @@ if btn_genera:
 if st.session_state.data_master:
     t1, t2, t3 = st.tabs(["🌍 DASHBOARD GLOBALE", "🏆 SCHEDINE AUTOMATICHE", "🔬 ESPLORATORE SINGOLE"])
     
-    # ---------------------------------------------------------
-    # TAB 1: DASHBOARD GLOBALE & BET BUILDER (Ripristinato)
+# ---------------------------------------------------------
+    # TAB 1: DASHBOARD GLOBALE & BET BUILDER (Completa V91)
     # ---------------------------------------------------------
     with t1:
         st.header("🌍 Dashboard Globale & Bet Builder")
@@ -783,13 +783,20 @@ if st.session_state.data_master:
             )
             return edited_df[edited_df["🛒"] == True].to_dict('records')
 
+        # 1. LA REGINA: TOP 10 ASSOLUTA (A larghezza piena)
+        sel_assoluta = mostra_tabella_interattiva("👑 TOP 10 ASSOLUTA (Le Probabilità più alte in assoluto)", lambda x: x['Tip'] not in ["U4.5", "U5.5", "Casa O0.5", "Ospite O0.5"], ["Prob"])
+        st.markdown("---")
+
+        # 2. LE CATEGORIE SPECIFICHE (Su due colonne)
         col_dash1, col_dash2 = st.columns(2)
         with col_dash1:
             sel_combo = mostra_tabella_interattiva("🏆 TOP 10 COMBO", lambda x: "+" in x['Tip'], ["Prob"])
             sel_1x2 = mostra_tabella_interattiva("🛡️ TOP 10 DOPPIE CHANCE", lambda x: x['Tip'] in ["1X", "X2", "12"], ["Prob"])
+            sel_gg = mostra_tabella_interattiva("🎯 TOP 10 GOAL / NOGOAL", lambda x: x['Tip'] in ["Goal", "NoGoal"], ["Prob"])
         with col_dash2:
             sel_mg = mostra_tabella_interattiva("🎯 TOP 10 MULTIGOL", lambda x: "MG" in x['Tip'], ["Prob", "Quota"])
             sel_uo = mostra_tabella_interattiva("⚽ TOP 10 OVER/UNDER", lambda x: ("O" in x['Tip'] or "U" in x['Tip']) and "+" not in x['Tip'], ["Prob"])
+            sel_azzardo = mostra_tabella_interattiva("🧨 TOP 10 AZZARDI (Quote alte > 2.50)", lambda x: float(x['Quota']) >= 2.50, ["Prob"])
 
         st.markdown("---")
         st.markdown("### 🚨 RADAR ANOMALIE (Value Bet & Mine Vaganti)")
@@ -809,7 +816,10 @@ if st.session_state.data_master:
         st.markdown("---")
         st.markdown("<div class='strategy-box builder-bg'>", unsafe_allow_html=True)
         st.header("🧾 IL TUO CARRELLO MANUALE")
-        tutte_selezionate = sel_combo + sel_1x2 + sel_mg + sel_uo
+        
+        # Somma di tutte le selezioni
+        tutte_selezionate = sel_assoluta + sel_combo + sel_1x2 + sel_mg + sel_uo + sel_gg + sel_azzardo
+        
         viste = set()
         carrello_finale = []
         for item in tutte_selezionate:
