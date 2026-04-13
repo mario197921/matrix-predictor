@@ -962,9 +962,4 @@ if st.session_state.data_master:
                         col_b.write(f"🥈 **{top_3[1][0]}** ({top_3[1][1]:.1f}%) Q: {q2}")
                         col_c.write(f"🥉 **{top_3[2][0]}** ({top_3[2][1]:.1f}%) Q: {q3}")
             
-            st.download_button(
-                label="💾 SCARICA TUTTE LE 3 SCHEDINE (TXT)",
-                data=testo_export,
-                file_name=f"Matrix_V90_Tickets_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
-                mime="text/plain"
-            )
+           
