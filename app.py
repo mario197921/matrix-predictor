@@ -260,28 +260,14 @@ def analizza_statistiche_avanzate_pro(team_id):
     return avg_poss, tot_tiri / match_v, avg_tiri_area, tiri_per_gol, tot_corner / match_v, tot_cart / match_v, tot_falli / match_v, tot_parate / match_v, stile
 
 def get_quota_finale(tip, prob, quote_reali):
-    # 1. QUOTA REALE BET365: Se l'API ce la fornisce, la usiamo al 100% (Targhetta Verde)
-    if quote_reali and tip in quote_reali: 
-        return quote_reali[tip], True
-    
+    if quote_reali and tip in quote_reali: return quote_reali[tip], True
     if prob <= 0: return 50.0, False
     
-    # 2. CALCOLATORE QUOTE (Per Combo, Multigol o partite senza quote API)
+    # Nessun trucco: probabilità reale al 100% con aggio del bookmaker al 6%
     quota_fair = 100.0 / prob
-    
-    if "+" in tip or "MG" in tip:
-        # Le Combo e i Multigol hanno un moltiplicatore naturale di rischio/rendimento.
-        # Usiamo un coefficiente 1.18 (realistico per simulare il palinsesto Bet365)
-        # invece del 1.55 "folle" della V90.
-        quota_mercato = 1.0 + ((quota_fair - 1.0) * 1.18)
-    else:
-        # Per un segno singolo mancante, simuliamo l'aggio standard del bookmaker (taglio 5%)
-        quota_mercato = quota_fair * 0.95
+    quota_mercato = quota_fair * 0.94
         
-    # Tetto massimo a quota 30.00 per evitare numeri irrealistici
-    quota_calibrata = min(30.0, max(1.01, quota_mercato))
-    
-    return round(quota_calibrata, 2), False
+    return round(min(30.0, max(1.01, quota_mercato)), 2), False
 
 @st.cache_data(ttl=3600)
 def analizza_squadra_globale(team_id):
@@ -382,8 +368,8 @@ def calcola_prob_poisson(xg, gol):
 def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev, tot_falli_match):
     p = {"1":0,"X":0,"2":0,"1X":0,"X2":0,"12":0,"Goal":0,"NoGoal":0, "Pari":0, "Dispari":0}
     
-    # V91: Espansione Multigol Dinamici (Aggiunti 1-5, 2-5)
-    mg = {"MG 1-3":0, "MG 1-4":0, "MG 1-5":0, "MG 2-3":0, "MG 2-4":0, "MG 2-5":0, "MG 3-4":0, "MG 3-5":0}
+    # V91.1: Rimossi i Multigol ingiocabili (1-5 e 3-5)
+    mg = {"MG 1-3":0, "MG 1-4":0, "MG 2-3":0, "MG 2-4":0, "MG 2-5":0, "MG 3-4":0}
     uo_lines = [1.5, 2.5, 3.5, 4.5, 5.5]
     
     for line in uo_lines: p[f"U{line}"] = 0; p[f"O{line}"] = 0
@@ -407,21 +393,18 @@ def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev
             if gc > 0: p["Casa O0.5"] += prob
             if gt > 0: p["Ospite O0.5"] += prob
             
-            # Calcolo Multigol V91
             if 1 <= tot <= 3: mg["MG 1-3"] += prob
             if 1 <= tot <= 4: mg["MG 1-4"] += prob
-            if 1 <= tot <= 5: mg["MG 1-5"] += prob
             if 2 <= tot <= 3: mg["MG 2-3"] += prob
             if 2 <= tot <= 4: mg["MG 2-4"] += prob
             if 2 <= tot <= 5: mg["MG 2-5"] += prob
             if 3 <= tot <= 4: mg["MG 3-4"] += prob
-            if 3 <= tot <= 5: mg["MG 3-5"] += prob
             
-            if gc <= 4 and gt <= 4: re_prob[f"Risultato {gc}-{gt}"] = prob
+            # Salvataggio Universale dei Risultati Esatti per calcolare le Combo
+            re_prob[f"Risultato {gc}-{gt}"] = prob
 
     p["1X"], p["X2"], p["12"] = (p["1"]+p["X"]), (p["X"]+p["2"]), (p["1"]+p["2"])
 
-    # Bilanciamento xG Estremi (Scudo contro over-stime)
     if xg_c > 1.2 and xg_t > 1.2:
         p["Goal"] = min(90.0, p["Goal"] * 1.18) 
         p["NoGoal"] = 100 - p["Goal"]
@@ -429,19 +412,19 @@ def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev
         p["NoGoal"] = min(90.0, p["NoGoal"] * 1.15)
         p["Goal"] = 100 - p["NoGoal"]
 
-    # V91: Calcolatore Combo Universale
+    # V91.1: CALCOLO ESATTO COMBINATO (Niente più moltiplicatori artificiali)
     combos = {
-        "1X + Under 3.5": p["1X"] * (p["U3.5"]/100) * 0.95,
-        "1X + Under 4.5": p["1X"] * (p["U4.5"]/100) * 0.96,
-        "X2 + Under 3.5": p["X2"] * (p["U3.5"]/100) * 0.95,
-        "X2 + Under 4.5": p["X2"] * (p["U4.5"]/100) * 0.96,
-        "1 + Over 1.5": p["1"] * (p["O1.5"]/100) * 0.92,
-        "2 + Over 1.5": p["2"] * (p["O1.5"]/100) * 0.92,
-        "1 + Over 2.5": p["1"] * (p["O2.5"]/100) * 0.90,
-        "2 + Over 2.5": p["2"] * (p["O2.5"]/100) * 0.90,
-        "Goal + Over 2.5": p["Goal"] * (p["O2.5"]/100) * 0.95,
-        "1X + Goal": p["1X"] * (p["Goal"]/100) * 0.93,
-        "X2 + Goal": p["X2"] * (p["Goal"]/100) * 0.93
+        "1X + Under 3.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(4) for t in range(4) if c >= t and c+t < 3.5),
+        "1X + Under 4.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(5) for t in range(5) if c >= t and c+t < 4.5),
+        "X2 + Under 3.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(4) for t in range(4) if t >= c and c+t < 3.5),
+        "X2 + Under 4.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(5) for t in range(5) if t >= c and c+t < 4.5),
+        "1 + Over 1.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if c > t and c+t > 1.5),
+        "2 + Over 1.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if t > c and c+t > 1.5),
+        "1 + Over 2.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if c > t and c+t > 2.5),
+        "2 + Over 2.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if t > c and c+t > 2.5),
+        "Goal + Over 2.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if c > 0 and t > 0 and c+t > 2.5),
+        "1X + Goal": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if c >= t and c > 0 and t > 0),
+        "X2 + Goal": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if t >= c and c > 0 and t > 0)
     }
 
     ht_prob = {"1": p["1"]*0.9, "X": p["X"]*1.5, "2": p["2"]*0.9} 
@@ -455,11 +438,10 @@ def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev
     prob_cart_45 = min(88.0, max(20.0, (tension / 5.0) * 55))
     special = {"Over 8.5 Angoli": prob_corner_85, "Over 4.5 Cartellini": prob_cart_45}
 
-    return {**p, **mg, **re_prob, **combos, **htft, **special}
+    # Pulizia visiva per l'interfaccia (nascondiamo le prob. dei risultati esatti < 5%)
+    re_prob_clean = {k: v for k, v in re_prob.items() if v >= 5.0}
 
-def semplifica_nome(nome):
-    for p in ['FC', 'AC ', ' BC', ' AS', ' Milan', ' Calcio', ' Hotspur', 'AFC ', 'United', 'City', 'SL ']: nome = nome.replace(p, '')
-    return nome.strip()
+    return {**p, **mg, **re_prob_clean, **combos, **htft, **special}
 
 def get_family(tip):
     if tip in ["1", "X", "2", "1X", "X2", "12"]: return "1X2"
@@ -871,9 +853,9 @@ if st.session_state.data_master:
         
         # 1. CASSAFORTE (1.10 - 1.30)
         st.markdown("<div style='padding: 15px; border-radius: 10px; background-color: #f8f9fa; border-left: 5px solid #2c3e50; margin-bottom: 20px;'>", unsafe_allow_html=True)
-        st.subheader("🛡️ CASSAFORTE (Quota Target ~1.50)")
+        st.subheader("🛡️ CASSAFORTE (Quota Target ~2.30)")
         st.markdown(f"**Puntata Allocata: {b_cassa:.2f}€ (55% del Budget)**")
-        c_slip, q_tot_c, prob_c, usate_c = costruisci_schedina_dinamica(st.session_state.all_tips_global, 1.10, 1.30, target_mult=1.60, max_righe=5, is_cassaforte=True)
+        c_slip, q_tot_c, prob_c, usate_c = costruisci_schedina_dinamica(st.session_state.all_tips_global, 1.10, 1.30, target_mult=2.30, max_righe=8, is_cassaforte=True)
         testo_export += f"🛡️ CASSAFORTE (Puntata: {b_cassa:.2f}€)\n"
         for x in c_slip:
             st.write(f"• [{x['Time']}] {x['Match']}: **{x['Tip']}** (Q: {x['Quota']})")
@@ -884,9 +866,9 @@ if st.session_state.data_master:
 
         # 2. SAFETY (1.31 - 1.50)
         st.markdown("<div class='strategy-box safety-bg'>", unsafe_allow_html=True)
-        st.subheader("🟢 SAFETY (Quota Target ~2.00)")
+        st.subheader("🟢 SAFETY (Quota Target ~2.30)")
         st.markdown(f"**Puntata Allocata: {b_safe:.2f}€ (25% del Budget)**")
-        s_slip, q_tot_s, prob_s, usate_s = costruisci_schedina_dinamica(st.session_state.all_tips_global, 1.31, 1.50, target_mult=2.20, max_righe=5, escludi_match=usate_c, check_blacklist=True)
+        s_slip, q_tot_s, prob_s, usate_s = costruisci_schedina_dinamica(st.session_state.all_tips_global, 1.31, 1.50, target_mult=2.30, max_righe=5, escludi_match=usate_c, check_blacklist=True)
         testo_export += f"🟢 SAFETY (Puntata: {b_safe:.2f}€)\n"
         for x in s_slip:
             st.write(f"• [{x['Time']}] {x['Match']}: **{x['Tip']}** (Q: {x['Quota']})")
