@@ -65,23 +65,24 @@ MASTER_LEAGUES = {
     "🇸🇪 Allsvenskan": 113, "🇳🇴 Eliteserien": 71, "🇫🇮 Veikkausliiga": 244,
     "🇩🇰 Superliga": 119, "🇨🇭 Super League": 207, "🇦🇹 Bundesliga": 218,
 
-    # --- NUOVO BLOCCO: BALCANI ---
+    # --- BALCANI ---
     "🇭🇷 HNL (Croazia)": 210, "🇷🇸 Super Liga (Serbia)": 288, "🇷🇴 Liga I (Romania)": 283,
 
-    # --- NUOVO BLOCCO: AMERICHE ---
+    # --- AMERICHE E COPPE ---
+    "🌎 Copa Libertadores": 13, "🌎 Copa Sudamericana": 11, "🌎 CONCACAF Champions": 16,
     "🇧🇷 Brasileirão": 71, "🇦🇷 Liga Profesional": 128, 
     "🇺🇸 MLS": 253, "🇲🇽 Liga MX": 228, "🇨🇴 Primera A (Colombia)": 239,
-    "🌎 Copa Libertadores": 13,
 
-    # --- NUOVO BLOCCO: ASIA E OCEANIA ---
+    # --- ASIA, OCEANIA E COPPE ---
+    "🌏 AFC Champions League (Asia)": 17,
     "🇯🇵 J1 League (Giappone)": 98, "🇰🇷 K League 1 (Corea)": 292,
     "🇦🇺 A-League (Australia)": 188, "🇸🇦 Saudi Pro League": 307
 }
 
 # --- DATABASE LOGICO V91 ---
 BLACKLIST_UNDER = ["Bayern Munich", "Barcelona", "Galatasaray", "Besiktas"]
-LEAGHE_2026 = [113, 71, 244, 128, 253, 228, 239, 98, 292]
-
+# Aggiunti gli ID 13 (Libertadores), 11 (Sudamericana) e 16 (CONCACAF) alle leghe solari
+LEAGHE_2026 = [113, 71, 244, 128, 253, 228, 239, 98, 292, 13, 11, 16]
 # ==========================================
 # 📡 SCUDO ANTI-CRASH E MOTORE ESTRAZIONE
 # ==========================================
@@ -106,11 +107,28 @@ def get_active_leagues(start_date, end_date):
     active_ids = set()
     delta = end_date - start_date
     days = min(delta.days + 1, 7) 
+    now_utc = datetime.now(timezone.utc)
+    
     try:
         for i in range(days):
             d_str = (start_date + timedelta(days=i)).strftime('%Y-%m-%d')
             resp = fetch_api_data("fixtures", {'date': d_str})
-            if resp: active_ids.update({f['league']['id'] for f in resp})
+            if resp: 
+                for f in resp:
+                    # 1. Ignoriamo partite posticipate, cancellate o sospese
+                    if f['fixture']['status']['short'] in ['PST', 'CANC', 'ABD', 'AWD', 'WO']:
+                        continue
+                    
+                    # 2. Ignoriamo le partite che sono GIÀ INIZIATE o FINITE oggi
+                    try:
+                        match_time_utc = datetime.fromisoformat(f['fixture']['date'])
+                        if match_time_utc <= now_utc:
+                            continue
+                    except:
+                        pass
+                        
+                    active_ids.add(f['league']['id'])
+                    
         return {k: v for k, v in MASTER_LEAGUES.items() if v in active_ids}
     except: return MASTER_LEAGUES
 
