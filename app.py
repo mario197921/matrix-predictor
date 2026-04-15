@@ -330,7 +330,13 @@ def analizza_h2h_dna_e_andata(id_casa, id_trasf):
     
     ultimo_match = matches[0]
     data_ultimo = datetime.strptime(ultimo_match['fixture']['date'][:10], '%Y-%m-%d')
-    if (datetime.now() - data_ultimo).days <= 28:
+    
+    # FIX V91: Controlliamo se l'ultimo match era di una coppa/torneo eliminatorio leggendo il nome della lega
+    nome_lega = str(ultimo_match.get('league', {}).get('name', '')).lower()
+    is_coppa_h2h = any(x in nome_lega for x in ['cup', 'coppa', 'copa', 'champions', 'europa', 'conference', 'libertadores'])
+
+    # Si attiva l'effetto Andata/Ritorno SOLO se è una coppa E giocata da meno di 28 giorni
+    if is_coppa_h2h and (datetime.now() - data_ultimo).days <= 28:
         is_home_last = ultimo_match['teams']['home']['id'] == id_casa
         gc_last, gt_last = ultimo_match['goals']['home'], ultimo_match['goals']['away']
         if gc_last is not None and gt_last is not None:
