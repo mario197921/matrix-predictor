@@ -619,7 +619,7 @@ if btn_genera:
                 # ma lascia passare le Coppe (Copa, Champions, ecc.) anche se hanno pochi dati.
                 is_coppa = any(x in name for x in ["Copa", "Cup", "Champions", "Sudamericana", "Libertadores", "CONCACAF"])
                 if not is_coppa and (db_stats[c_s]['giocate'] < 2 or db_stats[t_s]['giocate'] < 2): 
-                continue
+                    continue
 
                 quote_reali_match = odds_cache.get(match_date_str, {}).get(fix_id, {})
                 inf_all = inj_cache.get(match_date_str, [])
