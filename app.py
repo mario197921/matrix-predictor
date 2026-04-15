@@ -365,6 +365,10 @@ def scarica_meteo(citta):
 def calcola_prob_poisson(xg, gol): 
     return ((xg ** gol) * math.exp(-xg)) / math.factorial(gol)
 
+def semplifica_nome(nome):
+    for p in ['FC', 'AC ', ' BC', ' AS', ' Milan', ' Calcio', ' Hotspur', 'AFC ', 'United', 'City', 'SL ']: nome = nome.replace(p, '')
+    return nome.strip()
+
 def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev, tot_falli_match):
     p = {"1":0,"X":0,"2":0,"1X":0,"X2":0,"12":0,"Goal":0,"NoGoal":0, "Pari":0, "Dispari":0}
     
