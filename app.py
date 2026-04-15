@@ -615,8 +615,11 @@ if btn_genera:
                 c_u, t_u = f['teams']['home']['name'], f['teams']['away']['name']
                 c_s, t_s = semplifica_nome(c_u), semplifica_nome(t_u)
                 if c_s not in db_stats or t_s not in db_stats: continue
-                # V91.2: Filtro anti-allucinazione. Se non c'è storico, non si prevede.
-                if db_stats[c_s]['giocate'] < 2 or db_stats[t_s]['giocate'] < 2: continue
+                # V91.3: Filtro intelligente. Applica il blocco solo ai campionati (Serie A, B, ecc.) 
+                # ma lascia passare le Coppe (Copa, Champions, ecc.) anche se hanno pochi dati.
+                is_coppa = any(x in name for x in ["Copa", "Cup", "Champions", "Sudamericana", "Libertadores", "CONCACAF"])
+                if not is_coppa and (db_stats[c_s]['giocate'] < 2 or db_stats[t_s]['giocate'] < 2): 
+                continue
 
                 quote_reali_match = odds_cache.get(match_date_str, {}).get(fix_id, {})
                 inf_all = inj_cache.get(match_date_str, [])
@@ -674,8 +677,15 @@ if btn_genera:
 
                     if abs(rank_c - rank_t) <= 3: tension_idx += 0.2
 
-                xg_base_c = math.sqrt(max(0.01, db_stats[c_s]['ac']) * max(0.01, db_stats[t_s]['dt'])) * m_f_c * m_st_c
-                xg_base_t = math.sqrt(max(0.01, db_stats[t_s]['at']) * max(0.01, db_stats[c_s]['dc'])) * m_f_t * m_st_t
+                # V91.3: Paracadute matematico. Se i dati sono a zero (inizio coppa), 
+                # assegna una media minima di 0.8 per evitare l'errore del 100%.
+                ac_safe = max(0.8, db_stats[c_s]['ac'])
+                dt_safe = max(0.8, db_stats[t_s]['dt'])
+                at_safe = max(0.8, db_stats[t_s]['at'])
+                dc_safe = max(0.8, db_stats[c_s]['dc'])
+
+                xg_base_c = math.sqrt(ac_safe * dt_safe) * m_f_c * m_st_c
+                xg_base_t = math.sqrt(at_safe * dc_safe) * m_f_t * m_st_t
                 
                 malus_league = 0.85 if name in ["🇬🇷 Super League", "🇫🇷 Ligue 1", "🇮🇹 Serie B"] else 1.0 
                 xg_base_c *= malus_league
