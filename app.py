@@ -615,6 +615,8 @@ if btn_genera:
                 c_u, t_u = f['teams']['home']['name'], f['teams']['away']['name']
                 c_s, t_s = semplifica_nome(c_u), semplifica_nome(t_u)
                 if c_s not in db_stats or t_s not in db_stats: continue
+                # V91.2: Filtro anti-allucinazione. Se non c'è storico, non si prevede.
+                if db_stats[c_s]['giocate'] < 2 or db_stats[t_s]['giocate'] < 2: continue
 
                 quote_reali_match = odds_cache.get(match_date_str, {}).get(fix_id, {})
                 inf_all = inj_cache.get(match_date_str, [])
