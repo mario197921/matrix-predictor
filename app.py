@@ -645,7 +645,7 @@ if btn_genera:
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
                 
-                # V90: Estraiamo 12 valori, inclusi Gol Fatti e Subiti degli ultimi 10 match
+               # V90: Estrazione definitiva a 12 variabili (Statistiche + Squalifiche + Gol Momentum)
                 poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c, parate_c, stile_c, sq_certi_c, gf_10_c, gs_10_c = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
                 poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t, parate_t, stile_t, sq_certi_t, gf_10_t, gs_10_t = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
                 
