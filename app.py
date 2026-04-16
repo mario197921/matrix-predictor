@@ -86,32 +86,41 @@ def get_active_leagues(start_date, end_date):
         return {k: v for k, v in MASTER_LEAGUES.items() if v in active_ids}
     except: return MASTER_LEAGUES
 
-# V90: ESTRAZIONE DATI SINGOLO GIOCATORE (Rating, Posizione, Gol, Assist)
+# V90: ESTRAZIONE DATI SINGOLO GIOCATORE (Rating, Posizione, Gol, Assist) - TOTALI
 @st.cache_data(ttl=86400)
 def get_player_advanced_stats(player_id, season):
     if not player_id: return "Unknown", 0, 0, 6.0, 0
     try:
         resp = requests.get("https://v3.football.api-sports.io/players", headers=HEADERS, params={'id': player_id, 'season': season}).json()
         if resp.get('response'):
-            stats = resp['response'][0]['statistics'][0]
-            pos = stats['games']['position']
-            mins = stats['games']['minutes'] or 0
-            rating = float(stats['games']['rating'] or 6.0)
-            goals = stats['goals']['total'] or 0
-            assists = stats['goals']['assists'] or 0
-            return pos, goals, assists, rating, mins
+            stats_array = resp['response'][0]['statistics']
+            pos = "Unknown"
+            tot_mins, tot_goals, tot_assists = 0, 0, 0
+            ratings = []
+            
+            # Sommiamo le statistiche di tutte le competizioni (Campionato + Coppe)
+            for stat in stats_array:
+                if pos == "Unknown" and stat['games']['position']:
+                    pos = stat['games']['position']
+                tot_mins += stat['games']['minutes'] or 0
+                tot_goals += stat['goals']['total'] or 0
+                tot_assists += stat['goals']['assists'] or 0
+                if stat['games']['rating']:
+                    ratings.append(float(stat['games']['rating']))
+            
+            avg_rating = sum(ratings) / len(ratings) if ratings else 6.0
+            return pos, tot_goals, tot_assists, avg_rating, tot_mins
     except: pass
     return "Unknown", 0, 0, 6.0, 0
 
-# V90: IL NUOVO MOTORE ASSENTI AGNOSTICO
-def analizza_infortuni_pesati_v90(inf_list, partite_giocate_team):
-    malus_att = 0.0  # Danno all'attacco (riduce i propri xG)
-    boost_opp = 0.0  # Danno alla difesa (aumenta gli xG avversari)
+# V90: IL NUOVO MOTORE ASSENTI AGNOSTICO (Basato su Minuti Assoluti)
+def analizza_infortuni_pesati_v90(inf_list):
+    malus_att = 0.0  
+    boost_opp = 0.0  
     t1_star, t2_rot, t3_ris, squalificati = 0, 0, 0, 0
     difensori_out = 0
     portiere_titolare_out = False
     visti = set()
-    max_mins = max(1, partite_giocate_team * 90)
 
     for i in inf_list:
         p_id = i['player'].get('id')
@@ -122,39 +131,37 @@ def analizza_infortuni_pesati_v90(inf_list, partite_giocate_team):
         if 'suspend' in motivo or 'red card' in motivo or 'card' in motivo:
             squalificati += 1
 
-        # Chiamata chirurgica per il giocatore assente
         pos, gol, assist, rating, mins = get_player_advanced_stats(p_id, STAGIONE)
-        ratio = mins / max_mins
 
-        if ratio >= 0.50: t1_star += 1
-        elif ratio >= 0.20: t2_rot += 1
+        # Valutazione Assoluta V90: Evita il bug delle Coppe
+        is_star = mins >= 1200 or rating >= 7.0
+
+        if is_star: t1_star += 1
+        elif mins >= 400: t2_rot += 1
         else: t3_ris += 1
 
-        is_star = ratio >= 0.50 or rating >= 7.0
-
-        # L'IMPATTO AGNOSTICO SULL'ATTACCO (Chiunque faccia gol o assist)
+        # L'IMPATTO AGNOSTICO SULL'ATTACCO
         if gol >= 5 or assist >= 5 or (pos in ["Attacker", "Midfielder"] and is_star):
             malus_att += 0.15
-            if gol >= 10: malus_att += 0.10 # Super-bomber assente
-            if assist >= 8: malus_att += 0.10 # Super-assistman assente
-            if rating >= 7.3: malus_att += 0.10 # Fuoriclasse assoluto
+            if gol >= 10: malus_att += 0.10 
+            if assist >= 8: malus_att += 0.10 
+            if rating >= 7.3: malus_att += 0.10 
 
-        # L'IMPATTO STRUTTURALE SULLA DIFESA (Portieri e Difensori)
+        # L'IMPATTO STRUTTURALE SULLA DIFESA
         if pos == "Defender":
             if is_star:
                 boost_opp += 0.15
                 difensori_out += 1
-            elif ratio >= 0.20:
+            elif mins >= 400:
                 boost_opp += 0.05
                 difensori_out += 1
         elif pos == "Goalkeeper":
-            if is_star: # Portiere titolare
+            if is_star: 
                 portiere_titolare_out = True
-                boost_opp += 0.25 # Boost enorme all'avversario
+                boost_opp += 0.25 
 
-    # EFFETTO REPARTO SMANTELLATO
     if difensori_out >= 2:
-        boost_opp += 0.20 # La difesa perde le distanze
+        boost_opp += 0.20 
 
     return min(0.60, malus_att), min(0.60, boost_opp), t1_star, t2_rot, t3_ris, len(visti), squalificati, portiere_titolare_out, difensori_out
 
@@ -545,7 +552,6 @@ if btn_genera:
             inj_cache = {}
             odds_cache = {}
             for d_match in date_giocate:
-                inj_cache[d_match] = requests.get("https://v3.football.api-sports.io/injuries", headers=HEADERS, params={'league': f_id, 'season': STAGIONE, 'date': d_match}).json()
                 odds_cache[d_match] = scarica_quote_native(f_id, d_match)
 
             for f in fix['response']:
@@ -563,7 +569,7 @@ if btn_genera:
                 if c_s not in db_stats or t_s not in db_stats: continue
 
                 quote_reali_match = odds_cache.get(match_date_str, {}).get(fix_id, {})
-                inj = inj_cache.get(match_date_str, {})
+                
 
                 m_st_c, is_stanca_c, forma_c, m_f_c, rit_c = analizza_squadra_globale(db_stats[c_s]['id'])
                 m_st_t, is_stanca_t, forma_t, m_f_t, rit_t = analizza_squadra_globale(db_stats[t_s]['id'])
@@ -574,14 +580,21 @@ if btn_genera:
                 m_met, d_met = scarica_meteo(c_s)
                 m_h2h_c, m_h2h_t, gol_h2h_c, gol_h2h_t, str_h2h, b_and_c, b_and_t, andata_msg, dettagli_h2h_str = analizza_h2h_dna_e_andata(db_stats[c_s]['id'], db_stats[t_s]['id'])
                 
-                inf_all = inj.get('response', [])
+                # V90: Chiamata chirurgica per Fixture (Molto più precisa della 'date')
+                inj_resp = requests.get("https://v3.football.api-sports.io/injuries", headers=HEADERS, params={'fixture': fix_id}).json()
+                inf_all = inj_resp.get('response', [])
                 if not isinstance(inf_all, list): inf_all = []
-                inf_c_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == c_s]
-                inf_t_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == t_s]
                 
-                # V90: Calcolo Impatto Giocatori Agnostico
-                malus_att_c, boost_opp_c, t1_c, t2_c, t3_c, count_c, sq_c, gk_out_c, def_out_c = analizza_infortuni_pesati_v90(inf_c_list, db_stats[c_s]['giocate'])
-                malus_att_t, boost_opp_t, t1_t, t2_t, t3_t, count_t, sq_t, gk_out_t, def_out_t = analizza_infortuni_pesati_v90(inf_t_list, db_stats[t_s]['giocate'])
+                # V90 Fix: Match per ID SQUADRA, non per nome stringa (Risolve il bug 'Zero Assenti')
+                c_id = db_stats[c_s]['id']
+                t_id = db_stats[t_s]['id']
+                
+                inf_c_list = [i for i in inf_all if str(i['team']['id']) == str(c_id)]
+                inf_t_list = [i for i in inf_all if str(i['team']['id']) == str(t_id)]
+                
+                # V90: Calcolo Impatto Giocatori Agnostico aggiornato
+                malus_att_c, boost_opp_c, t1_c, t2_c, t3_c, count_c, sq_c, gk_out_c, def_out_c = analizza_infortuni_pesati_v90(inf_c_list)
+                malus_att_t, boost_opp_t, t1_t, t2_t, t3_t, count_t, sq_t, gk_out_t, def_out_t = analizza_infortuni_pesati_v90(inf_t_list)
                 
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
