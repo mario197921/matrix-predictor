@@ -149,64 +149,54 @@ def get_player_advanced_stats(player_id, season):
     return "Unknown", 0, 0, 6.0, 0
 
 @st.cache_data(ttl=3600)
-def calcola_impatto_infortuni(fixture_id, id_casa, id_trasf, stagione, giocate_c, giocate_t):
-    data = fetch_api_data("injuries", {"fixture": fixture_id})
-    if not data: return 0, 0, 1.0, 1.0, "Rosa Completa ✅", "Rosa Completa ✅"
-
-    assenti_veri_c, assenti_veri_t = 0, 0
-    malus_att_c, malus_att_t = 0.0, 0.0
+def analizza_infortuni_v91(inf_list, stagione, giocate_team):
+    assenti_veri = 0
+    malus_att = 0.0
     visti = set()
 
-    for p in data:
+    for p in inf_list:
         p_id = p.get('player', {}).get('id')
         if not p_id or p_id in visti: continue
         visti.add(p_id)
 
-        t_id = p['team']['id']
-        is_casa = (t_id == id_casa)
-        giocate_team = giocate_c if is_casa else giocate_t
-        
-        # SCANSIONE PROFILO GIOCATORE
         pos, gol, assist, rating, mins = get_player_advanced_stats(p_id, stagione)
-        max_mins = max(1, giocate_team * 90)
-        ratio = mins / max_mins
-
-        # LO SCUDO ANTI-FANTASMA: Ignoriamo chi ha giocato meno del 10% senza mai incidere
-        if ratio < 0.10 and gol == 0 and assist == 0 and rating < 6.8:
-            continue 
-
-        if is_casa: assenti_veri_c += 1
-        else: assenti_veri_t += 1
-
-        # CALCOLO PESO CHIRURGICO (Titolari, Stelle, Portieri)
-        is_star = ratio >= 0.50 or rating >= 7.0
-        malus = 0.05 
         
-        if gol >= 5 or assist >= 5 or (pos in ["Attacker", "Midfielder"] and is_star):
-            malus += 0.10
-            if gol >= 10: malus += 0.05 
-            if assist >= 8: malus += 0.05 
-        if pos == "Goalkeeper" and is_star:
-            malus += 0.15
-        if pos == "Defender" and is_star:
-            malus += 0.10
+        is_star = False
+        malus = 0.05 # Peso base
+        
+        # Se abbiamo trovato le stats del giocatore (Leghe Maggiori) applichiamo lo Scudo Anti-Fantasma
+        if pos != "Unknown":
+            max_mins = max(1, giocate_team * 90)
+            ratio = mins / max_mins
             
-        if is_casa: malus_att_c += malus
-        else: malus_att_t += malus
+            # Scartiamo chi non gioca mai
+            if ratio < 0.10 and gol == 0 and assist == 0 and rating < 6.8:
+                continue 
+            
+            is_star = ratio >= 0.50 or rating >= 7.0
+            
+            # Calcolo danni
+            if gol >= 5 or assist >= 5 or (pos in ["Attacker", "Midfielder"] and is_star):
+                malus += 0.10
+                if gol >= 10: malus += 0.05 
+                if assist >= 8: malus += 0.05 
+            if pos == "Goalkeeper" and is_star: malus += 0.15
+            if pos == "Defender" and is_star: malus += 0.10
+        else:
+            # Per le Leghe Minori (dove le stats mancano), teniamo buono il giocatore 
+            # applicando un malus medio-alto per sicurezza.
+            malus = 0.08
+            
+        assenti_veri += 1
+        malus_att += malus
 
-    def get_final_malus_and_msg(num_veri, malus_calc):
-        malus_finale = 1.0 - min(0.35, malus_calc) # Tetto massimo al 35% di danno
-        danno_perc = int((1 - malus_finale) * 100)
-        
-        if num_veri == 0: return 1.0, "Rosa Completa ✅"
-        elif danno_perc <= 5: return 1.0, f"🚑 {num_veri} Assenti (Lieve)"
-        elif danno_perc <= 15: return round(malus_finale, 2), f"🚑 {num_veri} Assenti (Pesante -{danno_perc}%)"
-        else: return round(malus_finale, 2), f"🚑 {num_veri} Assenti (EMERGENZA -{danno_perc}% ⚠️)"
-
-    m_c, msg_c = get_final_malus_and_msg(assenti_veri_c, malus_att_c)
-    m_t, msg_t = get_final_malus_and_msg(assenti_veri_t, malus_att_t)
-
-    return assenti_veri_c, assenti_veri_t, m_c, m_t, msg_c, msg_t
+    malus_finale = 1.0 - min(0.35, malus_att) # Cap massimo al 35%
+    danno_perc = int((1 - malus_finale) * 100)
+    
+    if assenti_veri == 0: return assenti_veri, 1.0, "Rosa Completa ✅"
+    elif danno_perc <= 5: return assenti_veri, 1.0, f"🚑 {assenti_veri} Assenti (Lieve)"
+    elif danno_perc <= 15: return assenti_veri, round(malus_finale, 2), f"🚑 {assenti_veri} Assenti (Pesante -{danno_perc}%)"
+    else: return assenti_veri, round(malus_finale, 2), f"🚑 {assenti_veri} Assenti (EMERGENZA -{danno_perc}% ⚠️)"
 
 @st.cache_data(ttl=3600)
 def scarica_quote_native(league_id, date_str):
@@ -646,7 +636,11 @@ if btn_genera:
                 inf_c_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == c_s]
                 inf_t_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == t_s]
                 
-                count_c, count_t, malus_inf_c, malus_inf_t, msg_inf_c, msg_inf_t = calcola_impatto_infortuni(fix_id, db_stats[c_s]['id'], db_stats[t_s]['id'], stagione_dinamica, db_stats[c_s]['giocate'], db_stats[t_s]['giocate'])
+                inf_c_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == c_s]
+                inf_t_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == t_s]
+                
+                count_c, malus_inf_c, msg_inf_c = analizza_infortuni_v91(inf_c_list, stagione_dinamica, db_stats[c_s]['giocate'])
+                count_t, malus_inf_t, msg_inf_t = analizza_infortuni_v91(inf_t_list, stagione_dinamica, db_stats[t_s]['giocate'])
                 
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
