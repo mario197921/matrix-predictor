@@ -215,7 +215,6 @@ def analizza_statistiche_stagionali(league_id, team_id):
     except: return 0.0, 0.0
 
 @st.cache_data(ttl=3600)
-@st.cache_data(ttl=3600)
 def analizza_statistiche_avanzate_pro(team_id):
     try:
         resp = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'team': team_id, 'last': 10, 'status': 'FT'}).json()
@@ -224,10 +223,21 @@ def analizza_statistiche_avanzate_pro(team_id):
         tot_poss, tot_tiri, tot_tiri_area, tot_gol, tot_corner = 0, 0, 0, 0, 0
         tot_cart, tot_falli, tot_parate = 0, 0, 0
         match_v = 0
-        squalificati_certi = 0 # V90: Variabile Radar Squalifiche
+        squalificati_certi = 0 
         
         for i, m in enumerate(matches):
             fix_id = m['fixture']['id']
+            
+            # [V90 EXTREME RADAR]: Leggiamo gli EVENTI dell'ultima partita. Questo funziona SEMPRE, anche in League Two!
+            if i == 0:
+                events_resp = requests.get("https://v3.football.api-sports.io/fixtures/events", headers=HEADERS, params={'fixture': fix_id}).json()
+                if events_resp.get('response'):
+                    for ev in events_resp['response']:
+                        # Se è un evento della nostra squadra, è un cartellino, e la parola 'Red' è nel dettaglio
+                        if str(ev['team']['id']) == str(team_id) and ev['type'] == 'Card' and 'Red' in ev.get('detail', ''):
+                            squalificati_certi += 1
+
+            # Recupero Statistiche (se disponibili, altrimenti salta senza rompere il codice)
             stats_resp = requests.get("https://v3.football.api-sports.io/fixtures/statistics", headers=HEADERS, params={'fixture': fix_id}).json()
             if stats_resp.get('response'):
                 for t_stats in stats_resp['response']:
@@ -240,14 +250,8 @@ def analizza_statistiche_avanzate_pro(team_id):
                         tot_corner += int(s_dict.get('Corner Kicks', 0) or 0)
                         tot_falli += int(s_dict.get('Fouls', 0) or 0)
                         tot_parate += int(s_dict.get('Goalkeeper Saves', 0) or 0)
+                        tot_cart += int(s_dict.get('Yellow Cards', 0) or 0) + int(s_dict.get('Red Cards', 0) or 0)
                         
-                        reds = int(s_dict.get('Red Cards', 0) or 0)
-                        tot_cart += int(s_dict.get('Yellow Cards', 0) or 0) + reds
-                        
-                        # V90: Se è l'ultima partita giocata (i == 0) e ci sono rossi, è squalificato oggi!
-                        if i == 0 and reds > 0:
-                            squalificati_certi = reds
-                            
                         is_home = str(m['teams']['home']['id']) == str(team_id)
                         tot_gol += int(m['goals']['home'] if is_home else m['goals']['away'])
                         match_v += 1
@@ -268,9 +272,9 @@ def analizza_statistiche_avanzate_pro(team_id):
         elif avg_poss < 45 and avg_tiri_area > 4: stile = "Verticale Diretto"
         else: stile = "Bilanciato"
         
-        # Aggiungiamo 'squalificati_certi' ai valori di ritorno
         return avg_poss, avg_tiri, avg_tiri_area, tiri_per_gol, avg_corner, avg_cart, avg_falli, avg_parate, stile, squalificati_certi
-    except: return 50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5, "Bilanciato", 0
+    except Exception as e: 
+        return 50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5, "Bilanciato", 0
 
 def get_quota_finale(tip, prob, quote_reali):
     if quote_reali and tip in quote_reali: return quote_reali[tip], True
