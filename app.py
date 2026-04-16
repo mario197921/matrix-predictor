@@ -617,9 +617,7 @@ if btn_genera:
                 if c_s not in db_stats or t_s not in db_stats: continue
                 # V91.3: Filtro intelligente. Applica il blocco solo ai campionati (Serie A, B, ecc.) 
                 # ma lascia passare le Coppe (Copa, Champions, ecc.) anche se hanno pochi dati.
-                is_coppa = any(x in name for x in ["Copa", "Cup", "Champions", "Sudamericana", "Libertadores", "CONCACAF"])
-                if not is_coppa and (db_stats[c_s]['giocate'] < 2 or db_stats[t_s]['giocate'] < 2): 
-                    continue
+               
 
                 quote_reali_match = odds_cache.get(match_date_str, {}).get(fix_id, {})
                 inf_all = inj_cache.get(match_date_str, [])
@@ -966,14 +964,18 @@ if st.session_state.data_master:
                         with col1:
                             mostra_rank_c = "" if camp in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"] else f" (Pos: {m['rank_c']}ª)"
                             st.write(f"🏠 **{m['c_s']}**{mostra_rank_c}")
-                            st.write(f"⚽ Possesso: {m['poss_c']:.1f}% | 🎯 Tiri Area/match: {m['box_c']:.1f}")
-                            st.write(f"🧤 Parate/match: {m['parate_c']:.1f} | 🛑 Falli/match: {m['falli_c']:.1f}")
+                            st.write(f"📊 Stile: <span class='{'stile-orizzontale' if 'Orizz' in m['stile_c'] else 'stile-verticale'}'>{m['stile_c']}</span>", unsafe_allow_html=True)
+                            st.write(f"⚽ Possesso: {m['poss_c']:.1f}% | 🎯 Tiri Area: {m['box_c']:.1f}")
+                            st.write(f"🧤 Parate: {m['parate_c']:.1f} | 🛑 Falli: {m['falli_c']:.1f}")
+                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_c']:.1f} tiri in porta**")
                             st.write(f"🛡️ Clean Sheet: <span class='cs-testo'>{m['cs_c']:.0f}%</span> | ❌ A secco: <span class='fts-testo'>{m['fts_c']:.0f}%</span>", unsafe_allow_html=True)
                         with col2:
                             mostra_rank_t = "" if camp in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"] else f" (Pos: {m['rank_t']}ª)"
                             st.write(f"✈️ **{m['t_s']}**{mostra_rank_t}")
-                            st.write(f"⚽ Possesso: {m['poss_t']:.1f}% | 🎯 Tiri Area/match: {m['box_t']:.1f}")
-                            st.write(f"🧤 Parate/match: {m['parate_t']:.1f} | 🛑 Falli/match: {m['falli_t']:.1f}")
+                            st.write(f"📊 Stile: <span class='{'stile-orizzontale' if 'Orizz' in m['stile_t'] else 'stile-verticale'}'>{m['stile_t']}</span>", unsafe_allow_html=True)
+                            st.write(f"⚽ Possesso: {m['poss_t']:.1f}% | 🎯 Tiri Area: {m['box_t']:.1f}")
+                            st.write(f"🧤 Parate: {m['parate_t']:.1f} | 🛑 Falli: {m['falli_t']:.1f}")
+                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_t']:.1f} tiri in porta**")
                             st.write(f"🛡️ Clean Sheet: <span class='cs-testo'>{m['cs_t']:.0f}%</span> | ❌ A secco: <span class='fts-testo'>{m['fts_t']:.0f}%</span>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
 
