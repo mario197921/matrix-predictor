@@ -154,15 +154,24 @@ def calcola_impatto_infortuni(fixture_id, id_casa, id_trasf):
     if not data: return 0, 0, 1.0, 1.0, "Rosa Completa ✅", "Rosa Completa ✅"
 
     assenti_c, assenti_t = 0, 0
+    visti = set()  # IL FILTRO ANTI-DOPPIONI
+
     for p in data:
-        if p['team']['id'] == id_casa: assenti_c += 1
-        elif p['team']['id'] == id_trasf: assenti_t += 1
+        p_id = p.get('player', {}).get('id')
+        # Se l'ID è vuoto o lo abbiamo già contato, lo saltiamo
+        if not p_id or p_id in visti: continue
+        visti.add(p_id)
+
+        if p['team']['id'] == id_casa: 
+            assenti_c += 1
+        elif p['team']['id'] == id_trasf: 
+            assenti_t += 1
 
     def get_malus_and_msg(num):
         if num == 0: return 1.0, "Rosa Completa ✅"
         elif num <= 2: return 1.0, f"🚑 {num} Assenti (Lieve)"
         elif num <= 4: return 0.90, f"🚑 {num} Assenti (Pesante -10%)"
-        else: return 0.75, f"🚑 {num} Assenti (EMERGENZA -25%)"
+        else: return 0.75, f"🚑 {num} Assenti (EMERGENZA -25% ⚠️)"
 
     malus_c, msg_c = get_malus_and_msg(assenti_c)
     malus_t, msg_t = get_malus_and_msg(assenti_t)
