@@ -535,6 +535,10 @@ if 'all_tips_global' not in st.session_state: st.session_state.all_tips_global =
 
 st.sidebar.header("⚙️ Centrale Operativa V91")
 
+if st.sidebar.button("🧹 SVUOTA MEMORIA CACHE", type="primary"):
+    st.cache_data.clear()
+    st.sidebar.success("✅ Memoria azzerata! Ora l'estrazione scaricherà i dati freschi al 100%.")
+
 date_range = st.sidebar.date_input("Seleziona Periodo (Dal - Al):", [])
 if len(date_range) == 2: start_date, end_date = date_range[0], date_range[1]
 elif len(date_range) == 1: start_date = end_date = date_range[0]
