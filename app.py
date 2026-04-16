@@ -215,6 +215,7 @@ def analizza_statistiche_stagionali(league_id, team_id):
     except: return 0.0, 0.0
 
 @st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600)
 def analizza_statistiche_avanzate_pro(team_id):
     try:
         resp = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'team': team_id, 'last': 10, 'status': 'FT'}).json()
@@ -223,8 +224,9 @@ def analizza_statistiche_avanzate_pro(team_id):
         tot_poss, tot_tiri, tot_tiri_area, tot_gol, tot_corner = 0, 0, 0, 0, 0
         tot_cart, tot_falli, tot_parate = 0, 0, 0
         match_v = 0
+        squalificati_certi = 0 # V90: Variabile Radar Squalifiche
         
-        for m in matches:
+        for i, m in enumerate(matches):
             fix_id = m['fixture']['id']
             stats_resp = requests.get("https://v3.football.api-sports.io/fixtures/statistics", headers=HEADERS, params={'fixture': fix_id}).json()
             if stats_resp.get('response'):
@@ -238,8 +240,14 @@ def analizza_statistiche_avanzate_pro(team_id):
                         tot_corner += int(s_dict.get('Corner Kicks', 0) or 0)
                         tot_falli += int(s_dict.get('Fouls', 0) or 0)
                         tot_parate += int(s_dict.get('Goalkeeper Saves', 0) or 0)
-                        tot_cart += int(s_dict.get('Yellow Cards', 0) or 0) + int(s_dict.get('Red Cards', 0) or 0)
                         
+                        reds = int(s_dict.get('Red Cards', 0) or 0)
+                        tot_cart += int(s_dict.get('Yellow Cards', 0) or 0) + reds
+                        
+                        # V90: Se è l'ultima partita giocata (i == 0) e ci sono rossi, è squalificato oggi!
+                        if i == 0 and reds > 0:
+                            squalificati_certi = reds
+                            
                         is_home = str(m['teams']['home']['id']) == str(team_id)
                         tot_gol += int(m['goals']['home'] if is_home else m['goals']['away'])
                         match_v += 1
@@ -254,15 +262,15 @@ def analizza_statistiche_avanzate_pro(team_id):
         avg_falli = tot_falli / match_v
         avg_parate = tot_parate / match_v
         
-       # V90 Fix: Cinismo calcolato sui Tiri in Porta totali (include missili da fuori)
         tiri_per_gol = tot_tiri / tot_gol if tot_gol > 0 else 10.0 
         
         if avg_poss > 55 and avg_tiri_area < 4: stile = "Tiki-Taka Sterile"
         elif avg_poss < 45 and avg_tiri_area > 4: stile = "Verticale Diretto"
         else: stile = "Bilanciato"
         
-        return avg_poss, avg_tiri, avg_tiri_area, tiri_per_gol, avg_corner, avg_cart, avg_falli, avg_parate, stile
-    except: return 50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5, "Bilanciato"
+        # Aggiungiamo 'squalificati_certi' ai valori di ritorno
+        return avg_poss, avg_tiri, avg_tiri_area, tiri_per_gol, avg_corner, avg_cart, avg_falli, avg_parate, stile, squalificati_certi
+    except: return 50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5, "Bilanciato", 0
 
 def get_quota_finale(tip, prob, quote_reali):
     if quote_reali and tip in quote_reali: return quote_reali[tip], True
@@ -599,8 +607,9 @@ if btn_genera:
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
                 
-                poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c, parate_c, stile_c = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
-                poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t, parate_t, stile_t = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
+                # V90: Ora estraiamo 10 valori, includendo il radar squalifiche (sq_certi)
+                poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c, parate_c, stile_c, sq_certi_c = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
+                poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t, parate_t, stile_t, sq_certi_t = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
                 
                 is_coppa = name in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"]
                 m_mot_c, m_mot_t, tension_idx = 1.0, 1.0, 1.0
