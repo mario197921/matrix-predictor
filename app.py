@@ -593,6 +593,10 @@ if btn_genera:
                 
                 m_met, d_met = scarica_meteo(c_s)
                 m_h2h_c, m_h2h_t, gol_h2h_c, gol_h2h_t, str_h2h, b_and_c, b_and_t, andata_msg, dettagli_h2h_str = analizza_h2h_dna_e_andata(db_stats[c_s]['id'], db_stats[t_s]['id'])
+
+                # ---> SPOSTATE QUI IN ALTO: Estrazione a 12 variabili <---
+                poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c, parate_c, stile_c, sq_certi_c, gf_10_c, gs_10_c = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
+                poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t, parate_t, stile_t, sq_certi_t, gf_10_t, gs_10_t = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
                 
                 # ==========================================
                 # INIZIO BLOCCO INFORTUNI V90 PRO (BLINDATO)
@@ -645,10 +649,7 @@ if btn_genera:
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
                 
-               # V90: Estrazione definitiva a 12 variabili (Statistiche + Squalifiche + Gol Momentum)
-                poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c, parate_c, stile_c, sq_certi_c, gf_10_c, gs_10_c = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
-                poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t, parate_t, stile_t, sq_certi_t, gf_10_t, gs_10_t = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
-                
+               
                 is_coppa = name in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"]
                 m_mot_c, m_mot_t, tension_idx = 1.0, 1.0, 1.0
                 msg_mot = ""
