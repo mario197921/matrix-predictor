@@ -148,53 +148,26 @@ def get_player_advanced_stats(player_id, season):
         except: pass
     return "Unknown", 0, 0, 6.0, 0
 
-def analizza_infortuni_pesati_v90(inf_list, partite_giocate_team):
-    malus_att, boost_opp = 0.0, 0.0 
-    t1_star, t2_rot, t3_ris, squalificati = 0, 0, 0, 0
-    difensori_out = 0
-    portiere_titolare_out = False
-    visti = set()
-    max_mins = max(1, partite_giocate_team * 90)
+@st.cache_data(ttl=3600)
+def calcola_impatto_infortuni(fixture_id, id_casa, id_trasf):
+    data = fetch_api_data("injuries", {"fixture": fixture_id})
+    if not data: return 0, 0, 1.0, 1.0, "Rosa Completa ✅", "Rosa Completa ✅"
 
-    for i in inf_list:
-        p_id = i['player'].get('id')
-        if not p_id or p_id in visti: continue
-        visti.add(p_id)
-        
-        motivo = str(i.get('type', '')).lower()
-        if 'suspend' in motivo or 'red card' in motivo or 'card' in motivo:
-            squalificati += 1
+    assenti_c, assenti_t = 0, 0
+    for p in data:
+        if p['team']['id'] == id_casa: assenti_c += 1
+        elif p['team']['id'] == id_trasf: assenti_t += 1
 
-        pos, gol, assist, rating, mins = get_player_advanced_stats(p_id, STAGIONE)
-        ratio = mins / max_mins
+    def get_malus_and_msg(num):
+        if num == 0: return 1.0, "Rosa Completa ✅"
+        elif num <= 2: return 1.0, f"🚑 {num} Assenti (Lieve)"
+        elif num <= 4: return 0.90, f"🚑 {num} Assenti (Pesante -10%)"
+        else: return 0.75, f"🚑 {num} Assenti (EMERGENZA -25%)"
 
-        if ratio >= 0.50: t1_star += 1
-        elif ratio >= 0.20: t2_rot += 1
-        else: t3_ris += 1
+    malus_c, msg_c = get_malus_and_msg(assenti_c)
+    malus_t, msg_t = get_malus_and_msg(assenti_t)
 
-        is_star = ratio >= 0.50 or rating >= 7.0
-
-        if gol >= 5 or assist >= 5 or (pos in ["Attacker", "Midfielder"] and is_star):
-            malus_att += 0.15
-            if gol >= 10: malus_att += 0.10 
-            if assist >= 8: malus_att += 0.10 
-            if rating >= 7.3: malus_att += 0.10 
-
-        if pos == "Defender":
-            if is_star:
-                boost_opp += 0.15
-                difensori_out += 1
-            elif ratio >= 0.20:
-                boost_opp += 0.05
-                difensori_out += 1
-        elif pos == "Goalkeeper":
-            if is_star:
-                portiere_titolare_out = True
-                boost_opp += 0.25 
-
-    if difensori_out >= 2: boost_opp += 0.20
-
-    return min(0.60, malus_att), min(0.60, boost_opp), t1_star, t2_rot, t3_ris, len(visti), squalificati, portiere_titolare_out, difensori_out
+    return assenti_c, assenti_t, malus_c, malus_t, msg_c, msg_t
 
 @st.cache_data(ttl=3600)
 def scarica_quote_native(league_id, date_str):
@@ -634,8 +607,7 @@ if btn_genera:
                 inf_c_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == c_s]
                 inf_t_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == t_s]
                 
-                malus_att_c, boost_opp_c, t1_c, t2_c, t3_c, count_c, sq_c, gk_out_c, def_out_c = analizza_infortuni_pesati_v90(inf_c_list, db_stats[c_s]['giocate'])
-                malus_att_t, boost_opp_t, t1_t, t2_t, t3_t, count_t, sq_t, gk_out_t, def_out_t = analizza_infortuni_pesati_v90(inf_t_list, db_stats[t_s]['giocate'])
+                count_c, count_t, malus_inf_c, malus_inf_t, msg_inf_c, msg_inf_t = calcola_impatto_infortuni(fix_id, db_stats[c_s]['id'], db_stats[t_s]['id'])
                 
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
@@ -715,9 +687,9 @@ if btn_genera:
                 se_sgombra_c = "C. Sgombra" in msg_mot
                 se_sgombra_t = "O. Sgombra" in msg_mot
                 
-                # Calcolo Finale xG
-                xg_c = xg_base_c * (1 - malus_att_c) * (1 + boost_opp_t) * m_h2h_c * b_and_c * m_mot_c * (1.10 if se_sgombra_t else 1.0)
-                xg_t = xg_base_t * (1 - malus_att_t) * (1 + boost_opp_c) * m_h2h_t * b_and_t * m_mot_t * (1.10 if se_sgombra_c else 1.0)
+               # Calcolo Finale xG (con Malus Medico V91)
+                xg_c = (xg_base_c * malus_inf_c) * m_h2h_c * b_and_c * m_mot_c * (1.10 if se_sgombra_t else 1.0)
+                xg_t = (xg_base_t * malus_inf_t) * m_h2h_t * b_and_t * m_mot_t * (1.10 if se_sgombra_c else 1.0)
                 
                 msg_streak = ""
                 # V91: Nerf Streak Breaker a 1.15 (prima era 1.45)
@@ -756,8 +728,7 @@ if btn_genera:
                     "all_tips": full_tips, "best_1x2": (best_1x2_key, best_1x2_prob, best_1x2_q, best_1x2_real),
                     "quote_reali": quote_reali_match,
                     "xg_c": xg_c, "xg_t": xg_t, "arb": arb, "is_sev": is_sev,
-                    "count_c": count_c, "sq_c": sq_c, "t1_c": t1_c, "t2_c": t2_c, "t3_c": t3_c, "gk_out_c": gk_out_c, "def_out_c": def_out_c,
-                    "count_t": count_t, "sq_t": sq_t, "t1_t": t1_t, "t2_t": t2_t, "t3_t": t3_t, "gk_out_t": gk_out_t, "def_out_t": def_out_t,
+                    "count_c": count_c, "count_t": count_t, "msg_inf_c": msg_inf_c, "msg_inf_t": msg_inf_t,
                     "meteo": d_met, "dna_h2h": str_h2h, "dettagli_h2h": dettagli_h2h_str, "streak_msg": msg_streak.strip(), "andata_msg": andata_msg, "msg_mot": msg_mot.strip(),
                     "stan_c": "⚠️ Fatigue" if is_stanca_c else "✅ Riposo", "stan_t": "⚠️ Fatigue" if is_stanca_t else "✅ Riposo", 
                     "forma_c": forma_c, "forma_t": forma_t, "rit_c": rit_c, "rit_t": rit_t,
@@ -990,8 +961,8 @@ if st.session_state.data_master:
                             st.write(f"✈️ <span class='form-box'>{m['forma_t']}</span> | {m['stan_t']}", unsafe_allow_html=True)
                         with c3:
                             st.markdown("<p class='label-bold'>Assenti & V91 Radar</p>", unsafe_allow_html=True)
-                            st.write(f"🏠 🚑 {m['count_c']} Assenti", unsafe_allow_html=True)
-                            st.write(f"✈️ 🚑 {m['count_t']} Assenti", unsafe_allow_html=True)
+                            st.write(f"🏠 {m['msg_inf_c']}", unsafe_allow_html=True)
+                            st.write(f"✈️ {m['msg_inf_t']}", unsafe_allow_html=True)
                         with c4: 
                             st.markdown("<p class='label-bold'>DNA Storico</p>", unsafe_allow_html=True)
                             st.write(f"<span class='dna-testo'>{m['dna_h2h']}</span>", unsafe_allow_html=True)
