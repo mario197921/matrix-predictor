@@ -220,7 +220,7 @@ def analizza_statistiche_avanzate_pro(team_id):
         resp = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'team': team_id, 'last': 10, 'status': 'FT'}).json()
         matches = resp.get('response', [])
         
-        tot_poss, tot_tiri, tot_tiri_area, tot_gol, tot_corner = 0, 0, 0, 0, 0
+        tot_poss, tot_tiri, tot_tiri_area, tot_gol_fatti, tot_gol_subiti, tot_corner = 0, 0, 0, 0, 0, 0
         tot_cart, tot_falli, tot_parate = 0, 0, 0
         match_v = 0
         squalificati_certi = 0 
@@ -228,16 +228,13 @@ def analizza_statistiche_avanzate_pro(team_id):
         for i, m in enumerate(matches):
             fix_id = m['fixture']['id']
             
-            # [V90 EXTREME RADAR]: Leggiamo gli EVENTI dell'ultima partita. Questo funziona SEMPRE, anche in League Two!
             if i == 0:
                 events_resp = requests.get("https://v3.football.api-sports.io/fixtures/events", headers=HEADERS, params={'fixture': fix_id}).json()
                 if events_resp.get('response'):
                     for ev in events_resp['response']:
-                        # Se è un evento della nostra squadra, è un cartellino, e la parola 'Red' è nel dettaglio
                         if str(ev['team']['id']) == str(team_id) and ev['type'] == 'Card' and 'Red' in ev.get('detail', ''):
                             squalificati_certi += 1
 
-            # Recupero Statistiche (se disponibili, altrimenti salta senza rompere il codice)
             stats_resp = requests.get("https://v3.football.api-sports.io/fixtures/statistics", headers=HEADERS, params={'fixture': fix_id}).json()
             if stats_resp.get('response'):
                 for t_stats in stats_resp['response']:
@@ -253,7 +250,9 @@ def analizza_statistiche_avanzate_pro(team_id):
                         tot_cart += int(s_dict.get('Yellow Cards', 0) or 0) + int(s_dict.get('Red Cards', 0) or 0)
                         
                         is_home = str(m['teams']['home']['id']) == str(team_id)
-                        tot_gol += int(m['goals']['home'] if is_home else m['goals']['away'])
+                        # V90: Calcoliamo Gol Fatti e Subiti Reali (Ultimi 10 match assoluti)
+                        tot_gol_fatti += int(m['goals']['home'] if is_home else m['goals']['away'])
+                        tot_gol_subiti += int(m['goals']['away'] if is_home else m['goals']['home'])
                         match_v += 1
                         
         if match_v == 0: match_v = 1 
@@ -266,15 +265,18 @@ def analizza_statistiche_avanzate_pro(team_id):
         avg_falli = tot_falli / match_v
         avg_parate = tot_parate / match_v
         
-        tiri_per_gol = tot_tiri / tot_gol if tot_gol > 0 else 10.0 
+        avg_gf = tot_gol_fatti / match_v
+        avg_gs = tot_gol_subiti / match_v
+        tiri_per_gol = tot_tiri / tot_gol_fatti if tot_gol_fatti > 0 else 10.0 
         
         if avg_poss > 55 and avg_tiri_area < 4: stile = "Tiki-Taka Sterile"
         elif avg_poss < 45 and avg_tiri_area > 4: stile = "Verticale Diretto"
         else: stile = "Bilanciato"
         
-        return avg_poss, avg_tiri, avg_tiri_area, tiri_per_gol, avg_corner, avg_cart, avg_falli, avg_parate, stile, squalificati_certi
+        # Ora esportiamo 12 valori (aggiunti avg_gf e avg_gs in fondo)
+        return avg_poss, avg_tiri, avg_tiri_area, tiri_per_gol, avg_corner, avg_cart, avg_falli, avg_parate, stile, squalificati_certi, avg_gf, avg_gs
     except Exception as e: 
-        return 50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5, "Bilanciato", 0
+        return 50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5, "Bilanciato", 0, 1.0, 1.0
 
 def get_quota_finale(tip, prob, quote_reali):
     if quote_reali and tip in quote_reali: return quote_reali[tip], True
@@ -611,9 +613,9 @@ if btn_genera:
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
                 
-                # V90: Ora estraiamo 10 valori, includendo il radar squalifiche (sq_certi)
-                poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c, parate_c, stile_c, sq_certi_c = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
-                poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t, parate_t, stile_t, sq_certi_t = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
+                # V90: Estraiamo 12 valori, inclusi Gol Fatti e Subiti degli ultimi 10 match
+                poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c, parate_c, stile_c, sq_certi_c, gf_10_c, gs_10_c = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
+                poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t, parate_t, stile_t, sq_certi_t, gf_10_t, gs_10_t = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
                 
                 is_coppa = name in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"]
                 m_mot_c, m_mot_t, tension_idx = 1.0, 1.0, 1.0
@@ -651,8 +653,26 @@ if btn_genera:
 
                     if abs(rank_c - rank_t) <= 3: tension_idx += 0.2
 
-                xg_base_c = math.sqrt(max(0.01, db_stats[c_s]['ac']) * max(0.01, db_stats[t_s]['dt'])) * m_f_c * m_st_c
-                xg_base_t = math.sqrt(max(0.01, db_stats[t_s]['at']) * max(0.01, db_stats[c_s]['dc'])) * m_f_t * m_st_t
+               # ==========================================
+                # V90 HYBRID XG CORE (Risolve il bug delle quote sballate)
+                # ==========================================
+                # 1. XG puramente dalla Classifica/Girone attuale
+                xg_standings_c = math.sqrt(max(0.01, db_stats[c_s]['ac']) * max(0.01, db_stats[t_s]['dt']))
+                xg_standings_t = math.sqrt(max(0.01, db_stats[t_s]['at']) * max(0.01, db_stats[c_s]['dc']))
+
+                # 2. XG Momentum dalle ultime 10 partite (copre i buchi statistici delle coppe)
+                xg_momentum_c = math.sqrt(max(0.01, gf_10_c) * max(0.01, gs_10_t))
+                xg_momentum_t = math.sqrt(max(0.01, gf_10_t) * max(0.01, gs_10_c))
+
+                # Nelle Coppe o Leghe Minori, il Momentum pesa l'80% perché le classifiche sono troppo corte o volatili.
+                # Nei Campionati normali, ci affidiamo al 70% alla classifica stagionale e al 30% allo stato di forma recente.
+                peso_momentum = 0.80 if is_coppa else 0.30
+                peso_standings = 1.0 - peso_momentum
+
+                # 3. Fusione finale
+                xg_base_c = ((xg_standings_c * peso_standings) + (xg_momentum_c * peso_momentum)) * m_f_c * m_st_c
+                xg_base_t = ((xg_standings_t * peso_standings) + (xg_momentum_t * peso_momentum)) * m_f_t * m_st_t
+                # ==========================================
                 
                 malus_league = 1.0
                 if name in ["🇬🇷 Super League", "🇫🇷 Ligue 1", "🇮🇹 Serie B"]: malus_league = 0.85 
