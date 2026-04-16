@@ -594,21 +594,53 @@ if btn_genera:
                 m_met, d_met = scarica_meteo(c_s)
                 m_h2h_c, m_h2h_t, gol_h2h_c, gol_h2h_t, str_h2h, b_and_c, b_and_t, andata_msg, dettagli_h2h_str = analizza_h2h_dna_e_andata(db_stats[c_s]['id'], db_stats[t_s]['id'])
                 
-                # V90: Chiamata chirurgica per Fixture (Molto più precisa della 'date')
-                inj_resp = requests.get("https://v3.football.api-sports.io/injuries", headers=HEADERS, params={'fixture': fix_id}).json()
-                inf_all = inj_resp.get('response', [])
-                if not isinstance(inf_all, list): inf_all = []
-                
-                # V90 Fix: Match per ID SQUADRA, non per nome stringa (Risolve il bug 'Zero Assenti')
+                # ==========================================
+                # INIZIO BLOCCO INFORTUNI V90 PRO (BLINDATO)
+                # ==========================================
                 c_id = db_stats[c_s]['id']
                 t_id = db_stats[t_s]['id']
                 
-                inf_c_list = [i for i in inf_all if str(i['team']['id']) == str(c_id)]
-                inf_t_list = [i for i in inf_all if str(i['team']['id']) == str(t_id)]
+                # Definiamo le leghe "cieche" per risparmiare API e attivare la modalità 100% Statistica
+                is_lega_cieca = f_id in [41, 42] # 41: League One, 42: League Two
+                msg_radar = "⚠️ Radar Infortuni Offline (Lega Minore) - Algoritmo 100% Statistico" if is_lega_cieca else ""
                 
-                # V90: Calcolo Impatto Giocatori Agnostico aggiornato
-                malus_att_c, boost_opp_c, t1_c, t2_c, t3_c, count_c, sq_c, gk_out_c, def_out_c = analizza_infortuni_pesati_v90(inf_c_list)
-                malus_att_t, boost_opp_t, t1_t, t2_t, t3_t, count_t, sq_t, gk_out_t, def_out_t = analizza_infortuni_pesati_v90(inf_t_list)
+                if is_lega_cieca:
+                    # NESSUNA chiamata API. Risparmiamo quota e azzeriamo le variabili di malus.
+                    malus_att_c, boost_opp_c, t1_c, t2_c, t3_c, count_c, sq_c, gk_out_c, def_out_c = 0.0, 0.0, 0, 0, 0, 0, 0, False, 0
+                    malus_att_t, boost_opp_t, t1_t, t2_t, t3_t, count_t, sq_t, gk_out_t, def_out_t = 0.0, 0.0, 0, 0, 0, 0, 0, False, 0
+                    
+                    # Applichiamo solo il "Radar Squalifiche Estremo" se abbiamo intercettato rossi dalle stats
+                    if sq_certi_c > 0:
+                        sq_c += sq_certi_c; count_c += sq_certi_c; malus_att_c += (0.05 * sq_certi_c)
+                    if sq_certi_t > 0:
+                        sq_t += sq_certi_t; count_t += sq_certi_t; malus_att_t += (0.05 * sq_certi_t)
+                else:
+                    # Chiamata base per Fixture (Solo per le leghe tracciate)
+                    inj_resp = requests.get("https://v3.football.api-sports.io/injuries", headers=HEADERS, params={'fixture': fix_id}).json()
+                    inf_all = inj_resp.get('response', [])
+                    if not isinstance(inf_all, list): inf_all = []
+                    
+                    # [RETE LARGA] Se è una coppa e l'array è vuoto, forziamo la ricerca
+                    if len(inf_all) == 0:
+                        inj_fall_c = requests.get("https://v3.football.api-sports.io/injuries", headers=HEADERS, params={'team': c_id, 'date': match_date_str}).json()
+                        inj_fall_t = requests.get("https://v3.football.api-sports.io/injuries", headers=HEADERS, params={'team': t_id, 'date': match_date_str}).json()
+                        if isinstance(inj_fall_c.get('response'), list): inf_all.extend(inj_fall_c['response'])
+                        if isinstance(inj_fall_t.get('response'), list): inf_all.extend(inj_fall_t['response'])
+                    
+                    inf_c_list = [i for i in inf_all if str(i['team']['id']) == str(c_id)]
+                    inf_t_list = [i for i in inf_all if str(i['team']['id']) == str(t_id)]
+                    
+                    malus_att_c, boost_opp_c, t1_c, t2_c, t3_c, count_c, sq_c, gk_out_c, def_out_c = analizza_infortuni_pesati_v90(inf_c_list)
+                    malus_att_t, boost_opp_t, t1_t, t2_t, t3_t, count_t, sq_t, gk_out_t, def_out_t = analizza_infortuni_pesati_v90(inf_t_list)
+
+                    # [RADAR SQUALIFICHE] Aggiungiamo i rossi matematici se l'API non li ha visti
+                    if sq_certi_c > 0 and sq_c == 0:
+                        sq_c += sq_certi_c; count_c += sq_certi_c; malus_att_c += (0.05 * sq_certi_c)
+                    if sq_certi_t > 0 and sq_t == 0:
+                        sq_t += sq_certi_t; count_t += sq_certi_t; malus_att_t += (0.05 * sq_certi_t)
+                # ==========================================
+                # FINE BLOCCO INFORTUNI V90 PRO (BLINDATO)
+                # ==========================================
                 
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
@@ -755,7 +787,7 @@ if btn_genera:
                     "xg_c": xg_c, "xg_t": xg_t, "arb": arb, "is_sev": is_sev,
                     "count_c": count_c, "sq_c": sq_c, "t1_c": t1_c, "t2_c": t2_c, "t3_c": t3_c, "gk_out_c": gk_out_c, "def_out_c": def_out_c,
                     "count_t": count_t, "sq_t": sq_t, "t1_t": t1_t, "t2_t": t2_t, "t3_t": t3_t, "gk_out_t": gk_out_t, "def_out_t": def_out_t,
-                    "meteo": d_met, "dna_h2h": str_h2h, "dettagli_h2h": dettagli_h2h_str, "streak_msg": msg_streak.strip(), "andata_msg": andata_msg, "msg_mot": msg_mot.strip(),
+                    "meteo": d_met,"msg_radar": msg_radar, "dna_h2h": str_h2h, "dettagli_h2h": dettagli_h2h_str, "streak_msg": msg_streak.strip(), "andata_msg": andata_msg, "msg_mot": msg_mot.strip(),
                     "stan_c": "⚠️ Fatigue" if is_stanca_c else "✅ Riposo", "stan_t": "⚠️ Fatigue" if is_stanca_t else "✅ Riposo", 
                     "forma_c": forma_c, "forma_t": forma_t, "rit_c": rit_c, "rit_t": rit_t,
                     "poss_c": poss_c, "tiri_c": tiri_c, "conv_c": conv_c, "stile_c": stile_c,
@@ -861,6 +893,7 @@ if st.session_state.data_master:
                         if m['msg_mot']: st.write(f"<span class='mot-testo'>{m['msg_mot']}</span>", unsafe_allow_html=True)
                         if m['andata_msg']: st.write(f"<span class='andata-testo'>{m['andata_msg']}</span>", unsafe_allow_html=True)
                         if m['streak_msg']: st.write(f"<span class='streak-testo'>{m['streak_msg']}</span>", unsafe_allow_html=True)
+                        if m.get('msg_radar'): st.warning(m['msg_radar'])
                         
                         st.markdown("<div class='stats-box'>", unsafe_allow_html=True)
                         col1, col2 = st.columns(2)
