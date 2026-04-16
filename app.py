@@ -156,26 +156,24 @@ def analizza_infortuni_v91(inf_list, stagione, giocate_team):
 
     for p in inf_list:
         p_id = p.get('player', {}).get('id')
+        # Filtro Anti-Doppioni (risolve i "14 infortunati invece di 4")
         if not p_id or p_id in visti: continue
         visti.add(p_id)
+
+        # Contiamo SEMPRE il giocatore, perché se è nella lista medica, è fuori
+        assenti_veri += 1
 
         pos, gol, assist, rating, mins = get_player_advanced_stats(p_id, stagione)
         
         is_star = False
-        malus = 0.05 # Peso base
+        malus = 0.05 # Danno base se non ci sono statistiche
         
-        # Se abbiamo trovato le stats del giocatore (Leghe Maggiori) applichiamo lo Scudo Anti-Fantasma
         if pos != "Unknown":
             max_mins = max(1, giocate_team * 90)
             ratio = mins / max_mins
-            
-            # Scartiamo chi non gioca mai
-            if ratio < 0.10 and gol == 0 and assist == 0 and rating < 6.8:
-                continue 
-            
             is_star = ratio >= 0.50 or rating >= 7.0
             
-            # Calcolo danni
+            # Calcolo dei danni extra se è un titolare o una stella
             if gol >= 5 or assist >= 5 or (pos in ["Attacker", "Midfielder"] and is_star):
                 malus += 0.10
                 if gol >= 10: malus += 0.05 
@@ -183,14 +181,12 @@ def analizza_infortuni_v91(inf_list, stagione, giocate_team):
             if pos == "Goalkeeper" and is_star: malus += 0.15
             if pos == "Defender" and is_star: malus += 0.10
         else:
-            # Per le Leghe Minori (dove le stats mancano), teniamo buono il giocatore 
-            # applicando un malus medio-alto per sicurezza.
+            # Malus standard per leghe minori dove non estraiamo le stats
             malus = 0.08
             
-        assenti_veri += 1
         malus_att += malus
 
-    malus_finale = 1.0 - min(0.35, malus_att) # Cap massimo al 35%
+    malus_finale = 1.0 - min(0.35, malus_att) # Tetto massimo al 35% di danno
     danno_perc = int((1 - malus_finale) * 100)
     
     if assenti_veri == 0: return assenti_veri, 1.0, "Rosa Completa ✅"
