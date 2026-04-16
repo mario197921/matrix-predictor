@@ -149,54 +149,62 @@ def get_player_advanced_stats(player_id, season):
     return "Unknown", 0, 0, 6.0, 0
 
 @st.cache_data(ttl=3600)
-def analizza_infortuni_lista_v91(inf_list, stagione, giocate_team):
-    if not inf_list: return 0, 1.0, "Rosa Completa ✅"
-
-    assenti_veri = 0
-    malus_att = 0.0
+def analizza_infortuni_originale_v90(inf_list, stagione, partite_giocate_team):
+    malus_att, boost_opp = 0.0, 0.0 
+    squalificati = 0
+    difensori_out = 0
     visti = set()
+    max_mins = max(1, partite_giocate_team * 90)
 
-    for p in inf_list:
-        p_id = p.get('player', {}).get('id')
+    for i in inf_list:
+        p_id = i.get('player', {}).get('id')
         if not p_id or p_id in visti: continue
         visti.add(p_id)
+        
+        # Recupero logica Squalifiche V90
+        motivo = str(i.get('type', '')).lower()
+        if 'suspend' in motivo or 'red card' in motivo or 'card' in motivo:
+            squalificati += 1
 
         pos, gol, assist, rating, mins = get_player_advanced_stats(p_id, stagione)
-        
-        is_star = False
-        malus = 0.05 
-        
-        # Scudo Anti-Fantasma (solo se l'API fornisce statistiche per questo campionato)
-        if pos != "Unknown":
-            max_mins = max(1, giocate_team * 90)
-            ratio = mins / max_mins
-            
-            # Se ha 0 minuti ed è anonimo, è un panchinaro fantasma: saltiamo e non lo contiamo
-            if ratio < 0.10 and gol == 0 and assist == 0 and rating < 6.8:
-                continue 
-                
-            is_star = ratio >= 0.50 or rating >= 7.0
-            if gol >= 5 or assist >= 5 or (pos in ["Attacker", "Midfielder"] and is_star):
-                malus += 0.10
-                if gol >= 10: malus += 0.05 
-                if assist >= 8: malus += 0.05 
-            if pos == "Goalkeeper" and is_star: malus += 0.15
-            if pos == "Defender" and is_star: malus += 0.10
-            
-            assenti_veri += 1
-            malus_att += malus
-        else:
-            # Nelle leghe minori contiamo tutti applicando un malus medio
-            assenti_veri += 1
-            malus_att += 0.08
+        ratio = mins / max_mins
 
-    malus_finale = 1.0 - min(0.35, malus_att)
-    danno_perc = int((1 - malus_finale) * 100)
+        is_star = ratio >= 0.50 or rating >= 7.0
+
+        # Calcolo Malus Attacco
+        if gol >= 5 or assist >= 5 or (pos in ["Attacker", "Midfielder"] and is_star):
+            malus_att += 0.15
+            if gol >= 10: malus_att += 0.10 
+            if assist >= 8: malus_att += 0.10 
+            if rating >= 7.3: malus_att += 0.10 
+
+        # Calcolo Boost Difesa (Il pezzo vitale che avevo rimosso)
+        if pos == "Defender":
+            if is_star:
+                boost_opp += 0.15
+                difensori_out += 1
+            elif ratio >= 0.20:
+                boost_opp += 0.05
+                difensori_out += 1
+        elif pos == "Goalkeeper":
+            if is_star:
+                boost_opp += 0.25 
+
+    if difensori_out >= 2: boost_opp += 0.20
+
+    totale_out = len(visti)
     
-    if assenti_veri == 0: return 0, 1.0, "Rosa Completa ✅"
-    elif danno_perc <= 5: return assenti_veri, 1.0, f"🚑 {assenti_veri} Assenti (Lieve)"
-    elif danno_perc <= 15: return assenti_veri, round(malus_finale, 2), f"🚑 {assenti_veri} Assenti (Pesante -{danno_perc}%)"
-    else: return assenti_veri, round(malus_finale, 2), f"🚑 {assenti_veri} Assenti (EMERGENZA -{danno_perc}% ⚠️)"
+    # Creazione del messaggio visivo
+    msg = "Rosa Completa ✅"
+    if totale_out > 0:
+        danno_att = int(malus_att * 100)
+        boost_dif = int(boost_opp * 100)
+        msg = f"🚑 {totale_out} Assenti"
+        if squalificati > 0: msg += f" ({squalificati} Squal.)"
+        if danno_att > 0: msg += f" | Attacco -{min(60, danno_att)}%"
+        if boost_dif > 0: msg += f" | Difesa Colpita (Opp +{min(60, boost_dif)}%)"
+
+    return min(0.60, malus_att), min(0.60, boost_opp), totale_out, msg
 
 @st.cache_data(ttl=3600)
 def scarica_quote_native(league_id, date_str):
@@ -640,8 +648,8 @@ if btn_genera:
                 inf_c_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == c_s]
                 inf_t_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == t_s]
                 
-                count_c, malus_inf_c, msg_inf_c = analizza_infortuni_lista_v91(inf_c_list, stagione_dinamica, db_stats[c_s]['giocate'])
-                count_t, malus_inf_t, msg_inf_t = analizza_infortuni_lista_v91(inf_t_list, stagione_dinamica, db_stats[t_s]['giocate'])
+                malus_att_c, boost_opp_c, count_c, msg_inf_c = analizza_infortuni_originale_v90(inf_c_list, STAGIONE, db_stats[c_s]['giocate'])
+                malus_att_t, boost_opp_t, count_t, msg_inf_t = analizza_infortuni_originale_v90(inf_t_list, STAGIONE, db_stats[t_s]['giocate'])
                 
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
@@ -721,9 +729,9 @@ if btn_genera:
                 se_sgombra_c = "C. Sgombra" in msg_mot
                 se_sgombra_t = "O. Sgombra" in msg_mot
                 
-               # Calcolo Finale xG (con Malus Medico V91)
-                xg_c = (xg_base_c * malus_inf_c) * m_h2h_c * b_and_c * m_mot_c * (1.10 if se_sgombra_t else 1.0)
-                xg_t = (xg_base_t * malus_inf_t) * m_h2h_t * b_and_t * m_mot_t * (1.10 if se_sgombra_c else 1.0)
+              # Calcolo Finale xG (Ripristino Matematica V90 Perfetta)
+                xg_c = xg_base_c * (1 - malus_att_c) * (1 + boost_opp_t) * m_h2h_c * b_and_c * m_mot_c * (1.10 if se_sgombra_t else 1.0)
+                xg_t = xg_base_t * (1 - malus_att_t) * (1 + boost_opp_c) * m_h2h_t * b_and_t * m_mot_t * (1.10 if se_sgombra_c else 1.0)
                 
                 msg_streak = ""
                 # V91: Nerf Streak Breaker a 1.15 (prima era 1.45)
