@@ -6,9 +6,9 @@ from datetime import datetime, timezone, timedelta
 import pytz
 
 # ==========================================
-# 🎨 UI: TOTAL MATRIX DESIGN (V91 QUANTUM)
+# 🎨 UI: TOTAL MATRIX DESIGN (V90 QUANTUM)
 # ==========================================
-st.set_page_config(page_title="Matrix Bet V91", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Matrix Bet V90", page_icon="🎯", layout="wide")
 
 st.markdown("""
     <style>
@@ -44,134 +44,102 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONFIGURAZIONE E CAMPIONATI V91 ---
+# --- CONFIGURAZIONE E CAMPIONATI V90 ---
 API_KEY_FOOTBALL = 'dc4d6488653c2d9a763290a44eb1613f'
-STAGIONE = "2025" 
+STAGIONE = "2025"
 HEADERS = {'x-apisports-key': API_KEY_FOOTBALL}
 
 MASTER_LEAGUES = {
-    # --- TOP EUROPEI E COPPE ---
+    # --- COPPE EUROPEE ---
     "🇪🇺 Champions League": 2, "🇪🇺 Europa League": 3, "🇪🇺 Conference League": 848,
-    "🇮🇹 Serie A": 135, "🇮🇹 Serie B": 136, "🇮🇹 Serie C - Girone A": 137, "🇮🇹 Serie C - Girone B": 138, "🇮🇹 Serie C - Girone C": 139,
-    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": 39, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship": 40, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 League One": 41, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 League Two": 42,
-    "🇪🇸 La Liga": 140, "🇪🇸 La Liga 2": 141, 
-    "🇩🇪 Bundesliga": 78, "🇩🇪 2. Bundesliga": 79, 
-    "🇫🇷 Ligue 1": 61,
     
-    # --- RESTO D'EUROPA E NORDICHE ---
-    "🇳🇱 Eredivisie": 88, "🇳🇱 Eerste Divisie": 89, 
-    "🇵🇹 Primeira Liga": 94, "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Prem.": 281,
+    # --- TOP 5 EUROPEI & SECONDE LINEE ---
+    "🇮🇹 Serie A": 135, "🇮🇹 Serie B": 136, 
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": 39, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship": 40,
+    "🇪🇸 La Liga": 140, "🇩🇪 Bundesliga": 78, "🇫🇷 Ligue 1": 61,
+    
+    # --- NUOVI TIER 2 EUROPEI (Miniera d'oro) ---
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 League One": 41, "🏴󠁧󠁢󠁥󠁮󠁧󠁿 League Two": 42,
+    "🇳🇱 Eerste Divisie": 89, "🇩🇪 2. Bundesliga": 79, "🇪🇸 La Liga 2": 141,
+    
+    # --- ALTRI CAMPIONATI EUROPEI TRACCIATI ---
+    "🇳🇱 Eredivisie": 88, "🇵🇹 Primeira Liga": 94, "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Prem.": 281,
     "🇹🇷 Süper Lig": 203, "🇧🇪 Pro League": 144, "🇬🇷 Super League": 197,
     "🇸🇪 Allsvenskan": 113, "🇳🇴 Eliteserien": 71, "🇫🇮 Veikkausliiga": 244,
-    "🇩🇰 Superliga": 119, "🇨🇭 Super League": 207, "🇦🇹 Bundesliga": 218,
-
-    # --- BALCANI ---
-    "🇭🇷 HNL (Croazia)": 210, "🇷🇸 Super Liga (Serbia)": 288, "🇷🇴 Liga I (Romania)": 283,
-
-    # --- AMERICHE E COPPE ---
-    "🌎 Copa Libertadores": 13, "🌎 Copa Sudamericana": 11, "🌎 CONCACAF Champions": 16,
-    "🇧🇷 Brasileirão": 71, "🇦🇷 Liga Profesional": 128, 
-    "🇺🇸 MLS": 253, "🇲🇽 Liga MX": 228, "🇨🇴 Primera A (Colombia)": 239,
-
-    # --- ASIA, OCEANIA E COPPE ---
-    "🌏 AFC Champions League (Asia)": 17,
-    "🇯🇵 J1 League (Giappone)": 98, "🇰🇷 K League 1 (Corea)": 292,
-    "🇦🇺 A-League (Australia)": 188, "🇸🇦 Saudi Pro League": 307
+    "🇩🇰 Superliga": 119, "🇨🇭 Super League": 207, "🇦🇹 Bundesliga": 218
 }
 
-BLACKLIST_UNDER = ["Bayern Munich", "Barcelona", "Galatasaray", "Besiktas"]
-LEAGHE_2026 = [113, 71, 244, 128, 253, 228, 239, 98, 292, 13, 11, 16]
 
 # ==========================================
-# 📡 SCUDO ANTI-CRASH E MOTORE ESTRAZIONE
+# 📡 MODULI API E CALCOLI MATEMATICI (V90)
 # ==========================================
-def get_season(league_id):
-    return "2026" if int(league_id) in LEAGHE_2026 else "2025"
-
-def fetch_api_data(endpoint, params):
-    url = f"https://v3.football.api-sports.io/{endpoint}"
-    try:
-        resp = requests.get(url, headers=HEADERS, params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        if "errors" in data and data["errors"]: return []
-        return data.get("response", [])
-    except Exception as e:
-        return []
-
 @st.cache_data(ttl=3600)
 def get_active_leagues(start_date, end_date):
     active_ids = set()
     delta = end_date - start_date
     days = min(delta.days + 1, 7) 
-    now_utc = datetime.now(timezone.utc)
-    
     try:
         for i in range(days):
             d_str = (start_date + timedelta(days=i)).strftime('%Y-%m-%d')
-            resp = fetch_api_data("fixtures", {'date': d_str})
-            if resp: 
-                for f in resp:
-                    if f['fixture']['status']['short'] in ['PST', 'CANC', 'ABD', 'AWD', 'WO']:
-                        continue
-                    try:
-                        match_time_utc = datetime.fromisoformat(f['fixture']['date'])
-                        if match_time_utc <= now_utc:
-                            continue
-                    except:
-                        pass
-                    active_ids.add(f['league']['id'])
-                    
+            resp = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'date': d_str}).json()
+            if 'response' in resp: active_ids.update({f['league']['id'] for f in resp['response']})
         return {k: v for k, v in MASTER_LEAGUES.items() if v in active_ids}
     except: return MASTER_LEAGUES
 
+# V90: ESTRAZIONE DATI SINGOLO GIOCATORE (Rating, Posizione, Gol, Assist)
 @st.cache_data(ttl=86400)
 def get_player_advanced_stats(player_id, season):
     if not player_id: return "Unknown", 0, 0, 6.0, 0
-    resp = fetch_api_data("players", {'id': player_id, 'season': season})
-    if resp:
-        try:
-            stats = resp[0]['statistics'][0]
+    try:
+        resp = requests.get("https://v3.football.api-sports.io/players", headers=HEADERS, params={'id': player_id, 'season': season}).json()
+        if resp.get('response'):
+            stats = resp['response'][0]['statistics'][0]
             pos = stats['games']['position']
             mins = stats['games']['minutes'] or 0
             rating = float(stats['games']['rating'] or 6.0)
             goals = stats['goals']['total'] or 0
             assists = stats['goals']['assists'] or 0
             return pos, goals, assists, rating, mins
-        except: pass
+    except: pass
     return "Unknown", 0, 0, 6.0, 0
 
-@st.cache_data(ttl=3600)
-def analizza_infortuni_originale_v90(inf_list, stagione, partite_giocate_team):
-    malus_att, boost_opp = 0.0, 0.0 
-    squalificati = 0
+# V90: IL NUOVO MOTORE ASSENTI AGNOSTICO
+def analizza_infortuni_pesati_v90(inf_list, partite_giocate_team):
+    malus_att = 0.0  # Danno all'attacco (riduce i propri xG)
+    boost_opp = 0.0  # Danno alla difesa (aumenta gli xG avversari)
+    t1_star, t2_rot, t3_ris, squalificati = 0, 0, 0, 0
     difensori_out = 0
+    portiere_titolare_out = False
     visti = set()
     max_mins = max(1, partite_giocate_team * 90)
 
     for i in inf_list:
-        p_id = i.get('player', {}).get('id')
+        p_id = i['player'].get('id')
         if not p_id or p_id in visti: continue
         visti.add(p_id)
         
-        # Recupero logica Squalifiche (Cruciale per Inter e simili)
         motivo = str(i.get('type', '')).lower()
         if 'suspend' in motivo or 'red card' in motivo or 'card' in motivo:
             squalificati += 1
 
-        pos, gol, assist, rating, mins = get_player_advanced_stats(p_id, stagione)
-        ratio = mins / max_mins if max_mins > 0 else 0
+        # Chiamata chirurgica per il giocatore assente
+        pos, gol, assist, rating, mins = get_player_advanced_stats(p_id, STAGIONE)
+        ratio = mins / max_mins
+
+        if ratio >= 0.50: t1_star += 1
+        elif ratio >= 0.20: t2_rot += 1
+        else: t3_ris += 1
 
         is_star = ratio >= 0.50 or rating >= 7.0
 
-        # Malus Attacco
+        # L'IMPATTO AGNOSTICO SULL'ATTACCO (Chiunque faccia gol o assist)
         if gol >= 5 or assist >= 5 or (pos in ["Attacker", "Midfielder"] and is_star):
             malus_att += 0.15
-            if gol >= 10: malus_att += 0.10 
-            if assist >= 8: malus_att += 0.10 
-            if rating >= 7.3: malus_att += 0.10 
+            if gol >= 10: malus_att += 0.10 # Super-bomber assente
+            if assist >= 8: malus_att += 0.10 # Super-assistman assente
+            if rating >= 7.3: malus_att += 0.10 # Fuoriclasse assoluto
 
-        # Boost Difesa (Il malus difensivo che fa aumentare i gol avversari)
+        # L'IMPATTO STRUTTURALE SULLA DIFESA (Portieri e Difensori)
         if pos == "Defender":
             if is_star:
                 boost_opp += 0.15
@@ -180,197 +148,209 @@ def analizza_infortuni_originale_v90(inf_list, stagione, partite_giocate_team):
                 boost_opp += 0.05
                 difensori_out += 1
         elif pos == "Goalkeeper":
-            if is_star:
-                boost_opp += 0.25 
+            if is_star: # Portiere titolare
+                portiere_titolare_out = True
+                boost_opp += 0.25 # Boost enorme all'avversario
 
-    if difensori_out >= 2: boost_opp += 0.20
+    # EFFETTO REPARTO SMANTELLATO
+    if difensori_out >= 2:
+        boost_opp += 0.20 # La difesa perde le distanze
 
-    totale_out = len(visti)
-    
-    msg = "Rosa Completa ✅"
-    if totale_out > 0:
-        danno_att = int(malus_att * 100)
-        boost_dif = int(boost_opp * 100)
-        msg = f"🚑 {totale_out} Assenti"
-        if squalificati > 0: msg += f" ({squalificati} Squal.)"
-        if danno_att > 0: msg += f" | Att. -{min(60, danno_att)}%"
-        if boost_dif > 0: msg += f" | Difesa Colpita ⚠️"
-
-    return min(0.60, malus_att), min(0.60, boost_opp), totale_out, msg
+    return min(0.60, malus_att), min(0.60, boost_opp), t1_star, t2_rot, t3_ris, len(visti), squalificati, portiere_titolare_out, difensori_out
 
 @st.cache_data(ttl=3600)
 def scarica_quote_native(league_id, date_str):
-    resp = fetch_api_data("odds", {'league': league_id, 'season': get_season(league_id), 'date': date_str, 'bookmaker': 8})
-    quote_dict = {}
-    for item in resp:
-        fix_id = item['fixture']['id']
-        quote_dict[fix_id] = {}
-        if item['bookmakers']:
-            for bet in item['bookmakers'][0]['bets']:
-                if bet['id'] == 1:
-                    for val in bet['values']:
-                        if val['value'] == 'Home': quote_dict[fix_id]['1'] = float(val['odd'])
-                        elif val['value'] == 'Draw': quote_dict[fix_id]['X'] = float(val['odd'])
-                        elif val['value'] == 'Away': quote_dict[fix_id]['2'] = float(val['odd'])
-                elif bet['id'] == 5:
-                    for val in bet['values']:
-                        if "Over" in val['value']: quote_dict[fix_id][f"O{val['value'].split(' ')[1]}"] = float(val['odd'])
-                        elif "Under" in val['value']: quote_dict[fix_id][f"U{val['value'].split(' ')[1]}"] = float(val['odd'])
-                elif bet['id'] == 12:
-                    for val in bet['values']:
-                        if val['value'] == 'Home/Draw': quote_dict[fix_id]['1X'] = float(val['odd'])
-                        elif val['value'] == 'Draw/Away': quote_dict[fix_id]['X2'] = float(val['odd'])
-                        elif val['value'] == 'Home/Away': quote_dict[fix_id]['12'] = float(val['odd'])
-                elif bet['id'] == 6:
-                    for val in bet['values']:
-                        if val['value'] == 'Yes': quote_dict[fix_id]['Goal'] = float(val['odd'])
-                        elif val['value'] == 'No': quote_dict[fix_id]['NoGoal'] = float(val['odd'])
-    return quote_dict
+    try:
+        resp = requests.get("https://v3.football.api-sports.io/odds", headers=HEADERS, params={'league': league_id, 'season': STAGIONE, 'date': date_str, 'bookmaker': 8}).json()
+        quote_dict = {}
+        for item in resp.get('response', []):
+            fix_id = item['fixture']['id']
+            quote_dict[fix_id] = {}
+            if item['bookmakers']:
+                for bet in item['bookmakers'][0]['bets']:
+                    if bet['id'] == 1:
+                        for val in bet['values']:
+                            if val['value'] == 'Home': quote_dict[fix_id]['1'] = float(val['odd'])
+                            elif val['value'] == 'Draw': quote_dict[fix_id]['X'] = float(val['odd'])
+                            elif val['value'] == 'Away': quote_dict[fix_id]['2'] = float(val['odd'])
+                    elif bet['id'] == 5:
+                        for val in bet['values']:
+                            if "Over" in val['value']: quote_dict[fix_id][f"O{val['value'].split(' ')[1]}"] = float(val['odd'])
+                            elif "Under" in val['value']: quote_dict[fix_id][f"U{val['value'].split(' ')[1]}"] = float(val['odd'])
+                    elif bet['id'] == 12:
+                        for val in bet['values']:
+                            if val['value'] == 'Home/Draw': quote_dict[fix_id]['1X'] = float(val['odd'])
+                            elif val['value'] == 'Draw/Away': quote_dict[fix_id]['X2'] = float(val['odd'])
+                            elif val['value'] == 'Home/Away': quote_dict[fix_id]['12'] = float(val['odd'])
+                    elif bet['id'] == 6:
+                        for val in bet['values']:
+                            if val['value'] == 'Yes': quote_dict[fix_id]['Goal'] = float(val['odd'])
+                            elif val['value'] == 'No': quote_dict[fix_id]['NoGoal'] = float(val['odd'])
+        return quote_dict
+    except: return {}
 
 @st.cache_data(ttl=86400)
 def analizza_statistiche_stagionali(league_id, team_id):
-    resp = fetch_api_data("teams/statistics", {'league': league_id, 'season': get_season(league_id), 'team': team_id})
-    if not resp: return 0.0, 0.0
-    stats = resp
-    giocate = stats.get('fixtures', {}).get('played', {}).get('total', 0)
-    if giocate == 0: return 0.0, 0.0
-    cs_tot = stats.get('clean_sheet', {}).get('total', 0)
-    fts_tot = stats.get('failed_to_score', {}).get('total', 0)
-    return (cs_tot / giocate) * 100, (fts_tot / giocate) * 100
+    try:
+        resp = requests.get("https://v3.football.api-sports.io/teams/statistics", headers=HEADERS, params={'league': league_id, 'season': STAGIONE, 'team': team_id}).json()
+        stats = resp.get('response', {})
+        if not stats: return 0.0, 0.0
+        
+        giocate = stats.get('fixtures', {}).get('played', {}).get('total', 0)
+        if giocate == 0: return 0.0, 0.0
+        
+        cs_tot = stats.get('clean_sheet', {}).get('total', 0)
+        fts_tot = stats.get('failed_to_score', {}).get('total', 0)
+        
+        cs_perc = (cs_tot / giocate) * 100
+        fts_perc = (fts_tot / giocate) * 100
+        return cs_perc, fts_perc
+    except: return 0.0, 0.0
 
 @st.cache_data(ttl=3600)
 def analizza_statistiche_avanzate_pro(team_id):
-    matches = fetch_api_data("fixtures", {'team': team_id, 'last': 10, 'status': 'FT'})
-    if not matches: return 50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5, "Bilanciato"
-    
-    tot_poss, tot_tiri, tot_tiri_area, tot_gol, tot_corner = 0, 0, 0, 0, 0
-    tot_cart, tot_falli, tot_parate = 0, 0, 0
-    match_v = 0
-    
-    for m in matches:
-        fix_id = m['fixture']['id']
-        stats_resp = fetch_api_data("fixtures/statistics", {'fixture': fix_id})
-        if stats_resp:
-            for t_stats in stats_resp:
-                if str(t_stats['team']['id']) == str(team_id):
-                    s_dict = {s['type']: s['value'] for s in t_stats['statistics']}
-                    poss = str(s_dict.get('Ball Possession', '50%')).replace('%', '')
-                    tot_poss += int(poss) if poss.isdigit() else 50
-                    tot_tiri += int(s_dict.get('Shots on Goal', 0) or 0)
-                    tot_tiri_area += int(s_dict.get('Shots insidebox', 0) or 0)
-                    tot_corner += int(s_dict.get('Corner Kicks', 0) or 0)
-                    tot_falli += int(s_dict.get('Fouls', 0) or 0)
-                    tot_parate += int(s_dict.get('Goalkeeper Saves', 0) or 0)
-                    tot_cart += int(s_dict.get('Yellow Cards', 0) or 0) + int(s_dict.get('Red Cards', 0) or 0)
-                    
-                    is_home = str(m['teams']['home']['id']) == str(team_id)
-                    tot_gol += int(m['goals']['home'] if is_home else m['goals']['away'])
-                    match_v += 1
-                    
-    if match_v == 0: match_v = 1 
-    
-    avg_poss = tot_poss / match_v
-    avg_tiri_area = tot_tiri_area / match_v
-    tiri_per_gol = (tot_tiri / tot_gol) if tot_gol > 0 else 10.0 
-    
-    if avg_poss > 55 and avg_tiri_area < 4: stile = "Tiki-Taka Sterile"
-    elif avg_poss < 45 and avg_tiri_area > 4: stile = "Verticale Diretto"
-    else: stile = "Bilanciato"
-    
-    return avg_poss, tot_tiri / match_v, avg_tiri_area, tiri_per_gol, tot_corner / match_v, tot_cart / match_v, tot_falli / match_v, tot_parate / match_v, stile
+    try:
+        resp = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'team': team_id, 'last': 10, 'status': 'FT'}).json()
+        matches = resp.get('response', [])
+        
+        tot_poss, tot_tiri, tot_tiri_area, tot_gol, tot_corner = 0, 0, 0, 0, 0
+        tot_cart, tot_falli, tot_parate = 0, 0, 0
+        match_v = 0
+        
+        for m in matches:
+            fix_id = m['fixture']['id']
+            stats_resp = requests.get("https://v3.football.api-sports.io/fixtures/statistics", headers=HEADERS, params={'fixture': fix_id}).json()
+            if stats_resp.get('response'):
+                for t_stats in stats_resp['response']:
+                    if str(t_stats['team']['id']) == str(team_id):
+                        s_dict = {s['type']: s['value'] for s in t_stats['statistics']}
+                        poss = str(s_dict.get('Ball Possession', '50%')).replace('%', '')
+                        tot_poss += int(poss) if poss.isdigit() else 50
+                        tot_tiri += int(s_dict.get('Shots on Goal', 0) or 0)
+                        tot_tiri_area += int(s_dict.get('Shots insidebox', 0) or 0)
+                        tot_corner += int(s_dict.get('Corner Kicks', 0) or 0)
+                        tot_falli += int(s_dict.get('Fouls', 0) or 0)
+                        tot_parate += int(s_dict.get('Goalkeeper Saves', 0) or 0)
+                        tot_cart += int(s_dict.get('Yellow Cards', 0) or 0) + int(s_dict.get('Red Cards', 0) or 0)
+                        
+                        is_home = str(m['teams']['home']['id']) == str(team_id)
+                        tot_gol += int(m['goals']['home'] if is_home else m['goals']['away'])
+                        match_v += 1
+                        
+        if match_v == 0: match_v = 1 
+        
+        avg_poss = tot_poss / match_v
+        avg_tiri = tot_tiri / match_v
+        avg_tiri_area = tot_tiri_area / match_v
+        avg_corner = tot_corner / match_v
+        avg_cart = tot_cart / match_v
+        avg_falli = tot_falli / match_v
+        avg_parate = tot_parate / match_v
+        
+       # V90 Fix: Cinismo calcolato sui Tiri in Porta totali (include missili da fuori)
+        tiri_per_gol = tot_tiri / tot_gol if tot_gol > 0 else 10.0 
+        
+        if avg_poss > 55 and avg_tiri_area < 4: stile = "Tiki-Taka Sterile"
+        elif avg_poss < 45 and avg_tiri_area > 4: stile = "Verticale Diretto"
+        else: stile = "Bilanciato"
+        
+        return avg_poss, avg_tiri, avg_tiri_area, tiri_per_gol, avg_corner, avg_cart, avg_falli, avg_parate, stile
+    except: return 50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5, "Bilanciato"
 
 def get_quota_finale(tip, prob, quote_reali):
     if quote_reali and tip in quote_reali: return quote_reali[tip], True
     if prob <= 0: return 50.0, False
-    
-    quota_fair = 100.0 / prob
-    quota_mercato = quota_fair * 0.94
-        
-    return round(min(30.0, max(1.01, quota_mercato)), 2), False
+    return max(1.01, round(1.0 + (((100 / prob) - 1.0) * 1.55), 2)), False
 
 @st.cache_data(ttl=3600)
 def analizza_squadra_globale(team_id):
-    matches = fetch_api_data("fixtures", {'team': team_id, 'last': 10, 'status': 'FT'})
-    if not matches: return 1.0, False, "N/D", 1.0, "Nessuno"
-    
-    ultima_data = datetime.strptime(matches[0]['fixture']['date'][:10], '%Y-%m-%d')
-    diff_giorni = (datetime.now() - ultima_data).days
-    is_stanca = diff_giorni <= 4
-    
-    forma_str, punti = "", 0
-    for m in matches[:5]:
-        is_home = str(m['teams']['home']['id']) == str(team_id)
-        gh, ga = m['goals']['home'], m['goals']['away']
-        if gh == ga: forma_str += "D"; punti += 1
-        elif (is_home and gh > ga) or (not is_home and ga > gh): forma_str += "W"; punti += 3
-        else: forma_str += "L"
-    forma_str = forma_str[::-1] 
-    
-    stats = {'W': 0, 'D': 0, 'L': 0, 'Over': 0, 'Goal': 0}
-    for m in matches:
-        is_home = str(m['teams']['home']['id']) == str(team_id)
-        gh, ga = m['goals']['home'], m['goals']['away']
-        if gh is not None and ga is not None:
-            if gh == ga: stats['D'] += 1
-            elif (is_home and gh > ga) or (not is_home and ga > gh): stats['W'] += 1
-            else: stats['L'] += 1
-            if (gh + ga) > 2: stats['Over'] += 1
-            if gh > 0 and ga > 0: stats['Goal'] += 1
+    try:
+        resp = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'team': team_id, 'last': 10, 'status': 'FT'}).json()
+        matches = resp.get('response', [])
+        if not matches: return 1.0, False, "N/D", 1.0, "Nessuno"
+        
+        ultima_data = datetime.strptime(matches[0]['fixture']['date'][:10], '%Y-%m-%d')
+        diff_giorni = (datetime.now() - ultima_data).days
+        is_stanca = diff_giorni <= 4
+        m_stanchezza = 0.95 if is_stanca else 1.0
+        
+        forma_str, punti = "", 0
+        
+        for m in matches[:5]:
+            is_home = str(m['teams']['home']['id']) == str(team_id)
+            gh, ga = m['goals']['home'], m['goals']['away']
+            if gh == ga: forma_str += "D"; punti += 1
+            elif (is_home and gh > ga) or (not is_home and ga > gh): forma_str += "W"; punti += 3
+            else: forma_str += "L"
+        forma_str = forma_str[::-1] 
+        m_forma = 0.9 + ((punti/15)*0.2)
+        
+        stats = {'W': 0, 'D': 0, 'L': 0, 'Over': 0, 'Goal': 0}
+        for m in matches:
+            is_home = str(m['teams']['home']['id']) == str(team_id)
+            gh, ga = m['goals']['home'], m['goals']['away']
+            if gh is not None and ga is not None:
+                if gh == ga: stats['D'] += 1
+                elif (is_home and gh > ga) or (not is_home and ga > gh): stats['W'] += 1
+                else: stats['L'] += 1
+                if (gh + ga) > 2: stats['Over'] += 1
+                if gh > 0 and ga > 0: stats['Goal'] += 1
             
-    ritardi = []
-    if stats['D'] == 0: ritardi.append("X")
-    if stats['W'] == 0: ritardi.append("Vittoria")
-    if stats['Over'] == 0: ritardi.append("Over 2.5")
-    if stats['Goal'] == 0: ritardi.append("Goal")
+        ritardi = []
+        if stats['D'] == 0: ritardi.append("X")
+        if stats['W'] == 0: ritardi.append("Vittoria")
+        if stats['Over'] == 0: ritardi.append("Over 2.5")
+        if stats['Goal'] == 0: ritardi.append("Goal")
 
-    return 0.95 if is_stanca else 1.0, is_stanca, forma_str, 0.9 + ((punti/15)*0.2), (", ".join(ritardi) if ritardi else "Nessuno")
+        return m_stanchezza, is_stanca, forma_str, m_forma, (", ".join(ritardi) if ritardi else "Nessuno")
+    except: return 1.0, False, "N/D", 1.0, "Nessuno"
 
 @st.cache_data(ttl=3600)
 def analizza_h2h_dna_e_andata(id_casa, id_trasf):
-    matches = fetch_api_data("fixtures/headtohead", {'h2h': f"{id_casa}-{id_trasf}", 'last': 5})
-    if not matches: return 1.0, 1.0, 0, 0, "Nessun Precedente", 1.0, 1.0, "", "Nessun match."
-    
-    vittorie_c, vittorie_t, gol_c, gol_t = 0, 0, 0, 0
-    andata_msg, boost_andata_c, boost_andata_t = "", 1.0, 1.0
-    dettagli_list = []
-    
-    for m in matches:
-        if m['goals']['home'] is not None:
-            d_m = datetime.strptime(m['fixture']['date'][:10], '%Y-%m-%d').strftime('%d/%m/%Y')
-            dettagli_list.append(f"📅 {d_m}: {m['teams']['home']['name']} <b>{m['goals']['home']} - {m['goals']['away']}</b> {m['teams']['away']['name']}")
-            
+    try:
+        resp = requests.get("https://v3.football.api-sports.io/fixtures/headtohead", headers=HEADERS, params={'h2h': f"{id_casa}-{id_trasf}", 'last': 5}).json()
+        matches = resp.get('response', [])
+        if not matches: return 1.0, 1.0, 0, 0, "Nessun Precedente", 1.0, 1.0, "", "Nessun match."
+        
+        vittorie_c, vittorie_t, gol_c, gol_t = 0, 0, 0, 0
+        andata_msg, boost_andata_c, boost_andata_t = "", 1.0, 1.0
+        
+        dettagli_list = []
+        for m in matches:
+            if m['goals']['home'] is not None:
+                d_m = datetime.strptime(m['fixture']['date'][:10], '%Y-%m-%d').strftime('%d/%m/%Y')
+                dettagli_list.append(f"📅 {d_m}: {m['teams']['home']['name']} <b>{m['goals']['home']} - {m['goals']['away']}</b> {m['teams']['away']['name']}")
+        dettagli_str = "<br>".join(dettagli_list) if dettagli_list else "Nessun match."
+        
+        ultimo_match = matches[0]
+        data_ultimo = datetime.strptime(ultimo_match['fixture']['date'][:10], '%Y-%m-%d')
+        if (datetime.now() - data_ultimo).days <= 28:
+            is_home_last = ultimo_match['teams']['home']['id'] == id_casa
+            gc_last, gt_last = ultimo_match['goals']['home'], ultimo_match['goals']['away']
+            if gc_last is not None and gt_last is not None:
+                g_c_and = gc_last if is_home_last else gt_last
+                g_t_and = gt_last if is_home_last else gc_last
+                diff = g_c_and - g_t_and
+                andata_msg = f"🏆 Andata: {g_c_and} - {g_t_and}"
+                if diff in [-1, -2]: boost_andata_c = 1.25; andata_msg += " (Casa all'assalto ⚔️)"
+                elif diff in [1, 2]: boost_andata_t = 1.25; andata_msg += " (Ospiti all'assalto ⚔️)"
+                elif diff <= -3 or diff >= 3: boost_andata_c = 0.85; boost_andata_t = 0.85; andata_msg += " (Qualificazione chiusa 🛡️)"
+        
+        for m in matches:
+            if m['goals']['home'] is None: continue
             is_home_now = m['teams']['home']['id'] == id_casa
             gc, gt = (m['goals']['home'], m['goals']['away']) if is_home_now else (m['goals']['away'], m['goals']['home'])
             gol_c += gc; gol_t += gt
             if gc > gt: vittorie_c += 1
             elif gt > gc: vittorie_t += 1
-
-    dettagli_str = "<br>".join(dettagli_list) if dettagli_list else "Nessun match."
-    
-    ultimo_match = matches[0]
-    data_ultimo = datetime.strptime(ultimo_match['fixture']['date'][:10], '%Y-%m-%d')
-    
-    nome_lega = str(ultimo_match.get('league', {}).get('name', '')).lower()
-    is_coppa_h2h = any(x in nome_lega for x in ['cup', 'coppa', 'copa', 'champions', 'europa', 'conference', 'libertadores'])
-
-    if is_coppa_h2h and (datetime.now() - data_ultimo).days <= 28:
-        is_home_last = ultimo_match['teams']['home']['id'] == id_casa
-        gc_last, gt_last = ultimo_match['goals']['home'], ultimo_match['goals']['away']
-        if gc_last is not None and gt_last is not None:
-            g_c_and = gc_last if is_home_last else gt_last
-            g_t_and = gt_last if is_home_last else gc_last
-            diff = g_c_and - g_t_and
-            andata_msg = f"🏆 Andata: {g_c_and} - {g_t_and}"
-            if diff in [-1, -2]: boost_andata_c = 1.25; andata_msg += " (Casa all'assalto ⚔️)"
-            elif diff in [1, 2]: boost_andata_t = 1.25; andata_msg += " (Ospiti all'assalto ⚔️)"
-            elif diff <= -3 or diff >= 3: boost_andata_c = 0.85; boost_andata_t = 0.85; andata_msg += " (Qualificazione chiusa 🛡️)"
-    
-    m_count = max(1, len([m for m in matches if m['goals']['home'] is not None]))
-    m_h2h_c = min(1.20, max(0.80, 0.90 + (vittorie_c/m_count)*0.20 + (gol_c/(m_count*max(1, gol_c+gol_t)))*0.10))
-    m_h2h_t = min(1.20, max(0.80, 0.90 + (vittorie_t/m_count)*0.20 + (gol_t/(m_count*max(1, gol_c+gol_t)))*0.10))
-    
-    storico_str = f"Vittorie: 🏠 {vittorie_c} - {vittorie_t} ✈️ | Gol H2H: {gol_c} a {gol_t}"
-    return m_h2h_c, m_h2h_t, gol_c, gol_t, storico_str, boost_andata_c, boost_andata_t, andata_msg, dettagli_str
+            
+        m_count = max(1, len([m for m in matches if m['goals']['home'] is not None]))
+        m_h2h_c = min(1.20, max(0.80, 0.90 + (vittorie_c/m_count)*0.20 + (gol_c/(m_count*max(1, gol_c+gol_t)))*0.10))
+        m_h2h_t = min(1.20, max(0.80, 0.90 + (vittorie_t/m_count)*0.20 + (gol_t/(m_count*max(1, gol_c+gol_t)))*0.10))
+        
+        storico_str = f"Vittorie: 🏠 {vittorie_c} - {vittorie_t} ✈️ | Gol H2H: {gol_c} a {gol_t}"
+        return m_h2h_c, m_h2h_t, gol_c, gol_t, storico_str, boost_andata_c, boost_andata_t, andata_msg, dettagli_str
+    except: return 1.0, 1.0, 0, 0, "Dati N/D", 1.0, 1.0, "", "Nessun dato."
 
 @st.cache_data(ttl=3600)
 def scarica_meteo(citta):
@@ -382,22 +362,12 @@ def scarica_meteo(citta):
         return (0.90, f"🌧️ {cond}") if pioggia else (1.0, f"☀️ {cond}")
     except: return 1.0, "🌥️ Dato N/D"
 
-# ==========================================
-# 🧮 MOTORE MATEMATICO E GENERAZIONE QUOTE
-# ==========================================
-def calcola_prob_poisson(xg, gol): 
-    return ((xg ** gol) * math.exp(-xg)) / math.factorial(gol)
-
-def semplifica_nome(nome):
-    for p in ['FC', 'AC ', ' BC', ' AS', ' Milan', ' Calcio', ' Hotspur', 'AFC ', 'United', 'City', 'SL ']: nome = nome.replace(p, '')
-    return nome.strip()
+def calcola_prob_poisson(xg, gol): return ((xg ** gol) * math.exp(-xg)) / math.factorial(gol)
 
 def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev, tot_falli_match):
     p = {"1":0,"X":0,"2":0,"1X":0,"X2":0,"12":0,"Goal":0,"NoGoal":0, "Pari":0, "Dispari":0}
-    
     mg = {"MG 1-3":0, "MG 1-4":0, "MG 2-3":0, "MG 2-4":0, "MG 2-5":0, "MG 3-4":0}
-    uo_lines = [1.5, 2.5, 3.5, 4.5, 5.5]
-    
+    uo_lines = [1.5, 2.5, 3.5, 4.5]
     for line in uo_lines: p[f"U{line}"] = 0; p[f"O{line}"] = 0
     p["Casa O0.5"] = 0; p["Ospite O0.5"] = 0
 
@@ -426,7 +396,7 @@ def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev
             if 2 <= tot <= 5: mg["MG 2-5"] += prob
             if 3 <= tot <= 4: mg["MG 3-4"] += prob
             
-            re_prob[f"Risultato {gc}-{gt}"] = prob
+            if gc <= 4 and gt <= 4: re_prob[f"Risultato {gc}-{gt}"] = prob
 
     p["1X"], p["X2"], p["12"] = (p["1"]+p["X"]), (p["X"]+p["2"]), (p["1"]+p["2"])
 
@@ -438,17 +408,13 @@ def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev
         p["Goal"] = 100 - p["NoGoal"]
 
     combos = {
-        "1X + Under 3.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(4) for t in range(4) if c >= t and c+t < 3.5),
-        "1X + Under 4.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(5) for t in range(5) if c >= t and c+t < 4.5),
-        "X2 + Under 3.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(4) for t in range(4) if t >= c and c+t < 3.5),
-        "X2 + Under 4.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(5) for t in range(5) if t >= c and c+t < 4.5),
-        "1 + Over 1.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if c > t and c+t > 1.5),
-        "2 + Over 1.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if t > c and c+t > 1.5),
-        "1 + Over 2.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if c > t and c+t > 2.5),
-        "2 + Over 2.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if t > c and c+t > 2.5),
-        "Goal + Over 2.5": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if c > 0 and t > 0 and c+t > 2.5),
-        "1X + Goal": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if c >= t and c > 0 and t > 0),
-        "X2 + Goal": sum(re_prob.get(f"Risultato {c}-{t}", 0) for c in range(8) for t in range(8) if t >= c and c > 0 and t > 0)
+        "1X + Over 1.5": p["1X"] * (p["O1.5"]/100) * 0.92,
+        "X2 + Over 1.5": p["X2"] * (p["O1.5"]/100) * 0.92,
+        "1X + Under 3.5": p["1X"] * (p["U3.5"]/100) * 0.95,
+        "X2 + Under 3.5": p["X2"] * (p["U3.5"]/100) * 0.95,
+        "1 + Over 2.5": p["1"] * (p["O2.5"]/100) * 0.90,
+        "2 + Over 2.5": p["2"] * (p["O2.5"]/100) * 0.90,
+        "Goal + Over 2.5": p["Goal"] * (p["O2.5"]/100) * 0.95
     }
 
     ht_prob = {"1": p["1"]*0.9, "X": p["X"]*1.5, "2": p["2"]*0.9} 
@@ -460,11 +426,17 @@ def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev
     prob_corner_85 = min(92.0, max(15.0, (avg_corner_match / 9.5) * 55))
     tension = avg_cart_match + (1.5 if is_sev else 0) + (tot_falli_match / 20.0) 
     prob_cart_45 = min(88.0, max(20.0, (tension / 5.0) * 55))
-    special = {"Over 8.5 Angoli": prob_corner_85, "Over 4.5 Cartellini": prob_cart_45}
 
-    re_prob_clean = {k: v for k, v in re_prob.items() if v >= 5.0}
+    special = {
+        "Over 8.5 Angoli": prob_corner_85,
+        "Over 4.5 Cartellini": prob_cart_45
+    }
 
-    return {**p, **mg, **re_prob_clean, **combos, **htft, **special}
+    return {**p, **mg, **re_prob, **combos, **htft, **special}
+
+def semplifica_nome(nome):
+    for p in ['FC', 'AC ', ' BC', ' AS', ' Milan', ' Calcio', ' Hotspur', 'AFC ', 'United', 'City', 'SL ']: nome = nome.replace(p, '')
+    return nome.strip()
 
 def get_family(tip):
     if tip in ["1", "X", "2", "1X", "X2", "12"]: return "1X2"
@@ -478,25 +450,9 @@ def get_family(tip):
     if "Angoli" in tip or "Cartellini" in tip: return "SPECIAL"
     return "ALTRO"
 
-# ==========================================
-# 💰 MOTORE SCHEDINE E CASSAFORTE (V91)
-# ==========================================
-def costruisci_schedina_dinamica(pool, min_q, max_q, target_mult, escludi_match=None, max_match_q=5.0, max_righe=12, max_same_family=2, check_blacklist=False, is_cassaforte=False):
+def costruisci_schedina_dinamica(pool, min_q, max_q, target_mult, escludi_match=None, max_match_q=5.0, max_righe=12, max_same_family=2):
     if escludi_match is None: escludi_match = set()
-    valid = []
-    
-    for x in pool:
-        q = float(x['Quota'])
-        if min_q <= q <= max_q and q <= max_match_q:
-            if check_blacklist and "U" in x['Tip'] and "+" not in x['Tip']:
-                if any(b_team in x['Match'] for b_team in BLACKLIST_UNDER):
-                    continue 
-            
-            if is_cassaforte and get_family(x['Tip']) not in ["UO", "MG", "1X2", "GGNG"]:
-                continue
-
-            valid.append(x)
-            
+    valid = [x for x in pool if min_q <= float(x['Quota']) <= max_q and float(x['Quota']) <= max_match_q]
     pool_ordinata = sorted(valid, key=lambda x: (x['Prob']/100) * float(x['Quota']), reverse=True)
     
     selezionate, viste_locali, family_counts = [], set(), {}
@@ -518,16 +474,12 @@ def costruisci_schedina_dinamica(pool, min_q, max_q, target_mult, escludi_match=
     return selezionate, q_tot, prob_tot, viste_locali.union(escludi_match)
 
 # ==========================================
-# 🏠 LOGICA DI STATO E INTERFACCIA V91
+# 🏠 LOGICA DI STATO E INTERFACCIA
 # ==========================================
 if 'data_master' not in st.session_state: st.session_state.data_master = {}
 if 'all_tips_global' not in st.session_state: st.session_state.all_tips_global = []
 
-st.sidebar.header("⚙️ Centrale Operativa V91")
-
-if st.sidebar.button("🧹 SVUOTA MEMORIA CACHE E RIAVVIA", type="primary"):
-    st.cache_data.clear()
-    st.sidebar.success("✅ Memoria azzerata! Ora l'estrazione scaricherà i dati freschi al 100%.")
+st.sidebar.header("⚙️ Centrale Operativa V90")
 
 date_range = st.sidebar.date_input("Seleziona Periodo (Dal - Al):", [])
 if len(date_range) == 2: start_date, end_date = date_range[0], date_range[1]
@@ -538,11 +490,11 @@ start_str = start_date.strftime('%Y-%m-%d')
 end_str = end_date.strftime('%Y-%m-%d')
 
 st.sidebar.markdown("---")
-budget_totale = st.sidebar.number_input("💰 Budget Totale Giornaliero (€):", min_value=5.0, value=50.0, step=5.0)
+budget_totale = st.sidebar.number_input("💰 Budget Totale da Investire (€):", min_value=5.0, value=50.0, step=5.0)
 st.sidebar.markdown("---")
 
 with st.sidebar:
-    if st.button("🔍 Trova Campionati Attivi"):
+    if st.button("🔍 Trova Campionati Attivi nel Periodo"):
         with st.spinner("Scansione palinsesto in corso..."):
             st.session_state['active_leagues'] = get_active_leagues(start_date, end_date)
 
@@ -551,7 +503,7 @@ active_dict = st.session_state['active_leagues']
 if not active_dict: st.sidebar.warning("Nessun campionato supportato attivo.")
 scelte = st.sidebar.multiselect("Campionati in campo:", list(active_dict.keys()), default=list(active_dict.keys()))
 
-btn_genera = st.sidebar.button("⚡ ESTRAI MATRIX V91")
+btn_genera = st.sidebar.button("⚡ ESTRAI MATRIX V90")
 
 if btn_genera:
     st.session_state.data_master = {}
@@ -562,18 +514,16 @@ if btn_genera:
 
     for name in scelte:
         f_id = active_dict[name]
-        stagione_dinamica = get_season(f_id)
-        
-        with st.spinner(f"Analisi V91 (Scudo Anti-Crash) {name}..."):
-            fix = fetch_api_data("fixtures", {'league': f_id, 'season': stagione_dinamica, 'from': start_str, 'to': end_str})
-            std = fetch_api_data("standings", {'league': f_id, 'season': stagione_dinamica})
+        with st.spinner(f"Analisi V90 (Motore Giocatori & Rating) {name}..."):
+            fix = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'league': f_id, 'season': STAGIONE, 'from': start_str, 'to': end_str}).json()
+            std = requests.get("https://v3.football.api-sports.io/standings", headers=HEADERS, params={'league': f_id, 'season': STAGIONE}).json()
             
-            if not fix: continue
+            if not fix.get('response'): continue
 
             db_stats = {}
             punti_champions, punti_salvezza, tot_squadre, partite_totali_campionato = 0, 0, 20, 38
-            if std and len(std) > 0 and 'league' in std[0] and 'standings' in std[0]['league']:
-                gruppo = std[0]['league']['standings'][0]
+            if std.get('response') and len(std['response']) > 0 and 'league' in std['response'][0] and 'standings' in std['response'][0]['league']:
+                gruppo = std['response'][0]['league']['standings'][0]
                 tot_squadre = len(gruppo)
                 partite_totali_campionato = (tot_squadre - 1) * 2
                 if tot_squadre >= 18:
@@ -591,14 +541,14 @@ if btn_genera:
                     }
 
             matches_list = []
-            date_giocate = {f['fixture']['date'][:10] for f in fix}
+            date_giocate = {f['fixture']['date'][:10] for f in fix['response']}
             inj_cache = {}
             odds_cache = {}
             for d_match in date_giocate:
-                inj_cache[d_match] = fetch_api_data("injuries", {'league': f_id, 'season': stagione_dinamica, 'date': d_match})
+                inj_cache[d_match] = requests.get("https://v3.football.api-sports.io/injuries", headers=HEADERS, params={'league': f_id, 'season': STAGIONE, 'date': d_match}).json()
                 odds_cache[d_match] = scarica_quote_native(f_id, d_match)
 
-            for f in fix:
+            for f in fix['response']:
                 if f['fixture']['status']['short'] in ['PST', 'CANC', 'ABD', 'AWD', 'WO']: continue 
 
                 fix_id = f['fixture']['id']
@@ -613,7 +563,7 @@ if btn_genera:
                 if c_s not in db_stats or t_s not in db_stats: continue
 
                 quote_reali_match = odds_cache.get(match_date_str, {}).get(fix_id, {})
-                inf_all = inj_cache.get(match_date_str, [])
+                inj = inj_cache.get(match_date_str, {})
 
                 m_st_c, is_stanca_c, forma_c, m_f_c, rit_c = analizza_squadra_globale(db_stats[c_s]['id'])
                 m_st_t, is_stanca_t, forma_t, m_f_t, rit_t = analizza_squadra_globale(db_stats[t_s]['id'])
@@ -624,12 +574,14 @@ if btn_genera:
                 m_met, d_met = scarica_meteo(c_s)
                 m_h2h_c, m_h2h_t, gol_h2h_c, gol_h2h_t, str_h2h, b_and_c, b_and_t, andata_msg, dettagli_h2h_str = analizza_h2h_dna_e_andata(db_stats[c_s]['id'], db_stats[t_s]['id'])
                 
-                # FIX INFORTUNI: Ricerca per ID per evitare nomi storpiati e uso STAGIONE fissa per leghe minori!
-                inf_c_list = [i for i in inf_all if i.get('team', {}).get('id') == db_stats[c_s]['id']]
-                inf_t_list = [i for i in inf_all if i.get('team', {}).get('id') == db_stats[t_s]['id']]
+                inf_all = inj.get('response', [])
+                if not isinstance(inf_all, list): inf_all = []
+                inf_c_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == c_s]
+                inf_t_list = [i for i in inf_all if semplifica_nome(i['team']['name']) == t_s]
                 
-                malus_att_c, boost_opp_c, count_c, msg_inf_c = analizza_infortuni_originale_v90(inf_c_list, STAGIONE, db_stats[c_s]['giocate'])
-                malus_att_t, boost_opp_t, count_t, msg_inf_t = analizza_infortuni_originale_v90(inf_t_list, STAGIONE, db_stats[t_s]['giocate'])
+                # V90: Calcolo Impatto Giocatori Agnostico
+                malus_att_c, boost_opp_c, t1_c, t2_c, t3_c, count_c, sq_c, gk_out_c, def_out_c = analizza_infortuni_pesati_v90(inf_c_list, db_stats[c_s]['giocate'])
+                malus_att_t, boost_opp_t, t1_t, t2_t, t3_t, count_t, sq_t, gk_out_t, def_out_t = analizza_infortuni_pesati_v90(inf_t_list, db_stats[t_s]['giocate'])
                 
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
@@ -637,7 +589,7 @@ if btn_genera:
                 poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c, parate_c, stile_c = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
                 poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t, parate_t, stile_t = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
                 
-                is_coppa = any(x in name for x in ["Champions", "Europa", "Conference", "Libertadores", "Sudamericana", "CONCACAF"])
+                is_coppa = name in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"]
                 m_mot_c, m_mot_t, tension_idx = 1.0, 1.0, 1.0
                 msg_mot = ""
 
@@ -646,8 +598,12 @@ if btn_genera:
                     tension_idx += 0.3
                     msg_mot = "🔥 DENTRO O FUORI (Coppa)"
                 elif not is_coppa:
-                    punti_c, punti_t = db_stats[c_s]['punti'], db_stats[t_s]['punti']
-                    rank_c, rank_t = db_stats[c_s]['rank'], db_stats[t_s]['rank']
+                    punti_disp_c = (partite_totali_campionato - db_stats[c_s]['giocate']) * 3
+                    punti_disp_t = (partite_totali_campionato - db_stats[t_s]['giocate']) * 3
+                    punti_c = db_stats[c_s]['punti']
+                    punti_t = db_stats[t_s]['punti']
+                    rank_c = db_stats[c_s]['rank']
+                    rank_t = db_stats[t_s]['rank']
 
                     if rank_c <= 6 or (punti_champions - punti_c) <= 7 and (punti_champions - punti_c) > 0:
                         m_mot_c = 1.15; msg_mot += "🏆 C. Vertice "
@@ -669,16 +625,11 @@ if btn_genera:
 
                     if abs(rank_c - rank_t) <= 3: tension_idx += 0.2
 
-                # V91: Paracadute per Coppe ed xG protetto
-                ac_safe = max(0.8, db_stats[c_s]['ac'])
-                dt_safe = max(0.8, db_stats[t_s]['dt'])
-                at_safe = max(0.8, db_stats[t_s]['at'])
-                dc_safe = max(0.8, db_stats[c_s]['dc'])
-
-                xg_base_c = math.sqrt(ac_safe * dt_safe) * m_f_c * m_st_c
-                xg_base_t = math.sqrt(at_safe * dc_safe) * m_f_t * m_st_t
+                xg_base_c = math.sqrt(max(0.01, db_stats[c_s]['ac']) * max(0.01, db_stats[t_s]['dt'])) * m_f_c * m_st_c
+                xg_base_t = math.sqrt(max(0.01, db_stats[t_s]['at']) * max(0.01, db_stats[c_s]['dc'])) * m_f_t * m_st_t
                 
-                malus_league = 0.85 if name in ["🇬🇷 Super League", "🇫🇷 Ligue 1", "🇮🇹 Serie B"] else 1.0 
+                malus_league = 1.0
+                if name in ["🇬🇷 Super League", "🇫🇷 Ligue 1", "🇮🇹 Serie B"]: malus_league = 0.85 
                 xg_base_c *= malus_league
                 xg_base_t *= malus_league
 
@@ -702,25 +653,30 @@ if btn_genera:
                     xg_base_c *= 0.90
                     xg_base_t *= 0.90
 
-                if fts_c > 35.0 or cs_t > 35.0: xg_base_c *= 0.85  
-                if fts_t > 35.0 or cs_c > 35.0: xg_base_t *= 0.85
+                if fts_c > 35.0: xg_base_c *= 0.85 
+                if cs_t > 35.0: xg_base_c *= 0.85  
+                if fts_t > 35.0: xg_base_t *= 0.85
+                if cs_c > 35.0: xg_base_t *= 0.85
                 
                 se_sgombra_c = "C. Sgombra" in msg_mot
                 se_sgombra_t = "O. Sgombra" in msg_mot
                 
-                # Calcolo Finale xG (Ripristino Matematica V90: il boost_opp alza gli expected goals avversari)
+                # V90: INCROCIO TOTALE xG. 
+                # Casa perde xG se manca il suo bomber (malus_att_c). 
+                # Casa guadagna xG se manca il difensore avversario (boost_opp_t)
                 xg_c = xg_base_c * (1 - malus_att_c) * (1 + boost_opp_t) * m_h2h_c * b_and_c * m_mot_c * (1.10 if se_sgombra_t else 1.0)
                 xg_t = xg_base_t * (1 - malus_att_t) * (1 + boost_opp_c) * m_h2h_t * b_and_t * m_mot_t * (1.10 if se_sgombra_c else 1.0)
                 
                 msg_streak = ""
-                if streak_breaker_c: xg_c = max(1.15, xg_c * 1.15); msg_streak += "🔥 STREAK CASA "
-                if streak_breaker_t: xg_t = max(1.15, xg_t * 1.15); msg_streak += "🔥 STREAK OSPITE"
+                if streak_breaker_c: xg_c = max(1.15, xg_c * 1.45); msg_streak += "🔥 STREAK CASA "
+                if streak_breaker_t: xg_t = max(1.15, xg_t * 1.45); msg_streak += "🔥 STREAK OSPITE"
                 
                 xg_c *= m_met; xg_t *= m_met
                 
                 arb = f['fixture']['referee'] or "N/D"
                 is_sev = any(s in str(arb) for s in ["Orsato", "Maresca", "Taylor", "Oliver", "Lahoz", "Hernandez"])
-                xg_c *= (1.05 if is_sev else 1.0); xg_t *= (1.05 if is_sev else 1.0)
+                m_arb = 1.05 if is_sev else 1.0
+                xg_c *= m_arb; xg_t *= m_arb
                 
                 avg_corner_match = corn_c + corn_t
                 avg_cart_match = cart_c + cart_t
@@ -729,7 +685,10 @@ if btn_genera:
                 
                 best_1x2_key = max(["1", "X", "2"], key=lambda k: full_tips[k])
                 if full_tips[best_1x2_key] < 45.0:
-                    best_1x2_key, best_1x2_prob, best_1x2_q, best_1x2_real = "No Segno Fisso", 0.0, "-", False
+                    best_1x2_key = "No Segno Fisso"
+                    best_1x2_prob = 0.0
+                    best_1x2_q = "-"
+                    best_1x2_real = False
                 else:
                     best_1x2_prob = full_tips[best_1x2_key]
                     best_1x2_q, best_1x2_real = get_quota_finale(best_1x2_key, best_1x2_prob, quote_reali_match)
@@ -748,7 +707,8 @@ if btn_genera:
                     "all_tips": full_tips, "best_1x2": (best_1x2_key, best_1x2_prob, best_1x2_q, best_1x2_real),
                     "quote_reali": quote_reali_match,
                     "xg_c": xg_c, "xg_t": xg_t, "arb": arb, "is_sev": is_sev,
-                    "count_c": count_c, "count_t": count_t, "msg_inf_c": msg_inf_c, "msg_inf_t": msg_inf_t,
+                    "count_c": count_c, "sq_c": sq_c, "t1_c": t1_c, "t2_c": t2_c, "t3_c": t3_c, "gk_out_c": gk_out_c, "def_out_c": def_out_c,
+                    "count_t": count_t, "sq_t": sq_t, "t1_t": t1_t, "t2_t": t2_t, "t3_t": t3_t, "gk_out_t": gk_out_t, "def_out_t": def_out_t,
                     "meteo": d_met, "dna_h2h": str_h2h, "dettagli_h2h": dettagli_h2h_str, "streak_msg": msg_streak.strip(), "andata_msg": andata_msg, "msg_mot": msg_mot.strip(),
                     "stan_c": "⚠️ Fatigue" if is_stanca_c else "✅ Riposo", "stan_t": "⚠️ Fatigue" if is_stanca_t else "✅ Riposo", 
                     "forma_c": forma_c, "forma_t": forma_t, "rit_c": rit_c, "rit_t": rit_t,
@@ -760,74 +720,47 @@ if btn_genera:
                 })
             if matches_list: st.session_state.data_master[name] = matches_list
 
-# --- DISPLAY DELLE 3 TAB (V91) ---
+# --- DISPLAY DELLE 3 TAB ---
 if st.session_state.data_master:
-    t1, t2, t3 = st.tabs(["🌍 DASHBOARD GLOBALE", "🏆 SCHEDINE AUTOMATICHE", "🔬 ESPLORATORE SINGOLE"])
+    t1, t2, t3 = st.tabs(["🛒 TOP 10 & BUILDER", "🔬 ESPLORATORE PARTITE", "🏆 SCHEDINE AUTOMATICHE"])
     
-# ---------------------------------------------------------
-    # TAB 1: DASHBOARD GLOBALE & BET BUILDER (Completa V91)
-    # ---------------------------------------------------------
     with t1:
-        st.header("🌍 Dashboard Globale & Bet Builder")
-        st.write("Spunta la casella '🛒' per aggiungere le migliori quote al tuo Carrello (calcolato a fine pagina).")
+        st.header("🛒 BET BUILDER & CLASSIFICHE OMNI-MARKET")
+        st.write("Spunta la casella '🛒' nelle tabelle qui sotto per aggiungere la partita al tuo Carrello (calcolato automaticamente a fine pagina).")
 
-        def mostra_tabella_interattiva(titolo, filter_func, sort_cols, max_rows=10):
+        def mostra_tabella_interattiva(titolo, tip_filters, min_q=1.01, max_rows=10):
             st.subheader(titolo)
-            pool = [x for x in st.session_state.all_tips_global if filter_func(x) and float(x['Quota']) >= 1.15]
+            pool = [x for x in st.session_state.all_tips_global if (tip_filters(x['Tip']) if callable(tip_filters) else x['Tip'] in tip_filters) and float(x['Quota']) >= min_q]
             if not pool:
                 st.info("Nessun dato disponibile per questa categoria.")
                 return []
             
-            df = pd.DataFrame(pool).sort_values(by=sort_cols, ascending=[False]*len(sort_cols)).head(max_rows)
-            df = df[['Match', 'Tip', 'Prob', 'Quota', 'Time']]
+            df = pd.DataFrame(pool).sort_values(by="Prob", ascending=False).head(max_rows)
+            df = df[['Match', 'Tip', 'Prob', 'Quota', 'Time', 'League']]
             df.insert(0, "🛒", False) 
             
             edited_df = st.data_editor(
                 df,
                 column_config={
-                    "🛒": st.column_config.CheckboxColumn("Sel", default=False),
-                    "Prob": st.column_config.NumberColumn("Prob (%)", format="%.1f%%"),
+                    "🛒": st.column_config.CheckboxColumn("Seleziona", default=False),
+                    "Prob": st.column_config.NumberColumn("Probabilità (%)", format="%.1f%%"),
                     "Quota": st.column_config.NumberColumn("Quota", format="%.2f")
                 },
-                hide_index=True, use_container_width=True, disabled=['Match', 'Tip', 'Prob', 'Quota', 'Time'],
+                hide_index=True,
+                use_container_width=True,
+                disabled=['Match', 'Tip', 'Prob', 'Quota', 'Time', 'League'],
                 key=f"editor_{titolo}"
             )
             return edited_df[edited_df["🛒"] == True].to_dict('records')
 
-        sel_assoluta = mostra_tabella_interattiva("👑 TOP 10 ASSOLUTA (Le Probabilità più alte in assoluto)", lambda x: x['Tip'] not in ["U4.5", "U5.5", "Casa O0.5", "Ospite O0.5"], ["Prob"])
-        st.markdown("---")
-
-        col_dash1, col_dash2 = st.columns(2)
-        with col_dash1:
-            sel_combo = mostra_tabella_interattiva("🏆 TOP 10 COMBO", lambda x: "+" in x['Tip'], ["Prob"])
-            sel_1x2 = mostra_tabella_interattiva("🛡️ TOP 10 DOPPIE CHANCE", lambda x: x['Tip'] in ["1X", "X2", "12"], ["Prob"])
-            sel_gg = mostra_tabella_interattiva("🎯 TOP 10 GOAL / NOGOAL", lambda x: x['Tip'] in ["Goal", "NoGoal"], ["Prob"])
-        with col_dash2:
-            sel_mg = mostra_tabella_interattiva("🎯 TOP 10 MULTIGOL", lambda x: "MG" in x['Tip'], ["Prob", "Quota"])
-            sel_uo = mostra_tabella_interattiva("⚽ TOP 10 OVER/UNDER", lambda x: ("O" in x['Tip'] or "U" in x['Tip']) and "+" not in x['Tip'], ["Prob"])
-            sel_azzardo = mostra_tabella_interattiva("🧨 TOP 10 AZZARDI (Quote alte > 2.50)", lambda x: float(x['Quota']) >= 2.50, ["Prob"])
-
-        st.markdown("---")
-        st.markdown("### 🚨 RADAR ANOMALIE (Value Bet & Mine Vaganti)")
-        anomalie_trovate = False
-        for camp, matches in st.session_state.data_master.items():
-            for m in matches:
-                is_mina_vagante = ("Sgombra" in m['msg_mot'] and ("Vertice" in m['msg_mot'] or "Disperata" in m['msg_mot']))
-                is_dominio_ospite = (m['xg_t'] > m['xg_c'] * 1.3)
-                q_best = m['best_1x2'][2]
-                if (is_mina_vagante or is_dominio_ospite) and (isinstance(q_best, float) and q_best > 2.50):
-                    anomalie_trovate = True
-                    st.error(f"**⚡ [{m['orario']}] {m['c_s']} vs {m['t_s']}**")
-                    st.write(f"↳ **Motivazione Matrix:** xG {m['xg_c']:.2f} a {m['xg_t']:.2f}. {m['msg_mot']}")
-                    st.write(f"↳ **Giocata Consigliata:** X2 o 2 Fisso (Quota: {q_best})")
-                    
-        if not anomalie_trovate: st.success("Nessuna anomalia grave rilevata oggi.")
-
-        st.markdown("---")
-        st.markdown("<div class='strategy-box builder-bg'>", unsafe_allow_html=True)
-        st.header("🧾 IL TUO CARRELLO MANUALE")
+        sel_1 = mostra_tabella_interattiva("👑 Top 10 Assoluta (No U4.5/O0.5)", lambda tip: tip not in ["U4.5", "Casa O0.5", "Ospite O0.5"])
+        sel_2 = mostra_tabella_interattiva("🛡️ Top 10 Doppie Chance", ["1X", "X2", "12"])
+        sel_3 = mostra_tabella_interattiva("⚽ Top 10 Over / Under", lambda tip: tip.startswith("O") or tip.startswith("U"))
+        sel_4 = mostra_tabella_interattiva("🎯 Top 10 Goal / NoGoal", ["Goal", "NoGoal"])
+        sel_5 = mostra_tabella_interattiva("⏱️ Top 10 Primo Tempo / Finale (HT/FT)", lambda tip: "HT/FT" in tip)
+        sel_6 = mostra_tabella_interattiva("🧨 Top 10 Azzardi (Quote Alte >= 2.50)", lambda tip: True, min_q=2.50)
         
-        tutte_selezionate = sel_assoluta + sel_combo + sel_1x2 + sel_mg + sel_uo + sel_gg + sel_azzardo
+        tutte_selezionate = sel_1 + sel_2 + sel_3 + sel_4 + sel_5 + sel_6
         
         viste = set()
         carrello_finale = []
@@ -837,9 +770,13 @@ if st.session_state.data_master:
                 viste.add(chiave)
                 carrello_finale.append(item)
 
+        st.markdown("---")
+        st.markdown("<div class='strategy-box builder-bg'>", unsafe_allow_html=True)
+        st.header("🧾 IL TUO CARRELLO")
         if carrello_finale:
             q_tot_b, p_tot_b = 1.0, 1.0
-            testo_scontrino = "=== CARRELLO MATRIX V91 ===\n\n"
+            testo_scontrino = "=== RICEVUTA MATRIX V90 ===\n\n"
+            
             for pick in carrello_finale:
                 st.write(f"✅ {pick['Match']}: **{pick['Tip']}** (Quota {pick['Quota']:.2f})")
                 q_tot_b *= float(pick['Quota'])
@@ -848,90 +785,26 @@ if st.session_state.data_master:
             
             testo_scontrino += f"\n📊 QUOTA TOTALE: {q_tot_b:.2f}\n"
             testo_scontrino += f"🎯 PROBABILITÀ CONGIUNTA: {p_tot_b*100:.2f}%\n"
+            testo_scontrino += f"💰 VINCITA STIMATA (su {budget_totale}€): ~{budget_totale * q_tot_b:.2f}€\n"
             
             st.write("---")
-            cb1, cb2 = st.columns(2)
+            cb1, cb2, cb3 = st.columns(3)
             cb1.metric("Quota Totale", f"{q_tot_b:.2f}")
             cb2.metric("Probabilità Congiunta", f"{p_tot_b*100:.2f}%")
+            cb3.metric(f"Vincita (su Budget Tot. {budget_totale}€)", f"~{budget_totale * q_tot_b:.2f}€")
             
             st.download_button(
-                label="💾 SCARICA LA TUA SCHEDINA MANUALE",
+                label="💾 SCARICA / SALVA SCHEDINA (TXT)",
                 data=testo_scontrino,
-                file_name=f"Matrix_CustomTicket_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                file_name=f"Matrix_Ticket_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                 mime="text/plain"
             )
         else:
-            st.info("👆 Spunta qualche partita dalle classifiche qui sopra per costruire la tua schedina.")
+            st.info("👆 Spunta qualche partita dalle classifiche qui sopra per costruire la schedina in tempo reale.")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # ---------------------------------------------------------
-    # TAB 2: GENERATORE SCHEDINE (CASSAFORTE + BUDGET)
-    # ---------------------------------------------------------
     with t2:
-        st.header("🏆 Generatore Algoritmico (Budget Ripartito)")
-        
-        b_cassa = budget_totale * 0.55
-        b_safe = budget_totale * 0.25
-        b_perf = budget_totale * 0.15
-        b_azz = budget_totale * 0.05
-        
-        testo_export = f"=== MATRIX V91: PIANO INVESTIMENTO ===\nBudget: {budget_totale}€ | Date: {start_str} / {end_str}\n\n"
-        
-        st.markdown("<div style='padding: 15px; border-radius: 10px; background-color: #f8f9fa; border-left: 5px solid #2c3e50; margin-bottom: 20px;'>", unsafe_allow_html=True)
-        st.subheader("🛡️ CASSAFORTE (Quota Target ~2.30)")
-        st.markdown(f"**Puntata Allocata: {b_cassa:.2f}€ (55% del Budget)**")
-        c_slip, q_tot_c, prob_c, usate_c = costruisci_schedina_dinamica(st.session_state.all_tips_global, 1.10, 1.30, target_mult=2.30, max_righe=8, is_cassaforte=True)
-        testo_export += f"🛡️ CASSAFORTE (Puntata: {b_cassa:.2f}€)\n"
-        for x in c_slip:
-            st.write(f"• [{x['Time']}] {x['Match']}: **{x['Tip']}** (Q: {x['Quota']})")
-            testo_export += f"- {x['Match']} -> {x['Tip']} @ {x['Quota']}\n"
-        st.metric("Vincita Stimata (Copertura)", f"~{b_cassa * q_tot_c:.2f}€")
-        testo_export += f"Vincita: ~{b_cassa * q_tot_c:.2f}€\n\n"
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("<div class='strategy-box safety-bg'>", unsafe_allow_html=True)
-        st.subheader("🟢 SAFETY (Quota Target ~2.30)")
-        st.markdown(f"**Puntata Allocata: {b_safe:.2f}€ (25% del Budget)**")
-        s_slip, q_tot_s, prob_s, usate_s = costruisci_schedina_dinamica(st.session_state.all_tips_global, 1.31, 1.50, target_mult=2.30, max_righe=5, escludi_match=usate_c, check_blacklist=True)
-        testo_export += f"🟢 SAFETY (Puntata: {b_safe:.2f}€)\n"
-        for x in s_slip:
-            st.write(f"• [{x['Time']}] {x['Match']}: **{x['Tip']}** (Q: {x['Quota']})")
-            testo_export += f"- {x['Match']} -> {x['Tip']} @ {x['Quota']}\n"
-        st.metric("Vincita Stimata", f"~{b_safe * q_tot_s:.2f}€")
-        testo_export += f"Vincita: ~{b_safe * q_tot_s:.2f}€\n\n"
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("<div class='strategy-box performance-bg'>", unsafe_allow_html=True)
-        st.subheader("🟠 PERFORMANCE")
-        st.markdown(f"**Puntata Allocata: {b_perf:.2f}€ (15% del Budget)**")
-        p_slip, q_tot_p, prob_p, usate_p = costruisci_schedina_dinamica(st.session_state.all_tips_global, 1.51, 2.20, target_mult=5.0, max_righe=5, escludi_match=usate_s)
-        testo_export += f"🟠 PERFORMANCE (Puntata: {b_perf:.2f}€)\n"
-        for x in p_slip:
-            st.write(f"• [{x['Time']}] {x['Match']}: **{x['Tip']}** (Q: {x['Quota']})")
-            testo_export += f"- {x['Match']} -> {x['Tip']} @ {x['Quota']}\n"
-        st.metric("Vincita Stimata", f"~{b_perf * q_tot_p:.2f}€")
-        testo_export += f"Vincita: ~{b_perf * q_tot_p:.2f}€\n\n"
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("<div class='strategy-box risk-bg'>", unsafe_allow_html=True)
-        st.subheader("🔴 AZZARDO")
-        st.markdown(f"**Puntata Allocata: {b_azz:.2f}€ (5% del Budget)**")
-        a_slip, q_tot_a, prob_a, _ = costruisci_schedina_dinamica(st.session_state.all_tips_global, 2.21, 4.50, target_mult=20.0, max_righe=5, escludi_match=usate_p)
-        testo_export += f"🔴 AZZARDO (Puntata: {b_azz:.2f}€)\n"
-        for x in a_slip:
-            st.write(f"• [{x['Time']}] {x['Match']}: **{x['Tip']}** (Q: {x['Quota']})")
-            testo_export += f"- {x['Match']} -> {x['Tip']} @ {x['Quota']}\n"
-        st.metric("Vincita Stimata", f"~{b_azz * q_tot_a:.2f}€")
-        testo_export += f"Vincita: ~{b_azz * q_tot_a:.2f}€\n\n"
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.download_button("💾 SCARICA PIANO INVESTIMENTO", data=testo_export, file_name=f"Matrix_V91_Piano_{datetime.now().strftime('%Y%m%d')}.txt", mime="text/plain")
-
-    # ---------------------------------------------------------
-    # TAB 3: ESPLORATORE SINGOLE
-    # ---------------------------------------------------------
-    with t3:
-        st.write("Analisi chirurgica per le singole partite.")
+        st.write(f"Partite UFFICIALI V90 per il periodo **{start_str} / {end_str}**.")
         for camp, matches in st.session_state.data_master.items():
             with st.expander(f"🏆 {camp}", expanded=False):
                 matches = sorted(matches, key=lambda x: x['orario'])
@@ -946,20 +819,21 @@ if st.session_state.data_master:
                         st.markdown("<div class='stats-box'>", unsafe_allow_html=True)
                         col1, col2 = st.columns(2)
                         with col1:
+                            # Nascondiamo la Posizione Classifica nelle Coppe per non confondere
                             mostra_rank_c = "" if camp in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"] else f" (Pos: {m['rank_c']}ª)"
                             st.write(f"🏠 **{m['c_s']}**{mostra_rank_c}")
-                            st.write(f"📊 Stile: <span class='{'stile-orizzontale' if 'Orizz' in m['stile_c'] else 'stile-verticale'}'>{m['stile_c']}</span>", unsafe_allow_html=True)
-                            st.write(f"⚽ Possesso: {m['poss_c']:.1f}% | 🎯 Tiri Area: {m['box_c']:.1f}")
-                            st.write(f"🧤 Parate: {m['parate_c']:.1f} | 🛑 Falli: {m['falli_c']:.1f}")
-                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_c']:.1f} tiri in porta**")
+                            st.write(f"📊 Stile (10gg): <span class='{'stile-orizzontale' if 'Orizz' in m['stile_c'] else 'stile-verticale'}'>{m['stile_c']}</span>", unsafe_allow_html=True)
+                            st.write(f"⚽ Possesso: {m['poss_c']:.1f}% | 🎯 Tiri Area/match: {m['box_c']:.1f}")
+                            st.write(f"🧤 Parate/match: {m['parate_c']:.1f} | 🛑 Falli/match: {m['falli_c']:.1f}")
+                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_c']:.1f} tiri in area**")
                             st.write(f"🛡️ Clean Sheet: <span class='cs-testo'>{m['cs_c']:.0f}%</span> | ❌ A secco: <span class='fts-testo'>{m['fts_c']:.0f}%</span>", unsafe_allow_html=True)
                         with col2:
                             mostra_rank_t = "" if camp in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"] else f" (Pos: {m['rank_t']}ª)"
                             st.write(f"✈️ **{m['t_s']}**{mostra_rank_t}")
-                            st.write(f"📊 Stile: <span class='{'stile-orizzontale' if 'Orizz' in m['stile_t'] else 'stile-verticale'}'>{m['stile_t']}</span>", unsafe_allow_html=True)
-                            st.write(f"⚽ Possesso: {m['poss_t']:.1f}% | 🎯 Tiri Area: {m['box_t']:.1f}")
-                            st.write(f"🧤 Parate: {m['parate_t']:.1f} | 🛑 Falli: {m['falli_t']:.1f}")
-                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_t']:.1f} tiri in porta**")
+                            st.write(f"📊 Stile (10gg): <span class='{'stile-orizzontale' if 'Orizz' in m['stile_t'] else 'stile-verticale'}'>{m['stile_t']}</span>", unsafe_allow_html=True)
+                            st.write(f"⚽ Possesso: {m['poss_t']:.1f}% | 🎯 Tiri Area/match: {m['box_t']:.1f}")
+                            st.write(f"🧤 Parate/match: {m['parate_t']:.1f} | 🛑 Falli/match: {m['falli_t']:.1f}")
+                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_t']:.1f} tiri in area**")
                             st.write(f"🛡️ Clean Sheet: <span class='cs-testo'>{m['cs_t']:.0f}%</span> | ❌ A secco: <span class='fts-testo'>{m['fts_t']:.0f}%</span>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -973,19 +847,38 @@ if st.session_state.data_master:
                             st.write(f"🏠 <span class='form-box'>{m['forma_c']}</span> | {m['stan_c']}", unsafe_allow_html=True)
                             st.write(f"✈️ <span class='form-box'>{m['forma_t']}</span> | {m['stan_t']}", unsafe_allow_html=True)
                         with c3:
-                            st.markdown("<p class='label-bold'>Assenti & V91 Radar</p>", unsafe_allow_html=True)
-                            st.write(f"🏠 {m['msg_inf_c']}", unsafe_allow_html=True)
-                            st.write(f"✈️ {m['msg_inf_t']}", unsafe_allow_html=True)
+                            st.markdown("<p class='label-bold'>Assenti & V90 Radar</p>", unsafe_allow_html=True)
+                            # V90: Icone specifiche per Portiere e Difesa
+                            c_star = f" (<span class='star-testo'>{m['t1_c']} Star</span>)" if m['t1_c'] > 0 else ""
+                            t_star = f" (<span class='star-testo'>{m['t1_t']} Star</span>)" if m['t1_t'] > 0 else ""
+                            sq_c_badge = f" <span class='star-testo'>[{m['sq_c']} 🟥]</span>" if m['sq_c'] > 0 else ""
+                            sq_t_badge = f" <span class='star-testo'>[{m['sq_t']} 🟥]</span>" if m['sq_t'] > 0 else ""
+                            gk_badge_c = " 🧤🚫" if m['gk_out_c'] else ""
+                            gk_badge_t = " 🧤🚫" if m['gk_out_t'] else ""
+                            def_badge_c = " 🧱⚠️" if m['def_out_c'] >= 2 else ""
+                            def_badge_t = " 🧱⚠️" if m['def_out_t'] >= 2 else ""
+                            
+                            st.write(f"🏠 🚑 {m['count_c']} Assenti{c_star}{sq_c_badge}{gk_badge_c}{def_badge_c}", unsafe_allow_html=True)
+                            st.write(f"✈️ 🚑 {m['count_t']} Assenti{t_star}{sq_t_badge}{gk_badge_t}{def_badge_t}", unsafe_allow_html=True)
                         with c4: 
-                            st.markdown("<p class='label-bold'>DNA Storico</p>", unsafe_allow_html=True)
+                            st.markdown("<p class='label-bold'>DNA Storico & Ritardi</p>", unsafe_allow_html=True)
                             st.write(f"<span class='dna-testo'>{m['dna_h2h']}</span>", unsafe_allow_html=True)
+                            st.write(f"<span class='ritardo-testo'>Ritardi 🏠: {m['rit_c']} | ✈️: {m['rit_t']}</span>", unsafe_allow_html=True)
+                            st.markdown(f"<div class='h2h-details'>{m['dettagli_h2h']}</div>", unsafe_allow_html=True)
+                        
+                        cc1, cc2, cc3 = st.columns(3)
+                        cc1.metric("🚩 Corner / Match", f"{m['corn_tot']:.1f}")
+                        cc2.metric("🟨 Cartellini / Match", f"{m['cart_tot']:.1f}")
+                        cc3.metric("🛑 Falli Totali / Match", f"{m['falli_tot']:.1f}")
 
                         if m['best_1x2'][0] == "No Segno Fisso":
-                            st.markdown(f"<div class='pure-1x2'>⚠️ NESSUN SEGNO SECCO CONSIGLIATO</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div class='pure-1x2'>⚠️ <b>NESSUN SEGNO SECCO CONSIGLIATO</b></div>", unsafe_allow_html=True)
                         else:
-                            st.markdown(f"<div class='pure-1x2'>👑 Miglior Segno Secco: <b>{m['best_1x2'][0]}</b> ({m['best_1x2'][1]:.1f}%) | Quota: {m['best_1x2'][2]}</div>", unsafe_allow_html=True)
+                            badge_1x2_class = "quota-badge" if m['best_1x2'][3] else "quota-badge-calc"
+                            badge_1x2_text = "Ufficiale Bet365" if m['best_1x2'][3] else "Calibrata"
+                            st.markdown(f"<div class='pure-1x2'>👑 Miglior Segno Secco: <b>{m['best_1x2'][0]}</b> ({m['best_1x2'][1]:.1f}%) <span class='{badge_1x2_class}'>Quota {badge_1x2_text}: {m['best_1x2'][2]}</span></div>", unsafe_allow_html=True)
                         
-                        exclude_safe = ["U4.5", "U5.5", "O0.5", "O1.5", "Casa O0.5", "Ospite O0.5"]
+                        exclude_safe = ["U4.5", "O0.5", "O1.5", "Casa O0.5", "Ospite O0.5"]
                         filtered_tips = {k: v for k, v in m['all_tips'].items() if k not in exclude_safe}
                         top_3 = sorted(filtered_tips.items(), key=lambda x: x[1], reverse=True)[:3]
                         
@@ -993,8 +886,77 @@ if st.session_state.data_master:
                         q2, _ = get_quota_finale(top_3[1][0], top_3[1][1], m['quote_reali'])
                         q3, _ = get_quota_finale(top_3[2][0], top_3[2][1], m['quote_reali'])
 
-                        st.write("🎯 **TOP 3 ASSOLUTE DELLA PARTITA:**")
+                        st.markdown("<div class='top-pick-box'>", unsafe_allow_html=True)
+                        st.write("🎯 **TOP 3 ASSOLUTE (Ordinate per Probabilità Pura):**")
                         col_a, col_b, col_c = st.columns(3)
-                        col_a.write(f"🥇 **{top_3[0][0]}** ({top_3[0][1]:.1f}%) Q: {q1}")
-                        col_b.write(f"🥈 **{top_3[1][0]}** ({top_3[1][1]:.1f}%) Q: {q2}")
-                        col_c.write(f"🥉 **{top_3[2][0]}** ({top_3[2][1]:.1f}%) Q: {q3}")
+                        col_a.write(f"<span class='gold-medal'>🥇 {top_3[0][0]}</span> ({top_3[0][1]:.1f}%) <span class='quota-badge-calc'>Quota: {q1}</span>", unsafe_allow_html=True)
+                        col_b.write(f"<span class='silver-medal'>🥈 {top_3[1][0]}</span> ({top_3[1][1]:.1f}%) <span class='quota-badge-calc'>Quota: {q2}</span>", unsafe_allow_html=True)
+                        col_c.write(f"<span class='bronze-medal'>🥉 {top_3[2][0]}</span> ({top_3[2][1]:.1f}%) <span class='quota-badge-calc'>Quota: {q3}</span>", unsafe_allow_html=True)
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+    with t3:
+        st.header("🏆 Generatore Automatico Ottimizzato (V90)")
+        st.write("Motore Giocatori V90 Attivo: Calcola Rating individuali, Danno di Reparto, e Portieri Titolari Assenti.")
+        
+        budget_safety = budget_totale * 0.60
+        budget_perf = budget_totale * 0.30
+        budget_azzardo = budget_totale * 0.10
+        
+        if len(st.session_state.all_tips_global) >= 4:
+            testo_export = f"=== MATRIX V90: SCHEDINE AUTOMATICHE ===\nPeriodo: {start_str} / {end_str}\n\n"
+            
+            st.markdown("<div class='strategy-box safety-bg'>", unsafe_allow_html=True)
+            st.subheader("🟢 Schedina SAFETY (Muro di Berlino Attivo)")
+            st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_safety:.2f}€ (60% del Budget)</span>", unsafe_allow_html=True)
+            
+            vietati_safety = ["Goal", "O1.5", "O2.5", "O3.5", "O4.5"]
+            pool_safety = [x for x in st.session_state.all_tips_global if x['Tip'] not in vietati_safety]
+            
+            s_slip, q_tot_s, prob_s, usate_safety = costruisci_schedina_dinamica(pool_safety, 1.12, 1.50, target_mult=2.0, max_righe=6, max_same_family=2, escludi_match=set())
+            testo_export += f"🟢 SAFETY (Puntata: {budget_safety:.2f}€)\n"
+            for x in s_slip:
+                bc = "quota-badge" if x['Real'] else "quota-badge-calc"
+                st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{bc}'>Q: {x['Quota']}</span>", unsafe_allow_html=True)
+                testo_export += f"- [{x['Time']}] {x['Match']} -> {x['Tip']} @ {x['Quota']:.2f}\n"
+            col_s1, col_s2 = st.columns(2)
+            col_s1.metric("Vincita Stimata", f"~{budget_safety * q_tot_s:.2f}€")
+            col_s2.metric("Probabilità Congiunta", f"{prob_s*100:.2f}%")
+            testo_export += f"Totale Quota: {q_tot_s:.2f} | Probabilità: {prob_s*100:.2f}% | Vincita: ~{budget_safety * q_tot_s:.2f}€\n\n"
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown("<div class='strategy-box performance-bg'>", unsafe_allow_html=True)
+            st.subheader("🟠 Schedina PERFORMANCE")
+            st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_perf:.2f}€ (30% del Budget)</span>", unsafe_allow_html=True)
+            p_slip, q_tot_p, prob_p, usate_perf = costruisci_schedina_dinamica(st.session_state.all_tips_global, 1.51, 2.20, target_mult=5.0, max_righe=6, max_same_family=2, escludi_match=usate_safety)
+            testo_export += f"🟠 PERFORMANCE (Puntata: {budget_perf:.2f}€)\n"
+            for x in p_slip:
+                bc = "quota-badge" if x['Real'] else "quota-badge-calc"
+                st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{bc}'>Q: {x['Quota']}</span>", unsafe_allow_html=True)
+                testo_export += f"- [{x['Time']}] {x['Match']} -> {x['Tip']} @ {x['Quota']:.2f}\n"
+            col_p1, col_p2 = st.columns(2)
+            col_p1.metric("Vincita Stimata", f"~{budget_perf * q_tot_p:.2f}€")
+            col_p2.metric("Probabilità Congiunta", f"{prob_p*100:.2f}%")
+            testo_export += f"Totale Quota: {q_tot_p:.2f} | Probabilità: {prob_p*100:.2f}% | Vincita: ~{budget_perf * q_tot_p:.2f}€\n\n"
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown("<div class='strategy-box risk-bg'>", unsafe_allow_html=True)
+            st.subheader("🔴 Schedina AZZARDO")
+            st.markdown(f"<span class='budget-tag'>💰 Puntata Allocata: {budget_azzardo:.2f}€ (10% del Budget)</span>", unsafe_allow_html=True)
+            r_slip, q_tot_a, prob_a, _ = costruisci_schedina_dinamica(st.session_state.all_tips_global, 2.21, 4.50, target_mult=30.0, max_match_q=4.50, max_righe=6, max_same_family=2, escludi_match=usate_perf)
+            testo_export += f"🔴 AZZARDO (Puntata: {budget_azzardo:.2f}€)\n"
+            for x in r_slip:
+                bc = "quota-badge" if x['Real'] else "quota-badge-calc"
+                st.write(f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: **{x['Tip']}** <span class='{bc}'>Q: {x['Quota']}</span>", unsafe_allow_html=True)
+                testo_export += f"- [{x['Time']}] {x['Match']} -> {x['Tip']} @ {x['Quota']:.2f}\n"
+            col_a1, col_a2 = st.columns(2)
+            col_a1.metric("Vincita Stimata", f"~{budget_azzardo * q_tot_a:.2f}€")
+            col_a2.metric("Probabilità Congiunta", f"{prob_a*100:.2f}%")
+            testo_export += f"Totale Quota: {q_tot_a:.2f} | Probabilità: {prob_a*100:.2f}% | Vincita: ~{budget_azzardo * q_tot_a:.2f}€\n\n"
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            st.download_button(
+                label="💾 SCARICA TUTTE LE 3 SCHEDINE (TXT)",
+                data=testo_export,
+                file_name=f"Matrix_V90_Tickets_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                mime="text/plain"
+            )
