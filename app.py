@@ -655,7 +655,7 @@ if btn_genera:
                 m_met, d_met = scarica_meteo(c_s)
                 m_h2h_c, m_h2h_t, gol_h2h_c, gol_h2h_t, str_h2h, b_and_c, b_and_t, andata_msg, dettagli_h2h_str = analizza_h2h_dna_e_andata(db_stats[c_s]['id'], db_stats[t_s]['id'])
                 
-               count_c, count_t, malus_inf_c, malus_inf_t, msg_inf_c, msg_inf_t = calcola_impatto_infortuni(fix_id, db_stats[c_s]['id'], db_stats[t_s]['id'], stagione_dinamica, db_stats[c_s]['giocate'], db_stats[t_s]['giocate'])
+                count_c, count_t, malus_inf_c, malus_inf_t, msg_inf_c, msg_inf_t = calcola_impatto_infortuni(fix_id, db_stats[c_s]['id'], db_stats[t_s]['id'], stagione_dinamica, db_stats[c_s]['giocate'], db_stats[t_s]['giocate'])
                 
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
