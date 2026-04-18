@@ -651,9 +651,11 @@ if btn_genera:
                 # Risolve l'anomalia delle Big (Inter, Fenerbahçe, ecc.) che venivano
                 # iper-penalizzate dagli assenti contro le piccole. La panchina di una Big 
                 # è superiore ai titolari di una piccola, quindi assorbiamo il malus.
+                
                 # Definiamo al volo se è una coppa per evitare il NameError
                 is_coppa_check = name in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"]
-                if not is_coppa:
+                
+                if not is_coppa_check:
                     punti_c_depth = db_stats[c_s]['punti']
                     punti_t_depth = db_stats[t_s]['punti']
                     gap_c = punti_c_depth - punti_t_depth
@@ -661,7 +663,6 @@ if btn_genera:
                     
                     # Se la squadra in Casa ha almeno 15 punti di vantaggio (È Golia)
                     if gap_c >= 15:
-                        # Calcoliamo quanta parte del malus "assorbire" (più è alto il gap, meno pesano gli infortuni)
                         ammortizzatore = max(0.20, 1.0 - (gap_c / 45.0)) 
                         malus_att_c *= ammortizzatore
                         boost_opp_t *= ammortizzatore
