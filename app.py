@@ -645,7 +645,32 @@ if btn_genera:
                 # ==========================================
                 # FINE BLOCCO INFORTUNI V90 PRO (BLINDATO)
                 # ==========================================
+                # ==========================================
+                # V90: SQUAD DEPTH BUFFER (Sindrome di Golia)
+                # ==========================================
+                # Risolve l'anomalia delle Big (Inter, Fenerbahçe, ecc.) che venivano
+                # iper-penalizzate dagli assenti contro le piccole. La panchina di una Big 
+                # è superiore ai titolari di una piccola, quindi assorbiamo il malus.
                 
+                if not is_coppa:
+                    punti_c_depth = db_stats[c_s]['punti']
+                    punti_t_depth = db_stats[t_s]['punti']
+                    gap_c = punti_c_depth - punti_t_depth
+                    gap_t = punti_t_depth - punti_c_depth
+                    
+                    # Se la squadra in Casa ha almeno 15 punti di vantaggio (È Golia)
+                    if gap_c >= 15:
+                        # Calcoliamo quanta parte del malus "assorbire" (più è alto il gap, meno pesano gli infortuni)
+                        ammortizzatore = max(0.20, 1.0 - (gap_c / 45.0)) 
+                        malus_att_c *= ammortizzatore
+                        boost_opp_t *= ammortizzatore
+                        
+                    # Se la squadra in Trasferta ha almeno 15 punti di vantaggio (È Golia)
+                    elif gap_t >= 15:
+                        ammortizzatore = max(0.20, 1.0 - (gap_t / 45.0))
+                        malus_att_t *= ammortizzatore
+                        boost_opp_c *= ammortizzatore
+                # ==========================================
                 streak_breaker_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_breaker_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
                 
