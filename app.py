@@ -515,6 +515,14 @@ st.sidebar.markdown("---")
 budget_totale = st.sidebar.number_input("💰 Budget Totale da Investire (€):", min_value=5.0, value=50.0, step=5.0)
 st.sidebar.markdown("---")
 
+st.sidebar.markdown("---")
+if st.sidebar.button("🗑️ SVUOTA MEMORIA V90 (Hard Reset)"):
+    st.cache_data.clear()
+    st.session_state.data_master = {}
+    st.session_state.all_tips_global = []
+    st.sidebar.success("✅ Cache svuotata! Il sistema è pronto per una scansione pulita.")
+st.sidebar.markdown("---")
+
 with st.sidebar:
     if st.button("🔍 Trova Campionati Attivi nel Periodo"):
         with st.spinner("Scansione palinsesto in corso..."):
