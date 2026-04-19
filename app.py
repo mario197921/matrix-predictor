@@ -114,7 +114,7 @@ def get_player_advanced_stats(player_id, season):
     return "Unknown", 0, 0, 6.0, 0
 
 # V90: IL NUOVO MOTORE ASSENTI AGNOSTICO (Basato su Minuti Assoluti)
-def analizza_infortuni_pesati_v90(inf_list):
+def analizza_infortuni_pesati_v90(inf_list, season_lega):
     malus_att = 0.0  
     boost_opp = 0.0  
     t1_star, t2_rot, t3_ris, squalificati = 0, 0, 0, 0
@@ -131,7 +131,8 @@ def analizza_infortuni_pesati_v90(inf_list):
         if 'suspend' in motivo or 'red card' in motivo or 'card' in motivo:
             squalificati += 1
 
-        pos, gol, assist, rating, mins = get_player_advanced_stats(p_id, STAGIONE)
+        # V90: Passiamo la stagione corretta alla ricerca del giocatore!
+        pos, gol, assist, rating, mins = get_player_advanced_stats(p_id, season_lega)
 
         # Valutazione Assoluta V90: Evita il bug delle Coppe
         is_star = mins >= 1200 or rating >= 7.0
@@ -166,9 +167,9 @@ def analizza_infortuni_pesati_v90(inf_list):
     return min(0.60, malus_att), min(0.60, boost_opp), t1_star, t2_rot, t3_ris, len(visti), squalificati, portiere_titolare_out, difensori_out
 
 @st.cache_data(ttl=3600)
-def scarica_quote_native(league_id, date_str):
+def scarica_quote_native(league_id, date_str, season_lega):
     try:
-        resp = requests.get("https://v3.football.api-sports.io/odds", headers=HEADERS, params={'league': league_id, 'season': STAGIONE, 'date': date_str, 'bookmaker': 8}).json()
+        resp = requests.get("https://v3.football.api-sports.io/odds", headers=HEADERS, params={'league': league_id, 'season': season_lega, 'date': date_str, 'bookmaker': 8}).json()
         quote_dict = {}
         for item in resp.get('response', []):
             fix_id = item['fixture']['id']
@@ -197,9 +198,9 @@ def scarica_quote_native(league_id, date_str):
     except: return {}
 
 @st.cache_data(ttl=86400)
-def analizza_statistiche_stagionali(league_id, team_id):
+def analizza_statistiche_stagionali(league_id, team_id, season_lega):
     try:
-        resp = requests.get("https://v3.football.api-sports.io/teams/statistics", headers=HEADERS, params={'league': league_id, 'season': STAGIONE, 'team': team_id}).json()
+        resp = requests.get("https://v3.football.api-sports.io/teams/statistics", headers=HEADERS, params={'league': league_id, 'season': season_lega, 'team': team_id}).json()
         stats = resp.get('response', {})
         if not stats: return 0.0, 0.0
         
@@ -536,37 +537,45 @@ if btn_genera:
     for name in scelte:
         f_id = active_dict[name]
         with st.spinner(f"Analisi V90 (Motore Giocatori & Rating) {name}..."):
-            fix = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'league': f_id, 'season': STAGIONE, 'from': start_str, 'to': end_str}).json()
-            std = requests.get("https://v3.football.api-sports.io/standings", headers=HEADERS, params={'league': f_id, 'season': STAGIONE}).json()
+            
+            # ==========================================
+            # V90 SMART CALENDAR (Nordiche = Anno Solare, Altre = STAGIONE)
+            # ==========================================
+            is_lega_estiva = name in ["🇸🇪 Allsvenskan", "🇳🇴 Eliteserien", "🇫🇮 Veikkausliiga"]
+            stagione_lega = start_date.year if is_lega_estiva else STAGIONE
+
+            fix = requests.get("https://v3.football.api-sports.io/fixtures", headers=HEADERS, params={'league': f_id, 'season': stagione_lega, 'from': start_str, 'to': end_str}).json()
+            std = requests.get("https://v3.football.api-sports.io/standings", headers=HEADERS, params={'league': f_id, 'season': stagione_lega}).json()
             
             if not fix.get('response'): continue
 
             db_stats = {}
             punti_champions, punti_salvezza, tot_squadre, partite_totali_campionato = 0, 0, 20, 38
             if std.get('response') and len(std['response']) > 0 and 'league' in std['response'][0] and 'standings' in std['response'][0]['league']:
-                gruppo = std['response'][0]['league']['standings'][0]
-                tot_squadre = len(gruppo)
-                partite_totali_campionato = (tot_squadre - 1) * 2
-                if tot_squadre >= 18:
-                    punti_champions = gruppo[3]['points'] 
-                    punti_salvezza = gruppo[tot_squadre - 4]['points'] 
                 
-                for t in gruppo:
-                    n = semplifica_nome(t['team']['name'])
-                    db_stats[n] = {
-                        'id': t['team']['id'], 'rank': t['rank'], 'giocate': t['all']['played'], 'punti': t['points'],
-                        'ac': t['home']['goals']['for'] / max(1, t['home']['played']),
-                        'dc': t['home']['goals']['against'] / max(1, t['home']['played']),
-                        'at': t['away']['goals']['for'] / max(1, t['away']['played']),
-                        'dt': t['away']['goals']['against'] / max(1, t['away']['played'])
-                    }
+                # ==========================================
+                # V90 PLAYOFF FIX (Cicliamo su TUTTI i gironi di classifica per l'Austria)
+                # ==========================================
+                tutti_i_gironi = std['response'][0]['league']['standings']
+                
+                for gruppo in tutti_i_gironi:
+                    tot_squadre = len(gruppo)
+                    for t in gruppo:
+                        n = semplifica_nome(t['team']['name'])
+                        db_stats[n] = {
+                            'id': t['team']['id'], 'rank': t['rank'], 'giocate': t['all']['played'], 'punti': t['points'],
+                            'ac': t['home']['goals']['for'] / max(1, t['home']['played']),
+                            'dc': t['home']['goals']['against'] / max(1, t['home']['played']),
+                            'at': t['away']['goals']['for'] / max(1, t['away']['played']),
+                            'dt': t['away']['goals']['against'] / max(1, t['away']['played'])
+                        }
 
             matches_list = []
             date_giocate = {f['fixture']['date'][:10] for f in fix['response']}
-            inj_cache = {}
             odds_cache = {}
             for d_match in date_giocate:
-                odds_cache[d_match] = scarica_quote_native(f_id, d_match)
+                # Passiamo la stagione dinamica per scaricare le quote corrette
+                odds_cache[d_match] = scarica_quote_native(f_id, d_match, stagione_lega)
 
             for f in fix['response']:
                 if f['fixture']['status']['short'] in ['PST', 'CANC', 'ABD', 'AWD', 'WO']: continue 
@@ -588,8 +597,8 @@ if btn_genera:
                 m_st_c, is_stanca_c, forma_c, m_f_c, rit_c = analizza_squadra_globale(db_stats[c_s]['id'])
                 m_st_t, is_stanca_t, forma_t, m_f_t, rit_t = analizza_squadra_globale(db_stats[t_s]['id'])
                 
-                cs_c, fts_c = analizza_statistiche_stagionali(f_id, db_stats[c_s]['id'])
-                cs_t, fts_t = analizza_statistiche_stagionali(f_id, db_stats[t_s]['id'])
+                cs_c, fts_c = analizza_statistiche_stagionali(f_id, db_stats[c_s]['id'], stagione_lega)
+                cs_t, fts_t = analizza_statistiche_stagionali(f_id, db_stats[t_s]['id'], stagione_lega)
                 
                 m_met, d_met = scarica_meteo(c_s)
                 m_h2h_c, m_h2h_t, gol_h2h_c, gol_h2h_t, str_h2h, b_and_c, b_and_t, andata_msg, dettagli_h2h_str = analizza_h2h_dna_e_andata(db_stats[c_s]['id'], db_stats[t_s]['id'])
@@ -634,9 +643,9 @@ if btn_genera:
                     inf_c_list = [i for i in inf_all if str(i['team']['id']) == str(c_id)]
                     inf_t_list = [i for i in inf_all if str(i['team']['id']) == str(t_id)]
                     
-                    malus_att_c, boost_opp_c, t1_c, t2_c, t3_c, count_c, sq_c, gk_out_c, def_out_c = analizza_infortuni_pesati_v90(inf_c_list)
-                    malus_att_t, boost_opp_t, t1_t, t2_t, t3_t, count_t, sq_t, gk_out_t, def_out_t = analizza_infortuni_pesati_v90(inf_t_list)
-
+                    malus_att_c, boost_opp_c, t1_c, t2_c, t3_c, count_c, sq_c, gk_out_c, def_out_c = analizza_infortuni_pesati_v90(inf_c_list, stagione_lega)
+                    malus_att_t, boost_opp_t, t1_t, t2_t, t3_t, count_t, sq_t, gk_out_t, def_out_t = analizza_infortuni_pesati_v90(inf_t_list, stagione_lega)
+                    
                     # [RADAR SQUALIFICHE] Aggiungiamo i rossi matematici se l'API non li ha visti
                     if sq_certi_c > 0 and sq_c == 0:
                         sq_c += sq_certi_c; count_c += sq_certi_c; malus_att_c += (0.05 * sq_certi_c)
