@@ -65,7 +65,7 @@ MASTER_LEAGUES = {
     # --- ALTRI CAMPIONATI EUROPEI TRACCIATI ---
     "🇳🇱 Eredivisie": 88, "🇵🇹 Primeira Liga": 94, "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Prem.": 281,
     "🇹🇷 Süper Lig": 203, "🇧🇪 Pro League": 144, "🇬🇷 Super League": 197,
-    "🇸🇪 Allsvenskan": 113, "🇳🇴 Eliteserien": 71, "🇫🇮 Veikkausliiga": 244,
+    "🇸🇪 Allsvenskan": 113, "🇳🇴 Eliteserien": 69, "🇫🇮 Veikkausliiga": 244,
     "🇩🇰 Superliga": 119, "🇨🇭 Super League": 207, "🇦🇹 Bundesliga": 218
 }
 
