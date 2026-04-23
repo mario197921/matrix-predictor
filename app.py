@@ -743,7 +743,9 @@ if btn_genera:
 
                 # Nelle Coppe o Leghe Minori, il Momentum pesa l'80% perché le classifiche sono troppo corte o volatili.
                 # Nei Campionati normali, ci affidiamo al 70% alla classifica stagionale e al 30% allo stato di forma recente.
-                peso_momentum = 0.80 if is_coppa else 0.30
+                # V90 EARLY SEASON SENSOR: Se hanno giocato 5 partite o meno, la classifica è acerba. Usa il Momentum all'80%.
+                partite_giocate_casa = db_stats[c_s]['giocate']
+                peso_momentum = 0.80 if (is_coppa_check or partite_giocate_casa <= 5) else 0.30
                 peso_standings = 1.0 - peso_momentum
 
                 # 3. Fusione finale
