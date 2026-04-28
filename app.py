@@ -618,7 +618,17 @@ if btn_genera:
 
                 c_u, t_u = f['teams']['home']['name'], f['teams']['away']['name']
                 c_s, t_s = semplifica_nome(c_u), semplifica_nome(t_u)
-                if c_s not in db_stats or t_s not in db_stats: continue
+                # ==========================================
+                # V90 PLAYOFF RESCUE: Recupero squadre fuori classifica
+                # ==========================================
+                # Se le squadre giocano i playoff e non sono nella classifica principale, 
+                # le aggiungiamo al volo al database con 0 partite. Il Sensore Inizio Stagione 
+                # riconoscerà lo 0 e calcolerà l'xG basandosi al 100% sullo storico recente!
+                if c_s not in db_stats:
+                    db_stats[c_s] = {'id': f['teams']['home']['id'], 'rank': 10, 'giocate': 0, 'punti': 0, 'ac': 0.0, 'dc': 0.0, 'at': 0.0, 'dt': 0.0}
+                if t_s not in db_stats:
+                    db_stats[t_s] = {'id': f['teams']['away']['id'], 'rank': 10, 'giocate': 0, 'punti': 0, 'ac': 0.0, 'dc': 0.0, 'at': 0.0, 'dt': 0.0}
+                # ==========================================
 
                 quote_reali_match = odds_cache.get(match_date_str, {}).get(fix_id, {})
                 
