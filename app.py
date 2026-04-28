@@ -913,10 +913,15 @@ if st.session_state.data_master:
         sel_2 = mostra_tabella_interattiva("🛡️ Top 10 Doppie Chance", ["1X", "X2", "12"])
         sel_3 = mostra_tabella_interattiva("⚽ Top 10 Over / Under", lambda tip: tip.startswith("O") or tip.startswith("U"))
         sel_4 = mostra_tabella_interattiva("🎯 Top 10 Goal / NoGoal", ["Goal", "NoGoal"])
-        sel_5 = mostra_tabella_interattiva("⏱️ Top 10 Primo Tempo / Finale (HT/FT)", lambda tip: "HT/FT" in tip)
+        
+        # NUOVE TABELLE V90: Multigol e Combo Match (Sostituiscono l'HT/FT)
+        sel_mg = mostra_tabella_interattiva("🥅 Top 10 Multigol", lambda tip: tip.startswith("MG"))
+        sel_combo = mostra_tabella_interattiva("🧩 Top 10 Combo Match", lambda tip: "+" in tip)
+        
         sel_6 = mostra_tabella_interattiva("🧨 Top 10 Azzardi (Quote Alte >= 2.50)", lambda tip: True, min_q=2.50)
         
-        tutte_selezionate = sel_1 + sel_2 + sel_3 + sel_4 + sel_5 + sel_6
+        # Carrello aggiornato con le nuove liste
+        tutte_selezionate = sel_1 + sel_2 + sel_3 + sel_4 + sel_mg + sel_combo + sel_6
         
         viste = set()
         carrello_finale = []
