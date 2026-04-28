@@ -223,12 +223,26 @@ def analizza_statistiche_avanzate_pro(team_id):
         
         tot_poss, tot_tiri, tot_tiri_area, tot_gol_fatti, tot_gol_subiti, tot_corner = 0, 0, 0, 0, 0, 0
         tot_cart, tot_falli, tot_parate = 0, 0, 0
-        match_v = 0
+        
+        # V90 Fix: Due contatori separati. Uno per le statistiche, uno per i gol reali.
+        match_v_stats = 0 
+        match_v_goals = 0 
         squalificati_certi = 0 
         
         for i, m in enumerate(matches):
             fix_id = m['fixture']['id']
+            is_home = str(m['teams']['home']['id']) == str(team_id)
             
+            # --- CALCOLO GOL (FUORI DALLE STATISTICHE AVANZATE) ---
+            # I gol vengono estratti dal tabellino base che esiste sempre!
+            gf = m['goals']['home'] if is_home else m['goals']['away']
+            gs = m['goals']['away'] if is_home else m['goals']['home']
+            
+            if gf is not None and gs is not None:
+                tot_gol_fatti += int(gf)
+                tot_gol_subiti += int(gs)
+                match_v_goals += 1
+
             if i == 0:
                 events_resp = requests.get("https://v3.football.api-sports.io/fixtures/events", headers=HEADERS, params={'fixture': fix_id}).json()
                 if events_resp.get('response'):
@@ -236,6 +250,7 @@ def analizza_statistiche_avanzate_pro(team_id):
                         if str(ev['team']['id']) == str(team_id) and ev['type'] == 'Card' and 'Red' in ev.get('detail', ''):
                             squalificati_certi += 1
 
+            # Recupero Statistiche Avanzate (se l'API non le ha, salta ma i gol sono già salvi)
             stats_resp = requests.get("https://v3.football.api-sports.io/fixtures/statistics", headers=HEADERS, params={'fixture': fix_id}).json()
             if stats_resp.get('response'):
                 for t_stats in stats_resp['response']:
@@ -249,32 +264,27 @@ def analizza_statistiche_avanzate_pro(team_id):
                         tot_falli += int(s_dict.get('Fouls', 0) or 0)
                         tot_parate += int(s_dict.get('Goalkeeper Saves', 0) or 0)
                         tot_cart += int(s_dict.get('Yellow Cards', 0) or 0) + int(s_dict.get('Red Cards', 0) or 0)
+                        match_v_stats += 1
                         
-                        is_home = str(m['teams']['home']['id']) == str(team_id)
-                        # V90: Calcoliamo Gol Fatti e Subiti Reali (Ultimi 10 match assoluti)
-                        tot_gol_fatti += int(m['goals']['home'] if is_home else m['goals']['away'])
-                        tot_gol_subiti += int(m['goals']['away'] if is_home else m['goals']['home'])
-                        match_v += 1
-                        
-        if match_v == 0: match_v = 1 
+        if match_v_stats == 0: match_v_stats = 1 
+        if match_v_goals == 0: match_v_goals = 1 
         
-        avg_poss = tot_poss / match_v
-        avg_tiri = tot_tiri / match_v
-        avg_tiri_area = tot_tiri_area / match_v
-        avg_corner = tot_corner / match_v
-        avg_cart = tot_cart / match_v
-        avg_falli = tot_falli / match_v
-        avg_parate = tot_parate / match_v
+        avg_poss = tot_poss / match_v_stats
+        avg_tiri = tot_tiri / match_v_stats
+        avg_tiri_area = tot_tiri_area / match_v_stats
+        avg_corner = tot_corner / match_v_stats
+        avg_cart = tot_cart / match_v_stats
+        avg_falli = tot_falli / match_v_stats
+        avg_parate = tot_parate / match_v_stats
         
-        avg_gf = tot_gol_fatti / match_v
-        avg_gs = tot_gol_subiti / match_v
-        tiri_per_gol = tot_tiri / tot_gol_fatti if tot_gol_fatti > 0 else 10.0 
+        avg_gf = tot_gol_fatti / match_v_goals
+        avg_gs = tot_gol_subiti / match_v_goals
+        tiri_per_gol = avg_tiri / avg_gf if avg_gf > 0 else 10.0 
         
         if avg_poss > 55 and avg_tiri_area < 4: stile = "Tiki-Taka Sterile"
         elif avg_poss < 45 and avg_tiri_area > 4: stile = "Verticale Diretto"
         else: stile = "Bilanciato"
         
-        # Ora esportiamo 12 valori (aggiunti avg_gf e avg_gs in fondo)
         return avg_poss, avg_tiri, avg_tiri_area, tiri_per_gol, avg_corner, avg_cart, avg_falli, avg_parate, stile, squalificati_certi, avg_gf, avg_gs
     except Exception as e: 
         return 50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5, "Bilanciato", 0, 1.0, 1.0
@@ -457,7 +467,8 @@ def calcola_tutti_i_mercati(xg_c, xg_t, avg_corner_match, avg_cart_match, is_sev
     return {**p, **mg, **re_prob, **combos, **htft, **special}
 
 def semplifica_nome(nome):
-    for p in ['FC', 'AC ', ' BC', ' AS', ' Milan', ' Calcio', ' Hotspur', 'AFC ', 'United', 'City', 'SL ']: nome = nome.replace(p, '')
+    for p in ['FC', 'AC ', ' BC', ' AS', ' Calcio', 'AFC ', 'SL ']: 
+        nome = nome.replace(p, '')
     return nome.strip()
 
 def get_family(tip):
@@ -559,13 +570,10 @@ if btn_genera:
 
             db_stats = {}
             punti_champions, punti_salvezza, tot_squadre, partite_totali_campionato = 0, 0, 20, 38
+            
+            # Se la classifica esiste, la leggiamo normalmente
             if std.get('response') and len(std['response']) > 0 and 'league' in std['response'][0] and 'standings' in std['response'][0]['league']:
-                
-                # ==========================================
-                # V90 PLAYOFF FIX (Cicliamo su TUTTI i gironi di classifica per l'Austria)
-                # ==========================================
                 tutti_i_gironi = std['response'][0]['league']['standings']
-                
                 for gruppo in tutti_i_gironi:
                     tot_squadre = len(gruppo)
                     for t in gruppo:
@@ -577,6 +585,19 @@ if btn_genera:
                             'at': t['away']['goals']['for'] / max(1, t['away']['played']),
                             'dt': t['away']['goals']['against'] / max(1, t['away']['played'])
                         }
+            else:
+                # [V90 STANDINGS FALLBACK] Classifica vuota dall'API? Nessun problema.
+                # Creiamo un database di emergenza leggendo le squadre direttamente dalle partite in programma.
+                for f in fix['response']:
+                    for team_type in ['home', 'away']:
+                        t_u = f['teams'][team_type]['name']
+                        t_id = f['teams'][team_type]['id']
+                        n = semplifica_nome(t_u)
+                        if n not in db_stats:
+                            db_stats[n] = {
+                                'id': t_id, 'rank': 10, 'giocate': 0, 'punti': 0,
+                                'ac': 0.0, 'dc': 0.0, 'at': 0.0, 'dt': 0.0
+                            }
 
             matches_list = []
             date_giocate = {f['fixture']['date'][:10] for f in fix['response']}
