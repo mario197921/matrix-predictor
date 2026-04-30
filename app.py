@@ -984,91 +984,121 @@ if st.session_state.data_master:
             with st.expander(f"🏆 {camp}", expanded=False):
                 matches = sorted(matches, key=lambda x: x['orario'])
                 for m in matches:
-                    with st.expander(f"🕒 {m['orario']} | 🏟️ {m['c_u']} vs {m['t_u']}", expanded=False):
-                        st.write(f"**Arbitro:** {m['arb']} | **VAR:** {'⚠️ Fiscale' if m['is_sev'] else '⚖️ Standard'} | **Clima:** {m['meteo']}")
+                    
+                    # 1. BARRA TITOLO INTELLIGENTE (Mostra subito la pick)
+                    titolo_expander = f"🕒 {m['orario']} | 🏟️ {m['c_u']} vs {m['t_u']} | 👑 Pick: {m['best_1x2'][0]}"
+                    if m['best_1x2'][0] == "No Segno Fisso": titolo_expander = f"🕒 {m['orario']} | 🏟️ {m['c_u']} vs {m['t_u']} | ⚠️ No Bet"
+                    
+                    with st.expander(titolo_expander, expanded=False):
                         
-                        if m['msg_mot']: st.write(f"<span class='mot-testo'>{m['msg_mot']}</span>", unsafe_allow_html=True)
-                        if m['andata_msg']: st.write(f"<span class='andata-testo'>{m['andata_msg']}</span>", unsafe_allow_html=True)
-                        if m['streak_msg']: st.write(f"<span class='streak-testo'>{m['streak_msg']}</span>", unsafe_allow_html=True)
+                        # --- BARRA DI STATO E ALLERTE ---
+                        st.markdown(f"<div style='font-size:0.85em; color:#7f8c8d; margin-bottom:10px;'><b>Arbitro:</b> {m['arb']} | <b>VAR:</b> {'⚠️ Fiscale' if m['is_sev'] else '⚖️ Standard'} | <b>Clima:</b> {m['meteo']}</div>", unsafe_allow_html=True)
                         if m.get('msg_radar'): st.warning(m['msg_radar'])
                         
-                        st.markdown("<div class='stats-box'>", unsafe_allow_html=True)
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            # Nascondiamo la Posizione Classifica nelle Coppe per non confondere
-                            mostra_rank_c = "" if camp in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"] else f" (Pos: {m['rank_c']}ª)"
-                            st.write(f"🏠 **{m['c_s']}**{mostra_rank_c}")
-                            st.write(f"📊 Stile (10gg): <span class='{'stile-orizzontale' if 'Orizz' in m['stile_c'] else 'stile-verticale'}'>{m['stile_c']}</span>", unsafe_allow_html=True)
-                            st.write(f"⚽ Possesso: {m['poss_c']:.1f}% | 🎯 Tiri Area/match: {m['box_c']:.1f}")
-                            st.write(f"🧤 Parate/match: {m['parate_c']:.1f} | 🛑 Falli/match: {m['falli_c']:.1f}")
-                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_c']:.1f} tiri in area**")
-                            st.write(f"🛡️ Clean Sheet: <span class='cs-testo'>{m['cs_c']:.0f}%</span> | ❌ A secco: <span class='fts-testo'>{m['fts_c']:.0f}%</span>", unsafe_allow_html=True)
-                        with col2:
-                            mostra_rank_t = "" if camp in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"] else f" (Pos: {m['rank_t']}ª)"
-                            st.write(f"✈️ **{m['t_s']}**{mostra_rank_t}")
-                            st.write(f"📊 Stile (10gg): <span class='{'stile-orizzontale' if 'Orizz' in m['stile_t'] else 'stile-verticale'}'>{m['stile_t']}</span>", unsafe_allow_html=True)
-                            st.write(f"⚽ Possesso: {m['poss_t']:.1f}% | 🎯 Tiri Area/match: {m['box_t']:.1f}")
-                            st.write(f"🧤 Parate/match: {m['parate_t']:.1f} | 🛑 Falli/match: {m['falli_t']:.1f}")
-                            st.write(f"🔪 Cinismo: **1 Gol ogni {m['conv_t']:.1f} tiri in area**")
-                            st.write(f"🛡️ Clean Sheet: <span class='cs-testo'>{m['cs_t']:.0f}%</span> | ❌ A secco: <span class='fts-testo'>{m['fts_t']:.0f}%</span>", unsafe_allow_html=True)
-                        st.markdown("</div>", unsafe_allow_html=True)
+                        tags_html = ""
+                        if m['msg_mot']: tags_html += f"<span class='mot-testo'>{m['msg_mot']}</span> "
+                        if m['andata_msg']: tags_html += f"<span class='andata-testo'>{m['andata_msg']}</span> "
+                        if m['streak_msg']: tags_html += f"<span class='streak-testo'>{m['streak_msg']}</span> "
+                        if tags_html: st.markdown(f"<div style='margin-bottom:15px;'>{tags_html}</div>", unsafe_allow_html=True)
 
-                        c1, c2, c3, c4 = st.columns(4)
-                        with c1:
-                            st.markdown("<p class='label-bold'>XG Finale</p>", unsafe_allow_html=True)
-                            st.metric(m['c_s'], f"{m['xg_c']:.2f}")
-                            st.metric(m['t_s'], f"{m['xg_t']:.2f}")
-                        with c2:
-                            st.markdown("<p class='label-bold'>Forma & Riposo</p>", unsafe_allow_html=True)
-                            st.write(f"🏠 <span class='form-box'>{m['forma_c']}</span> | {m['stan_c']}", unsafe_allow_html=True)
-                            st.write(f"✈️ <span class='form-box'>{m['forma_t']}</span> | {m['stan_t']}", unsafe_allow_html=True)
-                        with c3:
-                            st.markdown("<p class='label-bold'>Assenti & V90 Radar</p>", unsafe_allow_html=True)
-                            # V90: Icone specifiche per Portiere e Difesa
-                            c_star = f" (<span class='star-testo'>{m['t1_c']} Star</span>)" if m['t1_c'] > 0 else ""
-                            t_star = f" (<span class='star-testo'>{m['t1_t']} Star</span>)" if m['t1_t'] > 0 else ""
-                            sq_c_badge = f" <span class='star-testo'>[{m['sq_c']} 🟥]</span>" if m['sq_c'] > 0 else ""
-                            sq_t_badge = f" <span class='star-testo'>[{m['sq_t']} 🟥]</span>" if m['sq_t'] > 0 else ""
-                            gk_badge_c = " 🧤🚫" if m['gk_out_c'] else ""
-                            gk_badge_t = " 🧤🚫" if m['gk_out_t'] else ""
-                            def_badge_c = " 🧱⚠️" if m['def_out_c'] >= 2 else ""
-                            def_badge_t = " 🧱⚠️" if m['def_out_t'] >= 2 else ""
+                        # --- SEZIONE 1: IL VERDETTO (Previsioni V90) ---
+                        st.markdown("### 🎯 PREVISIONI MATRIX V90")
+                        pred_c1, pred_c2 = st.columns([1, 1.5])
+                        
+                        with pred_c1:
+                            if m['best_1x2'][0] == "No Segno Fisso":
+                                st.markdown(f"<div class='pure-1x2' style='text-align:center;'>⚠️ <b>NESSUN SEGNO SECCO SICURO</b><br><span style='font-size:0.8em;'>Affidati alle Combo/Multigol</span></div>", unsafe_allow_html=True)
+                            else:
+                                badge_1x2_class = "quota-badge" if m['best_1x2'][3] else "quota-badge-calc"
+                                badge_1x2_text = "Ufficiale Bet365" if m['best_1x2'][3] else "Calibrata V90"
+                                st.markdown(f"<div class='pure-1x2' style='text-align:center;'>👑 Miglior Segno Secco<br><span style='font-size:1.8em; font-weight:900;'>{m['best_1x2'][0]}</span><br>Probabilità: {m['best_1x2'][1]:.1f}%<br><span class='{badge_1x2_class}' style='margin-top:5px; display:inline-block;'>Quota {badge_1x2_text}: {m['best_1x2'][2]}</span></div>", unsafe_allow_html=True)
+                        
+                        with pred_c2:
+                            exclude_safe = ["U4.5", "O0.5", "O1.5", "Casa O0.5", "Ospite O0.5"]
+                            filtered_tips = {k: v for k, v in m['all_tips'].items() if k not in exclude_safe}
+                            top_3 = sorted(filtered_tips.items(), key=lambda x: x[1], reverse=True)[:3]
+                            q1, _ = get_quota_finale(top_3[0][0], top_3[0][1], m['quote_reali'])
+                            q2, _ = get_quota_finale(top_3[1][0], top_3[1][1], m['quote_reali'])
+                            q3, _ = get_quota_finale(top_3[2][0], top_3[2][1], m['quote_reali'])
                             
-                            st.write(f"🏠 🚑 {m['count_c']} Assenti{c_star}{sq_c_badge}{gk_badge_c}{def_badge_c}", unsafe_allow_html=True)
-                            st.write(f"✈️ 🚑 {m['count_t']} Assenti{t_star}{sq_t_badge}{gk_badge_t}{def_badge_t}", unsafe_allow_html=True)
-                        with c4: 
-                            st.markdown("<p class='label-bold'>DNA Storico & Ritardi</p>", unsafe_allow_html=True)
-                            st.write(f"<span class='dna-testo'>{m['dna_h2h']}</span>", unsafe_allow_html=True)
-                            st.write(f"<span class='ritardo-testo'>Ritardi 🏠: {m['rit_c']} | ✈️: {m['rit_t']}</span>", unsafe_allow_html=True)
-                            st.markdown(f"<div class='h2h-details'>{m['dettagli_h2h']}</div>", unsafe_allow_html=True)
-                        
-                        cc1, cc2, cc3 = st.columns(3)
-                        cc1.metric("🚩 Corner / Match", f"{m['corn_tot']:.1f}")
-                        cc2.metric("🟨 Cartellini / Match", f"{m['cart_tot']:.1f}")
-                        cc3.metric("🛑 Falli Totali / Match", f"{m['falli_tot']:.1f}")
+                            st.markdown(f"""
+                            <div style='background-color:#f8f9fa; padding:15px; border-radius:8px; border:1px solid #e1e4e8; height: 100%;'>
+                                <div style='font-weight:700; margin-bottom:10px; color:#2c3e50; font-size:1.1em;'>🔝 TOP 3 OMNI-MARKET</div>
+                                <div style='margin-bottom:8px;'>🥇 <b>{top_3[0][0]}</b> ({top_3[0][1]:.1f}%) <span class='quota-badge-calc' style='float:right;'>Q: {q1}</span></div>
+                                <div style='margin-bottom:8px;'>🥈 <b>{top_3[1][0]}</b> ({top_3[1][1]:.1f}%) <span class='quota-badge-calc' style='float:right;'>Q: {q2}</span></div>
+                                <div>🥉 <b>{top_3[2][0]}</b> ({top_3[2][1]:.1f}%) <span class='quota-badge-calc' style='float:right;'>Q: {q3}</span></div>
+                            </div>
+                            """, unsafe_allow_html=True)
 
-                        if m['best_1x2'][0] == "No Segno Fisso":
-                            st.markdown(f"<div class='pure-1x2'>⚠️ <b>NESSUN SEGNO SECCO CONSIGLIATO</b></div>", unsafe_allow_html=True)
-                        else:
-                            badge_1x2_class = "quota-badge" if m['best_1x2'][3] else "quota-badge-calc"
-                            badge_1x2_text = "Ufficiale Bet365" if m['best_1x2'][3] else "Calibrata"
-                            st.markdown(f"<div class='pure-1x2'>👑 Miglior Segno Secco: <b>{m['best_1x2'][0]}</b> ({m['best_1x2'][1]:.1f}%) <span class='{badge_1x2_class}'>Quota {badge_1x2_text}: {m['best_1x2'][2]}</span></div>", unsafe_allow_html=True)
+                        st.markdown("---")
                         
-                        exclude_safe = ["U4.5", "O0.5", "O1.5", "Casa O0.5", "Ospite O0.5"]
-                        filtered_tips = {k: v for k, v in m['all_tips'].items() if k not in exclude_safe}
-                        top_3 = sorted(filtered_tips.items(), key=lambda x: x[1], reverse=True)[:3]
+                        # --- SEZIONE 2: FACCIA A FACCIA (Tale of the Tape) ---
+                        st.markdown("### 📊 CONFRONTO FORZE IN CAMPO")
+                        col_h, col_vs, col_a = st.columns([4, 1, 4])
                         
-                        q1, _ = get_quota_finale(top_3[0][0], top_3[0][1], m['quote_reali'])
-                        q2, _ = get_quota_finale(top_3[1][0], top_3[1][1], m['quote_reali'])
-                        q3, _ = get_quota_finale(top_3[2][0], top_3[2][1], m['quote_reali'])
+                        # Colonna CASA
+                        with col_h:
+                            st.markdown(f"<div style='border-left:4px solid #3498db; background-color:#f4f9fd; padding:12px; border-radius:0 8px 8px 0;'>", unsafe_allow_html=True)
+                            mostra_rank_c = "" if camp in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"] else f" <span style='font-size:0.7em; color:#7f8c8d;'>(Pos: {m['rank_c']}ª)</span>"
+                            st.markdown(f"<h4 style='margin-top:0; color:#2980b9;'>🏠 {m['c_s']}{mostra_rank_c}</h4>", unsafe_allow_html=True)
+                            
+                            st.markdown(f"<div style='font-size:1.8em; font-weight:900; color:#2980b9; margin-bottom:10px;'>xG: {m['xg_c']:.2f}</div>", unsafe_allow_html=True)
+                            st.write(f"**Forma:** <span class='form-box'>{m['forma_c']}</span> ({m['stan_c']})", unsafe_allow_html=True)
+                            
+                            c_star = f" (<span class='star-testo'>{m['t1_c']} Star</span>)" if m['t1_c'] > 0 else ""
+                            sq_c_badge = f" <span class='star-testo'>[{m['sq_c']} 🟥]</span>" if m['sq_c'] > 0 else ""
+                            gk_badge_c = " 🧤🚫" if m['gk_out_c'] else ""
+                            def_badge_c = " 🧱⚠️" if m['def_out_c'] >= 2 else ""
+                            st.write(f"**Assenti:** 🚑 {m['count_c']}{c_star}{sq_c_badge}{gk_badge_c}{def_badge_c}", unsafe_allow_html=True)
+                            
+                            st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+                            st.write(f"**Stile:** {m['stile_c']}")
+                            st.write(f"Possesso: **{m['poss_c']:.1f}%** | Parate: **{m['parate_c']:.1f}**")
+                            st.write(f"Cinismo: **1 Gol ogni {m['conv_c']:.1f} tiri**")
+                            st.write(f"Difesa: CS <span class='cs-testo'>{m['cs_c']:.0f}%</span> | A secco <span class='fts-testo'>{m['fts_c']:.0f}%</span>", unsafe_allow_html=True)
+                            st.markdown("</div>", unsafe_allow_html=True)
+                            
+                        with col_vs:
+                            st.markdown("<div style='text-align:center; height:100%; display:flex; align-items:center; justify-content:center;'><h3 style='color:#bdc3c7;'>VS</h3></div>", unsafe_allow_html=True)
 
-                        st.markdown("<div class='top-pick-box'>", unsafe_allow_html=True)
-                        st.write("🎯 **TOP 3 ASSOLUTE (Ordinate per Probabilità Pura):**")
-                        col_a, col_b, col_c = st.columns(3)
-                        col_a.write(f"<span class='gold-medal'>🥇 {top_3[0][0]}</span> ({top_3[0][1]:.1f}%) <span class='quota-badge-calc'>Quota: {q1}</span>", unsafe_allow_html=True)
-                        col_b.write(f"<span class='silver-medal'>🥈 {top_3[1][0]}</span> ({top_3[1][1]:.1f}%) <span class='quota-badge-calc'>Quota: {q2}</span>", unsafe_allow_html=True)
-                        col_c.write(f"<span class='bronze-medal'>🥉 {top_3[2][0]}</span> ({top_3[2][1]:.1f}%) <span class='quota-badge-calc'>Quota: {q3}</span>", unsafe_allow_html=True)
-                        st.markdown("</div>", unsafe_allow_html=True)
+                        # Colonna TRASFERTA
+                        with col_a:
+                            st.markdown(f"<div style='border-left:4px solid #e74c3c; background-color:#fdf4f4; padding:12px; border-radius:0 8px 8px 0;'>", unsafe_allow_html=True)
+                            mostra_rank_t = "" if camp in ["🇪🇺 Champions League", "🇪🇺 Europa League", "🇪🇺 Conference League"] else f" <span style='font-size:0.7em; color:#7f8c8d;'>(Pos: {m['rank_t']}ª)</span>"
+                            st.markdown(f"<h4 style='margin-top:0; color:#c0392b;'>✈️ {m['t_s']}{mostra_rank_t}</h4>", unsafe_allow_html=True)
+                            
+                            st.markdown(f"<div style='font-size:1.8em; font-weight:900; color:#c0392b; margin-bottom:10px;'>xG: {m['xg_t']:.2f}</div>", unsafe_allow_html=True)
+                            st.write(f"**Forma:** <span class='form-box'>{m['forma_t']}</span> ({m['stan_t']})", unsafe_allow_html=True)
+                            
+                            t_star = f" (<span class='star-testo'>{m['t1_t']} Star</span>)" if m['t1_t'] > 0 else ""
+                            sq_t_badge = f" <span class='star-testo'>[{m['sq_t']} 🟥]</span>" if m['sq_t'] > 0 else ""
+                            gk_badge_t = " 🧤🚫" if m['gk_out_t'] else ""
+                            def_badge_t = " 🧱⚠️" if m['def_out_t'] >= 2 else ""
+                            st.write(f"**Assenti:** 🚑 {m['count_t']}{t_star}{sq_t_badge}{gk_badge_t}{def_badge_t}", unsafe_allow_html=True)
+                            
+                            st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+                            st.write(f"**Stile:** {m['stile_t']}")
+                            st.write(f"Possesso: **{m['poss_t']:.1f}%** | Parate: **{m['parate_t']:.1f}**")
+                            st.write(f"Cinismo: **1 Gol ogni {m['conv_t']:.1f} tiri**")
+                            st.write(f"Difesa: CS <span class='cs-testo'>{m['cs_t']:.0f}%</span> | A secco <span class='fts-testo'>{m['fts_t']:.0f}%</span>", unsafe_allow_html=True)
+                            st.markdown("</div>", unsafe_allow_html=True)
+
+                        st.markdown("---")
+                        
+                        # --- SEZIONE 3: SPECIALI E STORICO ---
+                        b1, b2 = st.columns([1, 1.5])
+                        with b1:
+                            st.markdown("<p style='font-size:0.9em; font-weight:bold; color:#7f8c8d; margin-bottom:5px; text-transform:uppercase;'>Metriche Gara</p>", unsafe_allow_html=True)
+                            st.markdown(f"🚩 **Corner Previsti:** {m['corn_tot']:.1f}")
+                            st.markdown(f"🟨 **Cartellini Previsti:** {m['cart_tot']:.1f}")
+                            st.markdown(f"🛑 **Falli Totali:** {m['falli_tot']:.1f}")
+                        with b2:
+                            st.markdown("<p style='font-size:0.9em; font-weight:bold; color:#7f8c8d; margin-bottom:5px; text-transform:uppercase;'>Ritardi & Storico</p>", unsafe_allow_html=True)
+                            st.markdown(f"**Ritardi Casa:** <span class='ritardo-testo'>{m['rit_c']}</span>", unsafe_allow_html=True)
+                            st.markdown(f"**Ritardi Ospite:** <span class='ritardo-testo'>{m['rit_t']}</span>", unsafe_allow_html=True)
+                            st.markdown(f"**DNA Storico:** <span class='dna-testo'>{m['dna_h2h']}</span>", unsafe_allow_html=True)
+                            with st.expander("🔍 Mostra Dettaglio Ultimi Scontri Diretti", expanded=False):
+                                st.markdown(f"<div style='font-size:0.85em; background:#f4f6f7; padding:10px; border-radius:5px;'>{m['dettagli_h2h']}</div>", unsafe_allow_html=True)
 
     with t3:
         st.header("🏆 Generatore Automatico Ottimizzato (V90)")
