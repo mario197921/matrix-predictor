@@ -68,7 +68,21 @@ MASTER_LEAGUES = {
     "🇸🇪 Allsvenskan": 113, "🇳🇴 Eliteserien": 69, "🇫🇮 Veikkausliiga": 244,
     "🇩🇰 Superliga": 119, "🇨🇭 Super League": 207, "🇦🇹 Bundesliga": 218
 }
+# ==========================================
+# 🕵️ V90 AUTO-DISCOVERY (Trova l'ID Esatto)
+# ==========================================
+# Risolve definitivamente il problema della Norvegia interrogando l'API
+@st.cache_data(ttl=86400)
+def trova_vero_id_lega(nazione, nome, fallback_id):
+    try:
+        resp = requests.get("https://v3.football.api-sports.io/leagues", headers=HEADERS, params={'country': nazione, 'name': nome}).json()
+        if resp.get('response'):
+            return resp['response'][0]['league']['id']
+    except: pass
+    return fallback_id
 
+# La Matrix sovrascrive il dizionario trovando da sola il vero ID dell'Eliteserien!
+MASTER_LEAGUES["🇳🇴 Eliteserien"] = trova_vero_id_lega("Norway", "Eliteserien", 69)
 
 # ==========================================
 # 📡 MODULI API E CALCOLI MATEMATICI (V90)
