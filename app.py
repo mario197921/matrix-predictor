@@ -66,7 +66,7 @@ MASTER_LEAGUES = {
     "🇳🇱 Eredivisie": 88, "🇵🇹 Primeira Liga": 94, "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Prem.": 281,
     "🇹🇷 Süper Lig": 203, "🇧🇪 Pro League": 144, "🇬🇷 Super League": 197,
     "🇸🇪 Allsvenskan": 113, "🇳🇴 Eliteserien": 69, "🇫🇮 Veikkausliiga": 244,
-    "🇩🇰 Superliga": 119, "🇨🇭 Super League": 207, "🇦🇹 Bundesliga": 218
+    "🇩🇰 Superliga": 119, "🇨🇭 Super League": 207, "🇦🇹 Bundesliga": 218,
     # === NUOVE LEGHE V90 ===
     "🇸🇦 Saudi Pro League": 307,
     "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Championship": 284,  # Risolve i Playoff incrociati di Maggio
