@@ -67,6 +67,10 @@ MASTER_LEAGUES = {
     "🇹🇷 Süper Lig": 203, "🇧🇪 Pro League": 144, "🇬🇷 Super League": 197,
     "🇸🇪 Allsvenskan": 113, "🇳🇴 Eliteserien": 69, "🇫🇮 Veikkausliiga": 244,
     "🇩🇰 Superliga": 119, "🇨🇭 Super League": 207, "🇦🇹 Bundesliga": 218
+    # === NUOVE LEGHE V90 ===
+    "🇸🇦 Saudi Pro League": 307,
+    "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Championship": 284,  # Risolve i Playoff incrociati di Maggio
+    "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish League One": 285,   # Risolve i Playoff delle serie minori
 }
 # ==========================================
 # 🕵️ V90 AUTO-DISCOVERY (Trova l'ID Esatto)
