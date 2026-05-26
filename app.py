@@ -541,6 +541,128 @@ p, span, label, div { color: var(--text) !important; }
   border-left: 3px solid var(--accent);
   margin-bottom: 12px;
 }
+
+/* ── FIX CALENDARIO (testo visibile su sfondo chiaro) ────── */
+[data-testid="stDateInput"] input,
+[data-testid="stDateInput"] div,
+[data-baseweb="calendar"] *,
+[data-baseweb="datepicker"] *,
+[data-baseweb="calendar"] td,
+[data-baseweb="calendar"] th,
+[data-baseweb="calendar"] button {
+  color: #1a1a1a !important;
+  background-color: #ffffff !important;
+}
+[data-baseweb="calendar"] [aria-selected="true"] {
+  background-color: var(--accent) !important;
+  color: #ffffff !important;
+}
+[data-baseweb="calendar"] button:hover {
+  background-color: #e8f0fe !important;
+}
+[data-testid="stDateInput"] input {
+  color: var(--text) !important;
+  background: var(--bg3) !important;
+}
+
+/* ── FIX EXPANDER — sempre visibile anche su mobile ──────── */
+.stExpander > details > summary {
+  background: var(--bg2) !important;
+  color: var(--text) !important;
+  padding: 14px 18px !important;
+  font-weight: 600 !important;
+  font-size: 0.92rem !important;
+  border-radius: var(--radius) !important;
+  display: flex !important;
+  align-items: center !important;
+  cursor: pointer !important;
+  user-select: none !important;
+}
+.stExpander > details > summary:hover {
+  background: var(--bg3) !important;
+}
+.stExpander > details[open] > summary {
+  background: var(--bg3) !important;
+  border-bottom: 1px solid var(--border) !important;
+  border-radius: var(--radius) var(--radius) 0 0 !important;
+}
+/* Freccia sempre visibile */
+.stExpander > details > summary::marker,
+.stExpander > details > summary::-webkit-details-marker {
+  color: var(--accent) !important;
+}
+
+/* ── FIX H2H POPUP — testo visibile su tema scuro ────────── */
+.h2h-box {
+  background: var(--bg3) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  padding: 12px 16px !important;
+  font-size: 0.85rem !important;
+  color: var(--text) !important;
+  line-height: 1.8 !important;
+}
+.h2h-box b, .h2h-box strong {
+  color: var(--accent) !important;
+}
+
+/* ── SPINNER / SUCCESS / WARNING ─────────────────────────── */
+[data-testid="stAlert"][data-baseweb="notification"] {
+  background: var(--bg3) !important;
+  border: 1px solid var(--accent) !important;
+  color: var(--text) !important;
+  border-radius: var(--radius-sm) !important;
+}
+/* Banner campionati attivi — blu invece di arancione */
+[data-testid="stAlert"].stSuccess,
+div[data-testid="stAlert"] {
+  background: linear-gradient(135deg, #0d1f3c, #162040) !important;
+  border: 1px solid var(--accent) !important;
+  color: var(--text) !important;
+  border-left: 4px solid var(--accent) !important;
+}
+[data-testid="stAlert"] p,
+[data-testid="stAlert"] span {
+  color: var(--text) !important;
+}
+
+/* ── MOLTIPLICATORE PROGRESSIVO SCHEDINA ─────────────────── */
+.mult-box {
+  background: linear-gradient(135deg, #0d1f3c, #1a2e4a);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin: 10px 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: var(--glow-blue);
+}
+.mult-label {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.75rem;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.mult-value {
+  font-family: 'Syne', sans-serif;
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--gold);
+  text-shadow: 0 0 20px rgba(251,191,36,0.3);
+}
+.mult-prob {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--text2);
+}
+.mult-vincita {
+  font-family: 'DM Mono', monospace;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--green);
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -817,28 +939,61 @@ def get_active_leagues(start_date, end_date):
 
 @st.cache_data(ttl=86400)
 def get_player_advanced_stats(player_id: int, season: str):
+    """
+    MIGLIORIA star player: usa rating + % da titolare + storico multi-stagione.
+    Risolve il caso Dumfries: pochi minuti per infortunio ma è comunque star.
+    """
     if not player_id:
         return "Unknown", 0, 0, 6.0, 0
     try:
+        # Stagione corrente
         resp = requests.get(
             "https://v3.football.api-sports.io/players",
             headers=HEADERS, params={'id': player_id, 'season': season}, timeout=8
         ).json()
-        if resp.get('response'):
-            stats_array = resp['response'][0]['statistics']
-            pos = "Unknown"
-            tot_mins, tot_goals, tot_assists = 0, 0, 0
-            ratings = []
-            for stat in stats_array:
-                if pos == "Unknown" and stat['games'].get('position'):
-                    pos = stat['games']['position']
-                tot_mins    += stat['games'].get('minutes')  or 0
-                tot_goals   += stat['goals'].get('total')    or 0
-                tot_assists += stat['goals'].get('assists')  or 0
-                if stat['games'].get('rating'):
-                    ratings.append(float(stat['games']['rating']))
-            avg_rating = sum(ratings) / len(ratings) if ratings else 6.0
-            return pos, tot_goals, tot_assists, avg_rating, tot_mins
+        # Stagione precedente (per capire se è titolare strutturale)
+        season_prev = str(int(str(season)) - 1)
+        resp_prev = requests.get(
+            "https://v3.football.api-sports.io/players",
+            headers=HEADERS, params={'id': player_id, 'season': season_prev}, timeout=8
+        ).json()
+
+        pos = "Unknown"
+        tot_mins = tot_goals = tot_assists = 0
+        mins_prev = 0
+        ratings = []
+        titolare_pct = 0.0
+
+        for stat in resp.get('response', [{}])[0].get('statistics', []):
+            if pos == "Unknown" and stat['games'].get('position'):
+                pos = stat['games']['position']
+            tot_mins    += stat['games'].get('minutes')  or 0
+            tot_goals   += stat['goals'].get('total')    or 0
+            tot_assists += stat['goals'].get('assists')  or 0
+            if stat['games'].get('rating'):
+                ratings.append(float(stat['games']['rating']))
+            app   = stat['games'].get('appearences') or 0
+            start = stat['games'].get('lineups')      or 0
+            if app > 0:
+                titolare_pct = max(titolare_pct, start / app)
+
+        for stat in resp_prev.get('response', [{}])[0].get('statistics', []):
+            mins_prev += stat['games'].get('minutes') or 0
+
+        avg_rating = sum(ratings) / len(ratings) if ratings else 6.0
+
+        # LOGICA STAR CORRETTA — almeno uno dei criteri:
+        # 1. Qualità alta (rating indipendente dai minuti)
+        # 2. Titolare abituale (>70% partite disponibili)
+        # 3. Titolare strutturale in entrambe le stagioni
+        # 4. Caso Dumfries: era titolare fisso l'anno scorso + buon rating ora
+        is_star = (
+            avg_rating >= 7.0
+            or titolare_pct >= 0.70
+            or (tot_mins >= 1200 and mins_prev >= 1800)
+            or (mins_prev >= 2000 and avg_rating >= 6.7)
+        )
+        return pos, tot_goals, tot_assists, avg_rating, tot_mins
     except Exception:
         pass
     return "Unknown", 0, 0, 6.0, 0
@@ -1245,9 +1400,19 @@ def kelly_fraction(prob: float, quota: float, fraz: float = 0.25) -> float:
 
 # ==========================================
 # 🔎 ANALISI SQUADRA & H2H
-# ==========================================
+
+# Frequenze medie attese per mercato (base statistica europea)
+FREQUENZE_MEDIE = {
+    'W': 3.0, 'X': 3.5, 'L': 3.0, 'Over': 2.0, 'Goal': 2.2
+}
+
 @st.cache_data(ttl=3600)
 def analizza_squadra_globale(team_id: int):
+    """
+    MIGLIORIA ritardi: conta partite consecutive senza evento
+    e confronta con la frequenza media attesa.
+    Ritorna anche punti_5 e punti_prev_5 per il calcolo pressione.
+    """
     try:
         resp = requests.get(
             "https://v3.football.api-sports.io/fixtures",
@@ -1255,38 +1420,70 @@ def analizza_squadra_globale(team_id: int):
         ).json()
         matches = resp.get('response', [])
         if not matches:
-            return 1.0, False, "N/D", 1.0, "Nessuno"
+            return 1.0, False, "N/D", 1.0, [], 0, 0
+
         ultima_data  = datetime.strptime(matches[0]['fixture']['date'][:10], '%Y-%m-%d')
         diff_giorni  = (datetime.now() - ultima_data).days
         is_stanca    = diff_giorni <= 4
         m_stanchezza = 0.95 if is_stanca else 1.0
-        forma_str = ""; punti = 0
-        for m in matches[:5]:
+
+        # Forma ultime 5 + punti split per pressione
+        forma_str = ""; punti_5 = 0; punti_prev_5 = 0
+        for i, m in enumerate(matches[:10]):
             is_home = str(m['teams']['home']['id']) == str(team_id)
             gh, ga  = m['goals']['home'], m['goals']['away']
-            if gh == ga:                                         forma_str += "D"; punti += 1
-            elif (is_home and gh > ga) or (not is_home and ga > gh): forma_str += "W"; punti += 3
-            else:                                                forma_str += "L"
+            if gh is None: continue
+            if gh == ga:   pt = 1; ch = "D"
+            elif (is_home and gh > ga) or (not is_home and ga > gh): pt = 3; ch = "W"
+            else:          pt = 0; ch = "L"
+            if i < 5:
+                forma_str += ch; punti_5 += pt
+            else:
+                punti_prev_5 += pt
         forma_str = forma_str[::-1]
-        m_forma   = 0.9 + (punti / 15) * 0.2
-        stats = {'W': 0, 'D': 0, 'L': 0, 'Over': 0, 'Goal': 0}
+        m_forma   = 0.9 + (punti_5 / 15) * 0.2
+
+        # Ritardi pesati — contatore consecutivo
+        consec = {'W': 0, 'X': 0, 'L': 0, 'Over': 0, 'Goal': 0}
         for m in matches:
             is_home = str(m['teams']['home']['id']) == str(team_id)
             gh, ga  = m['goals']['home'], m['goals']['away']
-            if gh is not None and ga is not None:
-                if gh == ga: stats['D'] += 1
-                elif (is_home and gh > ga) or (not is_home and ga > gh): stats['W'] += 1
-                else: stats['L'] += 1
-                if (gh + ga) > 2: stats['Over'] += 1
-                if gh > 0 and ga > 0: stats['Goal'] += 1
+            if gh is None or ga is None: continue
+            # W/D/L
+            if gh == ga:
+                consec['X'] = 0; consec['W'] += 1; consec['L'] += 1
+            elif (is_home and gh > ga) or (not is_home and ga > gh):
+                consec['W'] = 0; consec['X'] += 1; consec['L'] += 1
+            else:
+                consec['L'] = 0; consec['W'] += 1; consec['X'] += 1
+            # Over/Goal
+            if (gh + ga) > 2: consec['Over'] = 0
+            else:              consec['Over'] += 1
+            if gh > 0 and ga > 0: consec['Goal'] = 0
+            else:                  consec['Goal'] += 1
+
+        # Costruisci lista ritardi con peso
         ritardi = []
-        if stats['D'] == 0:    ritardi.append("X")
-        if stats['W'] == 0:    ritardi.append("Vittoria")
-        if stats['Over'] == 0: ritardi.append("Over 2.5")
-        if stats['Goal'] == 0: ritardi.append("Goal")
-        return m_stanchezza, is_stanca, forma_str, m_forma, (", ".join(ritardi) if ritardi else "Nessuno")
+        for evento, n in consec.items():
+            media = FREQUENZE_MEDIE[evento]
+            if n >= media:
+                peso = n / media
+                if peso >= 2.5:   livello = "🔴"
+                elif peso >= 1.5: livello = "🟠"
+                else:             livello = "🟡"
+                label_map = {'W':'Vittoria','X':'Pareggio','L':'Sconfitta',
+                             'Over':'Over 2.5','Goal':'Goal'}
+                ritardi.append({
+                    'evento': evento,
+                    'partite': n,
+                    'peso': peso,
+                    'livello': livello,
+                    'label': f"{livello} {label_map[evento]}: {n}p ({peso:.1f}x media)"
+                })
+
+        return m_stanchezza, is_stanca, forma_str, m_forma, ritardi, punti_5, punti_prev_5
     except Exception:
-        return 1.0, False, "N/D", 1.0, "Nessuno"
+        return 1.0, False, "N/D", 1.0, [], 0, 0
 
 @st.cache_data(ttl=3600)
 def analizza_h2h_dna_e_andata(id_casa: int, id_trasf: int):
@@ -1593,7 +1790,8 @@ if btn_genera:
                         "msg_mot": fase['label'],
                         "stan_c": "✅", "stan_t": "✅",
                         "forma_c": stats_c['forma'], "forma_t": stats_t['forma'],
-                        "rit_c": "N/D", "rit_t": "N/D",
+                        "rit_c": [], "rit_t": [],
+                        "pressione_c": 0.0, "pressione_t": 0.0, "msg_pressione": "",
                         "poss_c": 50, "tiri_c": 4, "conv_c": 5, "stile_c": "Nazionale",
                         "box_c": 4, "falli_c": 10, "parate_c": 2,
                         "poss_t": 50, "tiri_t": 4, "conv_t": 5, "stile_t": "Nazionale",
@@ -1609,8 +1807,8 @@ if btn_genera:
                         db_stats[sn] = {'id': tid, 'rank': 10, 'giocate': 0, 'punti': 0,
                                         'ac': 0.0, 'dc': 0.0, 'at': 0.0, 'dt': 0.0}
 
-                m_st_c, is_stanca_c, forma_c, m_f_c, rit_c = analizza_squadra_globale(db_stats[c_s]['id'])
-                m_st_t, is_stanca_t, forma_t, m_f_t, rit_t = analizza_squadra_globale(db_stats[t_s]['id'])
+                m_st_c, is_stanca_c, forma_c, m_f_c, rit_c, punti_5_c, punti_prev_5_c = analizza_squadra_globale(db_stats[c_s]['id'])
+                m_st_t, is_stanca_t, forma_t, m_f_t, rit_t, punti_5_t, punti_prev_5_t = analizza_squadra_globale(db_stats[t_s]['id'])
                 cs_c, fts_c = analizza_statistiche_stagionali(f_id, db_stats[c_s]['id'], stagione_lega)
                 cs_t, fts_t = analizza_statistiche_stagionali(f_id, db_stats[t_s]['id'], stagione_lega)
                 m_met, d_met = scarica_meteo(c_s)
@@ -1666,8 +1864,12 @@ if btn_genera:
                 streak_break_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
                 streak_break_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
 
-                # Motivazione
-                m_mot_c = m_mot_t = 1.0; tension_idx = 1.0; msg_mot = ""
+                # ── MOTIVAZIONE + PRESSIONE (effetto choking) ─────────────
+                m_mot_c = m_mot_t = 1.0
+                pressione_c = pressione_t = 0.0
+                msg_mot = ""; msg_pressione = ""
+                tension_idx = 1.0
+
                 if is_coppa_naz:
                     m_mot_c = m_mot_t = 1.20; tension_idx += 0.25; msg_mot = "🏆 COPPA NAZIONALE"
                 elif is_coppa_eu and mese_att in [3, 4, 5]:
@@ -1677,21 +1879,95 @@ if btn_genera:
                 elif is_playoff:
                     m_mot_c = m_mot_t = 1.30; tension_idx += 0.4; msg_mot = "⚡ PLAYOFF"
                 elif not is_coppa:
-                    punti_c = db_stats[c_s]['punti']; punti_t = db_stats[t_s]['punti']
-                    rank_c  = db_stats[c_s]['rank'];  rank_t  = db_stats[t_s]['rank']
+                    punti_c  = db_stats[c_s]['punti']; punti_t  = db_stats[t_s]['punti']
+                    rank_c   = db_stats[c_s]['rank'];  rank_t   = db_stats[t_s]['rank']
+                    gioc_c   = db_stats[c_s]['giocate']; gioc_t = db_stats[t_s]['giocate']
                     gap_ch_c = punti_champions - punti_c
                     gap_ch_t = punti_champions - punti_t
-                    if rank_c <= 6 or (0 < gap_ch_c <= 7):   m_mot_c = 1.15; msg_mot += "🏆 C.Vertice "
-                    elif rank_c >= tot_squadre - 6:            m_mot_c = 1.20; msg_mot += "🆘 C.Disperata "; tension_idx += 0.15
-                    elif mese_att >= 3 and (punti_c - punti_salvezza) > 9 and gap_ch_c > 10:
-                        m_mot_c = 1.10; msg_mot += "🌴 C.Sgombra "
-                    else: m_mot_c = 1.05
-                    if rank_t <= 6 or (0 < gap_ch_t <= 7):    m_mot_t = 1.15; msg_mot += "🏆 O.Vertice"
-                    elif rank_t >= tot_squadre - 6:            m_mot_t = 1.20; msg_mot += "🆘 O.Disperata"; tension_idx += 0.15
-                    elif mese_att >= 3 and (punti_t - punti_salvezza) > 9 and gap_ch_t > 10:
-                        m_mot_t = 1.10; msg_mot += "🌴 O.Sgombra"
-                    else: m_mot_t = 1.05
-                    if abs(rank_c - rank_t) <= 3: tension_idx += 0.2
+                    part_rim_c = max(1, partite_tot_camp - gioc_c)
+                    part_rim_t = max(1, partite_tot_camp - gioc_t)
+                    max_rag_c  = punti_c + part_rim_c * 3
+                    max_rag_t  = punti_t + part_rim_t * 3
+
+                    # ── OBIETTIVO CASA ──────────────────────────────
+                    if max_rag_c < punti_salvezza:
+                        m_mot_c = 0.75; msg_mot += "💀 C.Retrocessa "
+                    elif punti_c > punti_salvezza + part_rim_c * 2:
+                        m_mot_c = 0.85; msg_mot += "🏖️ C.Salva "
+                    elif punti_c >= punti_champions:
+                        m_mot_c = 1.20; msg_mot += "🏆 C.InChampions "
+                    elif 0 < gap_ch_c <= part_rim_c * 2:
+                        urgenza = 1.0 - (gap_ch_c / (part_rim_c * 3))
+                        m_mot_c = 1.10 + urgenza * 0.20; msg_mot += "🔥 C.CorsaChamp "
+                    elif rank_c >= tot_squadre - 3:
+                        m_mot_c = 1.25; msg_mot += "🆘 C.Disperata "
+                    elif rank_c >= tot_squadre - 6:
+                        m_mot_c = 1.15; msg_mot += "😰 C.ARischio "
+                    else:
+                        m_mot_c = 1.05
+
+                    # ── OBIETTIVO TRASFERTA ─────────────────────────
+                    if max_rag_t < punti_salvezza:
+                        m_mot_t = 0.75; msg_mot += "💀 O.Retrocessa"
+                    elif punti_t > punti_salvezza + part_rim_t * 2:
+                        m_mot_t = 0.85; msg_mot += "🏖️ O.Salva"
+                    elif punti_t >= punti_champions:
+                        m_mot_t = 1.20; msg_mot += "🏆 O.InChampions"
+                    elif 0 < gap_ch_t <= part_rim_t * 2:
+                        urgenza = 1.0 - (gap_ch_t / (part_rim_t * 3))
+                        m_mot_t = 1.10 + urgenza * 0.20; msg_mot += "🔥 O.CorsaChamp"
+                    elif rank_t >= tot_squadre - 3:
+                        m_mot_t = 1.25; msg_mot += "🆘 O.Disperata"
+                    elif rank_t >= tot_squadre - 6:
+                        m_mot_t = 1.15; msg_mot += "😰 O.ARischio"
+                    else:
+                        m_mot_t = 1.05
+
+                    # ── SCONTRO DIRETTO ─────────────────────────────
+                    if abs(rank_c - rank_t) <= 2:
+                        tension_idx += 0.25; msg_mot += " ⚔️ScontroDiretto"
+
+                    # ── PRESSIONE CASA (effetto Milan) ──────────────
+                    sconf_c = forma_c.count("L")
+                    trend_c = punti_5_c - punti_prev_5_c
+                    if m_mot_c >= 1.15:  # obiettivo vitale
+                        pressione_c += 0.10
+                    if sconf_c >= 4:     pressione_c += 0.20
+                    elif sconf_c >= 3:   pressione_c += 0.12
+                    elif sconf_c >= 2:   pressione_c += 0.06
+                    if trend_c <= -6:    pressione_c += 0.10
+                    elif trend_c <= -3:  pressione_c += 0.05
+                    pressione_c = min(0.35, pressione_c)
+
+                    # ── PRESSIONE TRASFERTA ─────────────────────────
+                    sconf_t = forma_t.count("L")
+                    trend_t = punti_5_t - punti_prev_5_t
+                    if m_mot_t >= 1.15:  pressione_t += 0.10
+                    if sconf_t >= 4:     pressione_t += 0.20
+                    elif sconf_t >= 3:   pressione_t += 0.12
+                    elif sconf_t >= 2:   pressione_t += 0.06
+                    if trend_t <= -6:    pressione_t += 0.10
+                    elif trend_t <= -3:  pressione_t += 0.05
+                    pressione_t = min(0.35, pressione_t)
+
+                    # ── BONUS LIBERTÀ (effetto Cagliari) ───────────
+                    if m_mot_c <= 0.90:  # sgombra/retrocessa
+                        vitt_c = forma_c.count("W")
+                        if vitt_c >= 3: m_mot_c *= 1.12
+                        else:           m_mot_c *= 1.05
+                    if m_mot_t <= 0.90:
+                        vitt_t = forma_t.count("W")
+                        if vitt_t >= 3: m_mot_t *= 1.12
+                        else:           m_mot_t *= 1.05
+
+                    if pressione_c > 0.15:
+                        msg_pressione += f" 😬Pressione Casa:{pressione_c*100:.0f}%"
+                    if pressione_t > 0.15:
+                        msg_pressione += f" 😬Pressione Osp:{pressione_t*100:.0f}%"
+
+                # Applica pressione ai moltiplicatori
+                m_mot_c = m_mot_c * (1 - pressione_c)
+                m_mot_t = m_mot_t * (1 - pressione_t)
 
                 # Hybrid xG
                 xg_st_c = math.sqrt(max(0.01, db_stats[c_s]['ac']) * max(0.01, db_stats[t_s]['dt']))
@@ -1781,6 +2057,8 @@ if btn_genera:
                     "stan_c": "⚠️ Fatigue" if is_stanca_c else "✅ Riposo",
                     "stan_t": "⚠️ Fatigue" if is_stanca_t else "✅ Riposo",
                     "forma_c": forma_c, "forma_t": forma_t, "rit_c": rit_c, "rit_t": rit_t,
+                    "pressione_c": pressione_c, "pressione_t": pressione_t,
+                    "msg_pressione": msg_pressione,
                     "poss_c": poss_c, "tiri_c": tiri_c, "conv_c": conv_c, "stile_c": stile_c,
                     "box_c": box_c, "falli_c": falli_c, "parate_c": par_c, "rig_c": rig_c,
                     "gf_home_c": gf_home_c, "gs_home_c": gs_home_c,
@@ -1923,9 +2201,10 @@ if st.session_state.data_master:
 
                         if m.get('msg_radar'): st.warning(m['msg_radar'])
                         tags = ""
-                        if m['msg_mot']:    tags += f"<span class='mot-testo'>{m['msg_mot']}</span> "
-                        if m['andata_msg']: tags += f"<span class='andata-testo'>{m['andata_msg']}</span> "
-                        if m['streak_msg']: tags += f"<span class='streak-testo'>{m['streak_msg']}</span> "
+                        if m['msg_mot']:    tags += f"<span class='tag tag-giallo'>{m['msg_mot']}</span> "
+                        if m.get('msg_pressione'): tags += f"<span class='tag tag-rosso'>{m['msg_pressione'].strip()}</span> "
+                        if m['andata_msg']: tags += f"<span class='tag tag-blu'>{m['andata_msg']}</span> "
+                        if m['streak_msg']: tags += f"<span class='tag tag-rosso'>{m['streak_msg']}</span> "
                         if tags: st.markdown(f"<div style='margin-bottom:15px;'>{tags}</div>", unsafe_allow_html=True)
 
                         st.markdown("### 🎯 PREVISIONI MATRIX V90")
@@ -2038,15 +2317,19 @@ if st.session_state.data_master:
                                         f"🛑 Falli: **{m['falli_tot']:.1f}**")
                         with b2:
                             st.markdown("**Ritardi & Storico**")
-                            st.markdown(f"Casa: <span class='ritardo-testo'>{m['rit_c']}</span> | "
-                                        f"Ospite: <span class='ritardo-testo'>{m['rit_t']}</span>",
-                                        unsafe_allow_html=True)
+                            def render_ritardi(rit_list, label):
+                                if not rit_list:
+                                    st.markdown(f"**{label}:** <span style='color:var(--green);font-size:0.85em;'>✅ Nessun ritardo significativo</span>", unsafe_allow_html=True)
+                                else:
+                                    pills = " ".join([f"<span class='tag tag-{'rosso' if r['peso']>=2.5 else 'giallo' if r['peso']>=1.5 else 'verde'}'>{r['label']}</span>" for r in rit_list])
+                                    st.markdown(f"**{label}:** {pills}", unsafe_allow_html=True)
+                            render_ritardi(m['rit_c'], "Ritardi Casa")
+                            render_ritardi(m['rit_t'], "Ritardi Ospite")
                             st.markdown(f"**DNA:** <span class='dna-testo'>{m['dna_h2h']}</span>",
                                         unsafe_allow_html=True)
                             if m['dettagli_h2h']:
-                                with st.expander("🔍 Scontri Diretti"):
-                                    st.markdown(f"<div style='font-size:0.85em;background:#f4f6f7;"
-                                                f"padding:10px;border-radius:5px;'>{m['dettagli_h2h']}</div>",
+                                with st.expander("🔍 Ultimi 5 Scontri Diretti"):
+                                    st.markdown(f"<div class='h2h-box'>{m['dettagli_h2h']}</div>",
                                                 unsafe_allow_html=True)
 
     # ─── TAB 3 ──────────────────────────────────────────────────────────────────
@@ -2081,6 +2364,7 @@ if st.session_state.data_master:
                 slip, q_tot, prob, usate = costruisci_schedina_dinamica(
                     pool_f, min_q, max_q, target, escludi_match=escludi, max_match_q=mq)
                 txt = f"{titolo} ({budget:.2f}€)\n"
+                q_prog = 1.0; p_prog = 1.0
                 for x in slip:
                     bc  = "quota-real" if x['Real'] else "quota-calc"
                     ed  = x.get('Edge', 0); kl = x.get('Kelly', 0) * 100
@@ -2098,10 +2382,18 @@ if st.session_state.data_master:
                         f"<span class='kelly-pill'>{kl:.1f}% → {pt:.2f}€</span>"
                         f"</div></div>",
                         unsafe_allow_html=True)
+                    q_prog *= float(x['Quota']); p_prog *= float(x['Prob'])/100.0
+                    vincita_prog = budget * q_prog
+                    st.markdown(f"""<div class="mult-box">
+                      <div><div class="mult-label">Moltiplicatore progressivo</div>
+                      <div class="mult-value">x{q_prog:.2f}</div></div>
+                      <div style="text-align:right"><div class="mult-prob">Prob: {p_prog*100:.1f}%</div>
+                      <div class="mult-vincita">~{vincita_prog:.2f}€</div></div>
+                    </div>""", unsafe_allow_html=True)
                     txt += f"  [{x['Time']}] {x['Match']} -> {x['Tip']} @ {x['Quota']:.2f} | Edge:{ed:+.1f}% | Kelly:{kl:.1f}% ({pt:.2f}€)\n"
                 c1, c2 = st.columns(2)
-                c1.metric("Vincita Stimata",       f"~{budget*q_tot:.2f}€")
-                c2.metric("Probabilità Congiunta", f"{prob*100:.2f}%")
+                c1.metric("Vincita Finale Stimata", f"~{budget*q_tot:.2f}€")
+                c2.metric("Probabilità Congiunta",  f"{prob*100:.2f}%")
                 txt += f"Quota:{q_tot:.2f} | Prob:{prob*100:.2f}% | Vincita:~{budget*q_tot:.2f}€\n\n"
                 st.markdown("</div>", unsafe_allow_html=True)
                 return usate, txt
