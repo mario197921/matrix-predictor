@@ -16,51 +16,532 @@ load_dotenv()
 st.set_page_config(page_title="Matrix Bet V90", page_icon="🎯", layout="wide")
 
 st.markdown("""
-    <style>
-    .stApp { background-color: #ffffff; color: #1a1a1a; }
-    .stExpander { border: 1px solid #e1e4e8 !important; background-color: #ffffff !important;
-        border-radius: 10px !important; box-shadow: 0 1px 4px rgba(0,0,0,0.03) !important;
-        margin-bottom: 10px !important; }
-    .stMetric { background-color: #fcfcfc; border: 1px solid #eee; padding: 12px; border-radius: 10px; }
-    h1, h2, h3, p, span, label { color: #1a1a1a !important; font-family: 'Segoe UI', sans-serif; }
-    .strategy-box { padding: 20px; border-radius: 15px; margin-bottom: 20px; border: 2px solid #e1e4e8; }
-    .safety-bg     { background-color: #f0fff4; border-left: 5px solid #27ae60; }
-    .performance-bg{ background-color: #fffaf0; border-left: 5px solid #d35400; }
-    .risk-bg       { background-color: #fff5f5; border-left: 5px solid #c0392b; }
-    .builder-bg    { background-color: #f5f0ff; border-left: 5px solid #8e44ad; }
-    .mondiale-bg   { background-color: #f0f8ff; border-left: 5px solid #1a5276; }
-    .form-box    { letter-spacing: 2px; font-family: monospace; font-weight: bold; }
-    .ritardo-testo { color: #e53e3e; font-size: 0.85em; font-weight: bold; }
-    .dna-testo   { color: #8e44ad; font-size: 0.85em; font-weight: bold; }
-    .streak-testo, .andata-testo, .mot-testo {
-        font-size: 0.85em; font-weight: bold; padding: 3px 8px;
-        border-radius: 5px; display: inline-block; margin-top: 5px; margin-right: 5px; }
-    .streak-testo { color: #e74c3c; background-color: #fceae9; border: 1px solid #fadbd8; }
-    .andata-testo { color: #2980b9; background-color: #ebf5fb; border: 1px solid #d6eaf8; }
-    .mot-testo    { color: #1a1a1a; background-color: #fcf3cf; border: 1px solid #f1c40f; }
-    .mondiale-testo { color: #1a5276; background-color: #d6eaf8; border: 1px solid #2980b9;
-        font-size: 0.85em; font-weight: bold; padding: 3px 8px; border-radius: 5px;
-        display: inline-block; margin-top: 5px; }
-    .orario-match { color: #e67e22; font-weight: bold; font-family: monospace; font-size: 1.1em; }
-    .quota-badge      { background-color: #2ecc71; padding: 3px 8px; border-radius: 4px;
-        font-size: 0.85em; color: #fff; margin-left: 5px; font-weight: bold; }
-    .quota-badge-calc { background-color: #95a5a6; padding: 3px 8px; border-radius: 4px;
-        font-size: 0.85em; color: #fff; margin-left: 5px; }
-    .value-positive { background-color: #27ae60; padding: 3px 8px; border-radius: 4px;
-        font-size: 0.85em; color: #fff; margin-left: 5px; font-weight: bold; }
-    .pure-1x2 { margin-top: 15px; margin-bottom: 15px; padding: 10px;
-        background-color: #fdfaf0; border-radius: 8px; border-left: 5px solid #f1c40f; }
-    .star-testo { color: #c0392b; font-weight: bold; font-size: 0.85em; }
-    .cs-testo   { color: #27ae60; font-weight: bold; }
-    .fts-testo  { color: #c0392b; font-weight: bold; }
-    .budget-tag { font-size: 1.1em; font-weight: bold; color: #2c3e50; margin-bottom: 10px;
-        display: inline-block; padding: 5px 10px; background-color: #ecf0f1;
-        border-radius: 5px; border-left: 4px solid #34495e; }
-    .kelly-tag  { font-size: 0.85em; color: #8e44ad; font-weight: bold;
-        background-color: #f5f0ff; padding: 3px 8px; border-radius: 4px; }
-    .fifa-rank-badge { background-color: #1a5276; color: #fff; padding: 2px 6px;
-        border-radius: 4px; font-size: 0.8em; font-weight: bold; }
-    </style>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+/* ── VARIABILI ─────────────────────────────────────────────── */
+:root {
+  --bg:          #0f1117;
+  --bg2:         #161b27;
+  --bg3:         #1e2535;
+  --border:      #2a3248;
+  --border2:     #3a4560;
+  --accent:      #4f8ef7;
+  --accent2:     #7c5cfc;
+  --green:       #22c55e;
+  --green-dim:   #16a34a;
+  --orange:      #f59e0b;
+  --red:         #ef4444;
+  --red-dim:     #dc2626;
+  --gold:        #fbbf24;
+  --text:        #e8ecf4;
+  --text2:       #8b95b0;
+  --text3:       #4a5568;
+  --radius:      12px;
+  --radius-sm:   8px;
+  --shadow:      0 4px 24px rgba(0,0,0,0.4);
+  --glow-blue:   0 0 20px rgba(79,142,247,0.15);
+  --glow-green:  0 0 20px rgba(34,197,94,0.15);
+}
+
+/* ── BASE ─────────────────────────────────────────────────── */
+.stApp, body, [data-testid="stAppViewContainer"] {
+  background-color: var(--bg) !important;
+  color: var(--text) !important;
+  font-family: 'DM Sans', sans-serif !important;
+}
+[data-testid="stHeader"] { background: transparent !important; }
+[data-testid="stSidebar"] {
+  background: var(--bg2) !important;
+  border-right: 1px solid var(--border) !important;
+}
+[data-testid="stSidebar"] * { color: var(--text) !important; }
+
+/* ── TYPOGRAPHY ───────────────────────────────────────────── */
+h1, h2, h3 {
+  font-family: 'Syne', sans-serif !important;
+  color: var(--text) !important;
+  letter-spacing: -0.02em;
+}
+h1 { font-size: 2rem !important; font-weight: 800 !important; }
+h2 { font-size: 1.4rem !important; font-weight: 700 !important; }
+h3 { font-size: 1.1rem !important; font-weight: 600 !important; }
+p, span, label, div { color: var(--text) !important; }
+
+/* ── TABS ─────────────────────────────────────────────────── */
+.stTabs [data-baseweb="tab-list"] {
+  background: var(--bg2) !important;
+  border-radius: var(--radius) !important;
+  padding: 4px !important;
+  gap: 4px !important;
+  border: 1px solid var(--border) !important;
+}
+.stTabs [data-baseweb="tab"] {
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+  color: var(--text2) !important;
+  background: transparent !important;
+  border-radius: var(--radius-sm) !important;
+  padding: 8px 16px !important;
+  transition: all 0.2s !important;
+}
+.stTabs [aria-selected="true"] {
+  background: var(--accent) !important;
+  color: #fff !important;
+  box-shadow: var(--glow-blue) !important;
+}
+.stTabs [data-baseweb="tab-panel"] {
+  padding-top: 20px !important;
+}
+
+/* ── EXPANDER ─────────────────────────────────────────────── */
+.stExpander {
+  background: var(--bg2) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  margin-bottom: 8px !important;
+  overflow: hidden !important;
+  transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+.stExpander:hover {
+  border-color: var(--border2) !important;
+  box-shadow: var(--shadow) !important;
+}
+.stExpander summary {
+  font-family: 'DM Sans', sans-serif !important;
+  font-weight: 500 !important;
+  color: var(--text) !important;
+  padding: 14px 18px !important;
+}
+
+/* ── METRICS ─────────────────────────────────────────────── */
+[data-testid="stMetric"] {
+  background: var(--bg3) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  padding: 16px !important;
+}
+[data-testid="stMetricValue"] {
+  font-family: 'Syne', sans-serif !important;
+  font-size: 1.6rem !important;
+  font-weight: 800 !important;
+  color: var(--accent) !important;
+}
+[data-testid="stMetricLabel"] {
+  font-size: 0.75rem !important;
+  color: var(--text2) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+}
+
+/* ── BUTTONS ─────────────────────────────────────────────── */
+.stButton > button {
+  background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+  padding: 10px 20px !important;
+  width: 100% !important;
+  transition: opacity 0.2s, transform 0.1s !important;
+  box-shadow: 0 2px 12px rgba(79,142,247,0.3) !important;
+}
+.stButton > button:hover {
+  opacity: 0.9 !important;
+  transform: translateY(-1px) !important;
+}
+.stButton > button:active { transform: translateY(0) !important; }
+
+/* ── INPUTS ─────────────────────────────────────────────── */
+.stNumberInput input, .stTextInput input, .stSelectbox select,
+[data-testid="stDateInput"] input {
+  background: var(--bg3) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+  color: var(--text) !important;
+  font-family: 'DM Sans', sans-serif !important;
+}
+.stMultiSelect [data-baseweb="select"] {
+  background: var(--bg3) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+/* ── DATAFRAME ───────────────────────────────────────────── */
+[data-testid="stDataFrame"], .stDataEditor {
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  overflow: hidden !important;
+}
+
+/* ── ALERTS ─────────────────────────────────────────────── */
+[data-testid="stAlert"] {
+  background: var(--bg3) !important;
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid var(--border) !important;
+}
+
+/* ── MATCH CARD ─────────────────────────────────────────── */
+.match-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 12px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.match-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--glow-blue);
+}
+
+/* ── XG BAR ─────────────────────────────────────────────── */
+.xg-bar-wrap {
+  background: var(--bg3);
+  border-radius: 999px;
+  height: 6px;
+  margin: 6px 0 12px;
+  overflow: hidden;
+  position: relative;
+}
+.xg-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s ease;
+}
+.xg-bar-home { background: linear-gradient(90deg, var(--accent), #60a5fa); }
+.xg-bar-away { background: linear-gradient(90deg, #f87171, var(--red)); }
+
+/* ── TEAM PANEL ─────────────────────────────────────────── */
+.team-panel {
+  border-radius: var(--radius);
+  padding: 18px;
+  position: relative;
+  overflow: hidden;
+}
+.team-panel-home {
+  background: linear-gradient(135deg, #0f2040 0%, #1a2e4a 100%);
+  border: 1px solid #1e3a5f;
+}
+.team-panel-away {
+  background: linear-gradient(135deg, #200f0f 0%, #2d1515 100%);
+  border: 1px solid #3d1515;
+}
+.team-panel-shine {
+  position: absolute; top: 0; right: 0;
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  opacity: 0.06;
+  transform: translate(30px, -30px);
+}
+.team-panel-home .team-panel-shine { background: var(--accent); }
+.team-panel-away .team-panel-shine { background: var(--red); }
+.team-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.xg-number {
+  font-family: 'Syne', sans-serif;
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1;
+  margin: 8px 0;
+}
+.xg-home { color: var(--accent); }
+.xg-away { color: #f87171; }
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 0.82rem;
+}
+.stat-label { color: var(--text2); }
+.stat-value { color: var(--text); font-weight: 600; font-family: 'DM Mono', monospace; }
+.form-char {
+  display: inline-block;
+  width: 22px; height: 22px;
+  border-radius: 4px;
+  text-align: center;
+  line-height: 22px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-right: 2px;
+  font-family: 'DM Mono', monospace;
+}
+.form-W { background: var(--green); color: #fff; }
+.form-D { background: var(--orange); color: #fff; }
+.form-L { background: var(--red);   color: #fff; }
+
+/* ── PICK CARD ──────────────────────────────────────────── */
+.pick-card {
+  background: linear-gradient(135deg, #0d1f3c, #162040);
+  border: 1px solid #1e3a6e;
+  border-radius: var(--radius);
+  padding: 20px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.pick-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+}
+.pick-sign {
+  font-family: 'Syne', sans-serif;
+  font-size: 3rem;
+  font-weight: 800;
+  color: var(--gold);
+  line-height: 1;
+  margin: 8px 0;
+  text-shadow: 0 0 30px rgba(251,191,36,0.3);
+}
+.pick-prob {
+  font-size: 0.85rem;
+  color: var(--text2);
+  margin-bottom: 8px;
+}
+.edge-positive {
+  display: inline-block;
+  background: rgba(34,197,94,0.15);
+  border: 1px solid rgba(34,197,94,0.3);
+  color: var(--green) !important;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: 'DM Mono', monospace;
+}
+.edge-negative {
+  display: inline-block;
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.3);
+  color: var(--red) !important;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: 'DM Mono', monospace;
+}
+.kelly-pill {
+  display: inline-block;
+  background: rgba(124,92,252,0.15);
+  border: 1px solid rgba(124,92,252,0.3);
+  color: #a78bfa !important;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: 'DM Mono', monospace;
+  margin-left: 6px;
+}
+.quota-real {
+  display: inline-block;
+  background: rgba(34,197,94,0.15);
+  border: 1px solid rgba(34,197,94,0.3);
+  color: var(--green) !important;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+}
+.quota-calc {
+  display: inline-block;
+  background: rgba(139,149,176,0.15);
+  border: 1px solid rgba(139,149,176,0.3);
+  color: var(--text2) !important;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: 'DM Mono', monospace;
+}
+
+/* ── TOP3 CARD ──────────────────────────────────────────── */
+.top3-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.top3-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 0.85rem;
+}
+.top3-row:last-child { border-bottom: none; }
+.top3-tip { font-weight: 600; color: var(--text); }
+.top3-prob { color: var(--text2); font-family: 'DM Mono', monospace; font-size: 0.8rem; }
+
+/* ── STRATEGY BOXES ──────────────────────────────────────── */
+.strategy-box {
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+}
+.safety-bg {
+  background: linear-gradient(135deg, #0a1f0f, #0d2415);
+  border-color: #1a4a25;
+  border-left: 4px solid var(--green);
+}
+.performance-bg {
+  background: linear-gradient(135deg, #1f140a, #241a0d);
+  border-color: #4a2e10;
+  border-left: 4px solid var(--orange);
+}
+.risk-bg {
+  background: linear-gradient(135deg, #1f0a0a, #240d0d);
+  border-color: #4a1010;
+  border-left: 4px solid var(--red);
+}
+.builder-bg {
+  background: linear-gradient(135deg, #120d1f, #160f26);
+  border-color: #2d1a4a;
+  border-left: 4px solid var(--accent2);
+}
+
+/* ── SCHEDINA ROW ────────────────────────────────────────── */
+.schedina-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+}
+.schedina-match { color: var(--text2); font-size: 0.75rem; margin-top: 2px; }
+
+/* ── BADGE / TAGS ────────────────────────────────────────── */
+.tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-right: 4px;
+  margin-top: 4px;
+}
+.tag-blu    { background: rgba(79,142,247,0.15); border: 1px solid rgba(79,142,247,0.3); color: #93c5fd !important; }
+.tag-giallo { background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.3); color: var(--gold) !important; }
+.tag-verde  { background: rgba(34,197,94,0.12);  border: 1px solid rgba(34,197,94,0.3);  color: #86efac !important; }
+.tag-rosso  { background: rgba(239,68,68,0.12);  border: 1px solid rgba(239,68,68,0.3);  color: #fca5a5 !important; }
+.tag-viola  { background: rgba(124,92,252,0.12); border: 1px solid rgba(124,92,252,0.3); color: #c4b5fd !important; }
+
+/* ── SECTION HEADER ──────────────────────────────────────── */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.section-icon {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.section-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── STAT PILL ───────────────────────────────────────────── */
+.stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  margin: 3px;
+}
+.stat-pill-label { color: var(--text2); }
+.stat-pill-value { color: var(--text); font-weight: 600; font-family: 'DM Mono', monospace; }
+
+/* ── DIVIDER ─────────────────────────────────────────────── */
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+  margin: 16px 0;
+}
+
+/* ── VS BADGE ────────────────────────────────────────────── */
+.vs-badge {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--border2);
+  text-align: center;
+  padding-top: 40px;
+}
+
+/* ── SIDEBAR HEADER ──────────────────────────────────────── */
+.sidebar-logo {
+  text-align: center;
+  padding: 16px 0 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.sidebar-logo-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.sidebar-logo-sub {
+  font-size: 0.7rem;
+  color: var(--text3) !important;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* ── FORM-BOX ────────────────────────────────────────────── */
+.form-box { letter-spacing: 2px; font-family: 'DM Mono', monospace; font-weight: bold; }
+
+/* ── MISC LEGACY COMPAT ──────────────────────────────────── */
+.ritardo-testo { color: var(--red) !important; font-size: 0.85em; font-weight: bold; }
+.dna-testo     { color: #a78bfa !important; font-size: 0.85em; font-weight: bold; }
+.orario-match  { color: var(--orange) !important; font-weight: bold; font-family: 'DM Mono', monospace; }
+.cs-testo      { color: var(--green) !important; font-weight: bold; }
+.fts-testo     { color: var(--red) !important; font-weight: bold; }
+.star-testo    { color: var(--red) !important; font-weight: bold; font-size: 0.85em; }
+.budget-tag {
+  font-size: 1rem; font-weight: 700;
+  color: var(--text) !important;
+  display: inline-block; padding: 6px 14px;
+  background: var(--bg3); border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
+  margin-bottom: 12px;
+}
+</style>
 """, unsafe_allow_html=True)
 
 # ==========================================
@@ -253,6 +734,68 @@ MASTER_LEAGUES["🇳🇴 Eliteserien"]              = _no_leagues.get("Eliteseri
 MASTER_LEAGUES["🇳🇴 1. divisjon (Playoff NO)"] = _no_leagues.get("Norwegian First Division", 70)
 
 # ==========================================
+# 🏆 AUTO-DISCOVERY COPPE NAZIONALI
+# ==========================================
+# Le coppe nazionali hanno ID che cambiano ogni stagione su API-Sports.
+# Invece di hardcodarli, li troviamo automaticamente per nome+nazione.
+# I fallback sono gli ID più comuni osservati storicamente.
+
+@st.cache_data(ttl=86400)
+def trova_id_coppa(nazione: str, nome_coppa: str, fallback_id: int) -> int:
+    """Trova l'ID di una coppa nazionale cercando per nome e nazione."""
+    try:
+        resp = requests.get(
+            "https://v3.football.api-sports.io/leagues",
+            headers=HEADERS,
+            params={'country': nazione, 'name': nome_coppa, 'type': 'Cup'},
+            timeout=6
+        ).json()
+        if resp.get('response'):
+            return resp['response'][0]['league']['id']
+    except Exception:
+        pass
+    return fallback_id
+
+# Coppe Nordiche (anno solare)
+MASTER_LEAGUES["🇫🇮 Finnish Cup"]            = trova_id_coppa("Finland", "Finnish Cup", 391)
+MASTER_LEAGUES["🇳🇴 Norwegian Cup"]          = trova_id_coppa("Norway",  "Norwegian Football Cup", 112)
+MASTER_LEAGUES["🇸🇪 Svenska Cupen"]          = trova_id_coppa("Sweden",  "Svenska Cupen", 144)
+MASTER_LEAGUES["🇩🇰 DBU Pokalen"]            = trova_id_coppa("Denmark", "DBU Pokalen", 123)
+
+# Coppe Top 5 Europei
+MASTER_LEAGUES["🇮🇹 Coppa Italia"]           = trova_id_coppa("Italy",   "Coppa Italia", 137)
+MASTER_LEAGUES["🏴󠁧󠁢󠁥󠁮󠁧󠁿 FA Cup"]                = trova_id_coppa("England", "FA Cup", 45)
+MASTER_LEAGUES["🏴󠁧󠁢󠁥󠁮󠁧󠁿 EFL Cup"]               = trova_id_coppa("England", "League Cup", 48)
+MASTER_LEAGUES["🇪🇸 Copa del Rey"]           = trova_id_coppa("Spain",   "Copa del Rey", 143)
+MASTER_LEAGUES["🇩🇪 DFB Pokal"]              = trova_id_coppa("Germany", "DFB Pokal", 81)
+MASTER_LEAGUES["🇫🇷 Coupe de France"]        = trova_id_coppa("France",  "Coupe de France", 66)
+
+# Coppe Altri Europei
+MASTER_LEAGUES["🇳🇱 KNVB Beker"]             = trova_id_coppa("Netherlands", "KNVB Beker", 90)
+MASTER_LEAGUES["🇵🇹 Taça de Portugal"]       = trova_id_coppa("Portugal", "Taça de Portugal", 96)
+MASTER_LEAGUES["🇧🇪 Croky Cup"]              = trova_id_coppa("Belgium",  "Belgian Cup", 146)
+MASTER_LEAGUES["🇹🇷 Türkiye Kupası"]         = trova_id_coppa("Turkey",   "Türkiye Kupası", 204)
+MASTER_LEAGUES["🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Cup"]          = trova_id_coppa("Scotland", "Scottish Cup", 283)
+MASTER_LEAGUES["🇨🇭 Schweizer Cup"]          = trova_id_coppa("Switzerland", "Schweizer Cup", 208)
+MASTER_LEAGUES["🇦🇹 ÖFB Cup"]               = trova_id_coppa("Austria",  "ÖFB Cup", 219)
+
+# Aggiungi tutte le coppe ai set corretti
+_coppe_nomi = {
+    "🇫🇮 Finnish Cup", "🇳🇴 Norwegian Cup", "🇸🇪 Svenska Cupen", "🇩🇰 DBU Pokalen",
+    "🇮🇹 Coppa Italia", "🏴󠁧󠁢󠁥󠁮󠁧󠁿 FA Cup", "🏴󠁧󠁢󠁥󠁮󠁧󠁿 EFL Cup", "🇪🇸 Copa del Rey",
+    "🇩🇪 DFB Pokal", "🇫🇷 Coupe de France", "🇳🇱 KNVB Beker",
+    "🇵🇹 Taça de Portugal", "🇧🇪 Croky Cup", "🇹🇷 Türkiye Kupası",
+    "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Cup", "🇨🇭 Schweizer Cup", "🇦🇹 ÖFB Cup",
+}
+# Le coppe nordiche usano anno solare come stagione
+LEGHE_ANNO_SOLARE.update({
+    "🇫🇮 Finnish Cup", "🇳🇴 Norwegian Cup",
+    "🇸🇪 Svenska Cupen", "🇩🇰 DBU Pokalen",
+})
+# Tutte le coppe sono trattate come coppe (peso momentum 80%, motivazione alta)
+COPPE_NAZIONALI = _coppe_nomi
+
+# ==========================================
 # 📡 MODULI API — DATI GENERALI
 # ==========================================
 @st.cache_data(ttl=3600)
@@ -397,49 +940,71 @@ def analizza_statistiche_stagionali(league_id: int, team_id: int, season_lega):
 
 @st.cache_data(ttl=1800)
 def analizza_statistiche_avanzate_pro(team_id: int):
-    """Cached 30min — riduce ~80% delle chiamate API rispetto alla versione precedente."""
+    """
+    Cached 30min.
+    MIGLIORIA 1: Cinismo corretto — sottrae i rigori dal calcolo.
+    MIGLIORIA 2: Storico casa/trasferta separato per xG più preciso.
+    """
     try:
         resp = requests.get(
             "https://v3.football.api-sports.io/fixtures",
-            headers=HEADERS, params={'team': team_id, 'last': 10, 'status': 'FT'}, timeout=8
+            headers=HEADERS, params={"team": team_id, "last": 10, "status": "FT"}, timeout=8
         ).json()
-        matches = resp.get('response', [])
+        matches = resp.get("response", [])
+
         tot_poss = tot_tiri = tot_area = tot_gf = tot_gs = 0
-        tot_corn = tot_cart = tot_falli = tot_par = 0
+        tot_corn = tot_cart = tot_falli = tot_par = tot_rigori = 0
         mv_stats = mv_goals = sq_certi = 0
+
+        # MIGLIORIA 2: contatori separati casa/trasferta
+        gf_home = gs_home = n_home = 0
+        gf_away = gs_away = n_away = 0
+
         for i, m in enumerate(matches):
-            fid     = m['fixture']['id']
-            is_home = str(m['teams']['home']['id']) == str(team_id)
-            gf = m['goals']['home'] if is_home else m['goals']['away']
-            gs = m['goals']['away'] if is_home else m['goals']['home']
+            fid     = m["fixture"]["id"]
+            is_home = str(m["teams"]["home"]["id"]) == str(team_id)
+            gf = m["goals"]["home"] if is_home else m["goals"]["away"]
+            gs = m["goals"]["away"] if is_home else m["goals"]["home"]
             if gf is not None and gs is not None:
                 tot_gf += int(gf); tot_gs += int(gs); mv_goals += 1
+                # Split casa/trasferta
+                if is_home:
+                    gf_home += int(gf); gs_home += int(gs); n_home += 1
+                else:
+                    gf_away += int(gf); gs_away += int(gs); n_away += 1
+
             if i == 0:
                 ev = requests.get(
                     "https://v3.football.api-sports.io/fixtures/events",
-                    headers=HEADERS, params={'fixture': fid}, timeout=8
+                    headers=HEADERS, params={"fixture": fid}, timeout=8
                 ).json()
-                for e in ev.get('response', []):
-                    if str(e['team']['id']) == str(team_id) and e['type'] == 'Card' and 'Red' in e.get('detail', ''):
-                        sq_certi += 1
+                for e in ev.get("response", []):
+                    if str(e["team"]["id"]) == str(team_id):
+                        if e["type"] == "Card" and "Red" in e.get("detail", ""):
+                            sq_certi += 1
+
             sr = requests.get(
                 "https://v3.football.api-sports.io/fixtures/statistics",
-                headers=HEADERS, params={'fixture': fid}, timeout=8
+                headers=HEADERS, params={"fixture": fid}, timeout=8
             ).json()
-            for ts in sr.get('response', []):
-                if str(ts['team']['id']) == str(team_id):
-                    s = {x['type']: x['value'] for x in ts['statistics']}
-                    poss = str(s.get('Ball Possession', '50%')).replace('%', '')
+            for ts in sr.get("response", []):
+                if str(ts["team"]["id"]) == str(team_id):
+                    s = {x["type"]: x["value"] for x in ts["statistics"]}
+                    poss = str(s.get("Ball Possession", "50%")).replace("%", "")
                     tot_poss  += int(poss) if poss.isdigit() else 50
-                    tot_tiri  += int(s.get('Shots on Goal', 0)    or 0)
-                    tot_area  += int(s.get('Shots insidebox', 0)  or 0)
-                    tot_corn  += int(s.get('Corner Kicks', 0)     or 0)
-                    tot_falli += int(s.get('Fouls', 0)            or 0)
-                    tot_par   += int(s.get('Goalkeeper Saves', 0) or 0)
-                    tot_cart  += int(s.get('Yellow Cards', 0) or 0) + int(s.get('Red Cards', 0) or 0)
-                    mv_stats  += 1
+                    tot_tiri  += int(s.get("Shots on Goal", 0)    or 0)
+                    tot_area  += int(s.get("Shots insidebox", 0)  or 0)
+                    tot_corn  += int(s.get("Corner Kicks", 0)     or 0)
+                    tot_falli += int(s.get("Fouls", 0)            or 0)
+                    tot_par   += int(s.get("Goalkeeper Saves", 0) or 0)
+                    tot_cart  += int(s.get("Yellow Cards", 0) or 0) + int(s.get("Red Cards", 0) or 0)
+                    # MIGLIORIA 1: estrai rigori segnati
+                    tot_rigori += int(s.get("Penalty Goals", 0) or 0)
+                    mv_stats   += 1
+
         if mv_stats == 0: mv_stats = 1
         if mv_goals == 0: mv_goals = 1
+
         avg_poss  = tot_poss  / mv_stats
         avg_tiri  = tot_tiri  / mv_stats
         avg_area  = tot_area  / mv_stats
@@ -449,13 +1014,30 @@ def analizza_statistiche_avanzate_pro(team_id: int):
         avg_par   = tot_par   / mv_stats
         avg_gf    = tot_gf    / mv_goals
         avg_gs    = tot_gs    / mv_goals
-        conv = avg_tiri / avg_gf if avg_gf > 0 else 10.0
+        avg_rig   = tot_rigori / mv_goals
+
+        # MIGLIORIA 1: Cinismo da gioco (esclude rigori)
+        gol_da_gioco  = max(0.1, avg_gf  - avg_rig)
+        tiri_da_gioco = max(0.1, avg_tiri - avg_rig)
+        conv = tiri_da_gioco / gol_da_gioco if gol_da_gioco > 0 else 10.0
+
+        # MIGLIORIA 2: medie casa/trasferta (usate per xG splitting)
+        avg_gf_home = gf_home / max(1, n_home)
+        avg_gs_home = gs_home / max(1, n_home)
+        avg_gf_away = gf_away / max(1, n_away)
+        avg_gs_away = gs_away / max(1, n_away)
+
         if avg_poss > 55 and avg_area < 4:   stile = "Tiki-Taka Sterile"
         elif avg_poss < 45 and avg_area > 4: stile = "Verticale Diretto"
         else:                                 stile = "Bilanciato"
-        return avg_poss, avg_tiri, avg_area, conv, avg_corn, avg_cart, avg_falli, avg_par, stile, sq_certi, avg_gf, avg_gs
+
+        # Return esteso: aggiunge avg_rig, avg_gf_home, avg_gs_home, avg_gf_away, avg_gs_away
+        return (avg_poss, avg_tiri, avg_area, conv, avg_corn, avg_cart, avg_falli, avg_par,
+                stile, sq_certi, avg_gf, avg_gs,
+                avg_rig, avg_gf_home, avg_gs_home, avg_gf_away, avg_gs_away)
     except Exception:
-        return 50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5, "Bilanciato", 0, 1.0, 1.0
+        return (50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5,
+                "Bilanciato", 0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0)
 
 # ==========================================
 # 🌍 MODULO MONDIALE — Logica dedicata per Nazionali
@@ -820,8 +1402,16 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
 if 'data_master'     not in st.session_state: st.session_state.data_master     = {}
 if 'all_tips_global' not in st.session_state: st.session_state.all_tips_global = []
 
-st.sidebar.header("⚙️ Centrale Operativa V90")
-date_range = st.sidebar.date_input("Seleziona Periodo (Dal - Al):", [])
+# ── SIDEBAR HEADER ────────────────────────────────────────────────────────────
+st.sidebar.markdown("""
+<div class='sidebar-logo'>
+  <div class='sidebar-logo-title'>MATRIX BET V90</div>
+  <div class='sidebar-logo-sub'>Predictive Analytics Engine</div>
+</div>
+""", unsafe_allow_html=True)
+
+st.sidebar.markdown("**📅 Periodo di analisi**")
+date_range = st.sidebar.date_input("", [])
 if len(date_range) == 2:   start_date, end_date = date_range[0], date_range[1]
 elif len(date_range) == 1: start_date = end_date = date_range[0]
 else:                       start_date = end_date = datetime.now().date()
@@ -863,7 +1453,9 @@ if btn_genera:
     for name in scelte:
         f_id         = active_dict[name]
         is_mondiale  = (f_id == 1)
-        is_coppa     = name in COPPE_EUROPEE
+        is_coppa_eu  = name in COPPE_EUROPEE
+        is_coppa_naz = name in COPPE_NAZIONALI
+        is_coppa     = is_coppa_eu or is_coppa_naz
         is_anno_sol  = name in LEGHE_ANNO_SOLARE
         is_playoff   = name in LEGHE_PLAYOFF
         is_lega_cieca = f_id in LEGHE_CIECHE
@@ -1026,9 +1618,11 @@ if btn_genera:
                  b_and_c, b_and_t, andata_msg, det_h2h) = analizza_h2h_dna_e_andata(
                     db_stats[c_s]['id'], db_stats[t_s]['id'])
                 (poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c,
-                 par_c, stile_c, sq_cert_c, gf_10_c, gs_10_c) = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
+                 par_c, stile_c, sq_cert_c, gf_10_c, gs_10_c,
+                 rig_c, gf_home_c, gs_home_c, gf_away_c, gs_away_c) = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
                 (poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t,
-                 par_t, stile_t, sq_cert_t, gf_10_t, gs_10_t) = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
+                 par_t, stile_t, sq_cert_t, gf_10_t, gs_10_t,
+                 rig_t, gf_home_t, gs_home_t, gf_away_t, gs_away_t) = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
 
                 c_id = db_stats[c_s]['id']; t_id = db_stats[t_s]['id']
                 msg_radar = ("⚠️ Radar Infortuni Offline (Lega Minore)" if is_lega_cieca else "")
@@ -1074,8 +1668,12 @@ if btn_genera:
 
                 # Motivazione
                 m_mot_c = m_mot_t = 1.0; tension_idx = 1.0; msg_mot = ""
-                if is_coppa and mese_att in [3, 4, 5]:
+                if is_coppa_naz:
+                    m_mot_c = m_mot_t = 1.20; tension_idx += 0.25; msg_mot = "🏆 COPPA NAZIONALE"
+                elif is_coppa_eu and mese_att in [3, 4, 5]:
                     m_mot_c = m_mot_t = 1.25; tension_idx += 0.3; msg_mot = "🔥 DENTRO O FUORI"
+                elif is_coppa_eu:
+                    m_mot_c = m_mot_t = 1.15; tension_idx += 0.2; msg_mot = "🇪🇺 Coppa Europea"
                 elif is_playoff:
                     m_mot_c = m_mot_t = 1.30; tension_idx += 0.4; msg_mot = "⚡ PLAYOFF"
                 elif not is_coppa:
@@ -1098,8 +1696,10 @@ if btn_genera:
                 # Hybrid xG
                 xg_st_c = math.sqrt(max(0.01, db_stats[c_s]['ac']) * max(0.01, db_stats[t_s]['dt']))
                 xg_st_t = math.sqrt(max(0.01, db_stats[t_s]['at']) * max(0.01, db_stats[c_s]['dc']))
-                xg_mo_c = math.sqrt(max(0.01, gf_10_c) * max(0.01, gs_10_t))
-                xg_mo_t = math.sqrt(max(0.01, gf_10_t) * max(0.01, gs_10_c))
+                # MIGLIORIA 2: xG momentum usa casa/trasferta separati
+                # Casa gioca in casa → usiamo i suoi gol_fatti_in_casa vs gol_subiti_in_casa dell'avversario
+                xg_mo_c = math.sqrt(max(0.01, gf_home_c) * max(0.01, gs_home_t))
+                xg_mo_t = math.sqrt(max(0.01, gf_away_t) * max(0.01, gs_away_c))
                 # Peso momentum: 80% per coppe/playoff/inizio stagione, 30% per campionati normali
                 peso_mom  = 0.80 if (is_coppa or is_playoff or db_stats[c_s]['giocate'] <= 5) else 0.30
                 peso_std  = 1.0 - peso_mom
@@ -1182,9 +1782,11 @@ if btn_genera:
                     "stan_t": "⚠️ Fatigue" if is_stanca_t else "✅ Riposo",
                     "forma_c": forma_c, "forma_t": forma_t, "rit_c": rit_c, "rit_t": rit_t,
                     "poss_c": poss_c, "tiri_c": tiri_c, "conv_c": conv_c, "stile_c": stile_c,
-                    "box_c": box_c, "falli_c": falli_c, "parate_c": par_c,
+                    "box_c": box_c, "falli_c": falli_c, "parate_c": par_c, "rig_c": rig_c,
+                    "gf_home_c": gf_home_c, "gs_home_c": gs_home_c,
                     "poss_t": poss_t, "tiri_t": tiri_t, "conv_t": conv_t, "stile_t": stile_t,
-                    "box_t": box_t, "falli_t": falli_t, "parate_t": par_t,
+                    "box_t": box_t, "falli_t": falli_t, "parate_t": par_t, "rig_t": rig_t,
+                    "gf_away_t": gf_away_t, "gs_away_t": gs_away_t,
                     "corn_tot": avg_corn, "cart_tot": avg_cart, "falli_tot": tot_falli,
                 })
 
@@ -1194,6 +1796,21 @@ if btn_genera:
 # ==========================================
 # 🖥️ DISPLAY: 3 TAB
 # ==========================================
+# ── MAIN HEADER ──────────────────────────────────────────────────────────────
+st.markdown("""
+<div style="padding: 28px 0 20px;">
+  <div style="font-family:'Syne',sans-serif;font-size:2.4rem;font-weight:800;
+    background:linear-gradient(135deg,#4f8ef7,#7c5cfc);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    line-height:1;margin-bottom:6px;">
+    🎯 MATRIX BET V90
+  </div>
+  <div style="font-size:0.85rem;color:#8b95b0;letter-spacing:0.05em;">
+    Predictive Football Analytics — Powered by API-Sports & Poisson Model
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
 if st.session_state.data_master:
     t1, t2, t3 = st.tabs(["🛒 TOP 10 & BUILDER", "🔬 ESPLORATORE PARTITE", "🏆 SCHEDINE AUTOMATICHE"])
 
@@ -1252,9 +1869,19 @@ if st.session_state.data_master:
             txt = "=== RICEVUTA MATRIX V90 ===\n\n"
             for pick in carrello:
                 edge = pick.get('Edge', 0); kelly = pick.get('Kelly', 0)
-                st.write(f"✅ {pick['Match']}: **{pick['Tip']}** "
-                         f"(Q {pick['Quota']:.2f} | Edge: {edge:.1f}% | Kelly: {kelly*100:.1f}%)")
-                q_tot_b   *= float(pick['Quota'])
+                bc   = "quota-real" if pick.get('Real') else "quota-calc"
+                ec_c = "edge-positive" if edge > 0 else "edge-negative"
+                st.markdown(
+                    f"<div class='schedina-row'>"
+                    f"<div><div style='font-weight:600;color:var(--text);'>✅ {pick['Match']} → <strong>{pick['Tip']}</strong></div>"
+                    f"<div class='schedina-match'>{pick.get('League','')} | {pick['Time']}</div></div>"
+                    f"<div style='text-align:right;'>"
+                    f"<span class='{bc}'>Q {pick['Quota']:.2f}</span> "
+                    f"<span class='{ec_c}'>{edge:+.1f}%</span> "
+                    f"<span class='kelly-pill'>K: {kelly*100:.1f}%</span>"
+                    f"</div></div>",
+                    unsafe_allow_html=True)
+                q_tot_b    *= float(pick['Quota'])
                 prob_tot_b *= float(pick['Prob']) / 100.0
                 txt += f"[{pick['Time']}] {pick['Match']} -> {pick['Tip']} @ {pick['Quota']:.2f} | Edge: {edge:.1f}%\n"
             txt += (f"\n📊 QUOTA TOTALE: {q_tot_b:.2f}\n"
@@ -1305,40 +1932,49 @@ if st.session_state.data_master:
                         pc1, pc2 = st.columns([1, 1.5])
                         with pc1:
                             if m['best_1x2'][0] == "No Segno Fisso":
-                                st.markdown("<div class='pure-1x2' style='text-align:center;'>"
-                                            "⚠️ <b>NESSUN SEGNO SICURO</b></div>", unsafe_allow_html=True)
+                                st.markdown("""
+<div class="pick-card" style="border-color:#3d1515;">
+  <div style="font-size:2rem;margin:8px 0;">⚠️</div>
+  <div style="font-family:'Syne',sans-serif;font-weight:700;color:#f87171;">NESSUN SEGNO SICURO</div>
+  <div style="font-size:0.8rem;color:var(--text2);margin-top:8px;">Usa Combo o Multigol</div>
+</div>""", unsafe_allow_html=True)
                             else:
-                                bc = "quota-badge" if m['best_1x2'][3] else "quota-badge-calc"
-                                bl = "Ufficiale Bet365" if m['best_1x2'][3] else "Calibrata V90"
-                                edge_v = calcola_edge_pct(m['best_1x2'][1], float(m['best_1x2'][2]))
+                                bc  = "quota-real" if m['best_1x2'][3] else "quota-calc"
+                                bl  = "Bet365" if m['best_1x2'][3] else "V90 Est."
+                                edge_v  = calcola_edge_pct(m['best_1x2'][1], float(m['best_1x2'][2]))
                                 kelly_v = kelly_fraction(m['best_1x2'][1], float(m['best_1x2'][2]))
-                                ec = "#27ae60" if edge_v > 0 else "#e74c3c"
-                                st.markdown(
-                                    f"<div class='pure-1x2' style='text-align:center;'>"
-                                    f"👑 Miglior Segno Secco<br>"
-                                    f"<span style='font-size:1.8em;font-weight:900;'>{m['best_1x2'][0]}</span><br>"
-                                    f"Prob: {m['best_1x2'][1]:.1f}% | "
-                                    f"<span style='color:{ec};font-weight:bold;'>Edge: {edge_v:+.1f}%</span><br>"
-                                    f"<span class='{bc}'>{bl}: {m['best_1x2'][2]}</span> "
-                                    f"<span class='kelly-tag'>Kelly: {kelly_v*100:.1f}%</span>"
-                                    f"</div>", unsafe_allow_html=True)
+                                ec_cls  = "edge-positive" if edge_v > 0 else "edge-negative"
+                                st.markdown(f"""
+<div class="pick-card">
+  <div style="font-size:0.75rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.1em;">👑 Miglior Segno</div>
+  <div class="pick-sign">{m['best_1x2'][0]}</div>
+  <div class="pick-prob">Probabilità stimata: <strong style="color:var(--text)">{m['best_1x2'][1]:.1f}%</strong></div>
+  <div style="margin-bottom:10px;">
+    <span class="{ec_cls}">Edge {edge_v:+.1f}%</span>
+    <span class="kelly-pill">Kelly {kelly_v*100:.1f}%</span>
+  </div>
+  <div><span class="{bc}">{bl}: {m['best_1x2'][2]}</span></div>
+</div>""", unsafe_allow_html=True)
                         with pc2:
                             excl = ["U4.5","O0.5","O1.5","Casa O0.5","Ospite O0.5"]
                             top3 = sorted({k:v for k,v in m['all_tips'].items() if k not in excl}.items(),
                                           key=lambda x: x[1], reverse=True)[:3]
                             rows = ""
                             for idx, (tk, tv) in enumerate(top3):
-                                qf, _ = get_quota_finale(tk, tv, m['quote_reali'])
+                                qf, qreal = get_quota_finale(tk, tv, m['quote_reali'])
                                 ef    = calcola_edge_pct(tv, qf)
-                                ec    = "#27ae60" if ef > 0 else "#e74c3c"
+                                ec_c  = "edge-positive" if ef > 0 else "edge-negative"
+                                qc    = "quota-real" if qreal else "quota-calc"
                                 medal = ["🥇","🥈","🥉"][idx]
-                                rows += (f"<div style='margin-bottom:8px;'>{medal} <b>{tk}</b> ({tv:.1f}%) "
-                                         f"<span class='quota-badge-calc' style='float:right;'>Q:{qf}</span> "
-                                         f"<span style='color:{ec};font-size:0.8em;'>{ef:+.1f}%</span></div>")
+                                rows += (f"<div class='top3-row'>"
+                                         f"<span>{medal} <span class='top3-tip'>{tk}</span>"
+                                         f"<span class='top3-prob' style='margin-left:6px;'>{tv:.0f}%</span></span>"
+                                         f"<span><span class='{ec_c}'>{ef:+.0f}%</span> "
+                                         f"<span class='{qc}' style='margin-left:4px;'>Q{qf}</span></span></div>")
                             st.markdown(
-                                f"<div style='background:#f8f9fa;padding:15px;border-radius:8px;"
-                                f"border:1px solid #e1e4e8;'>"
-                                f"<div style='font-weight:700;margin-bottom:10px;'>🔝 TOP 3 OMNI-MARKET</div>"
+                                f"<div class='top3-card'>"
+                                f"<div class='section-header' style='margin-bottom:12px;'>"
+                                f"<span style='font-family:Syne,sans-serif;font-weight:700;font-size:0.9rem;'>🔝 TOP 3 OMNI-MARKET</span></div>"
                                 f"{rows}</div>", unsafe_allow_html=True)
 
                         st.markdown("---")
@@ -1348,40 +1984,46 @@ if st.session_state.data_master:
                         def scheda(col, nome, rank, xg, forma, stan, count, t1_s, sq,
                                    gk_out, def_out, stile, poss, par, conv, cs, fts, colore, icona):
                             with col:
-                                st.markdown(
-                                    f"<div style='border-left:4px solid {colore};"
-                                    f"background-color:#f4f9fd;padding:12px;border-radius:0 8px 8px 0;'>",
-                                    unsafe_allow_html=True)
-                                rank_lbl = "" if camp in COPPE_EUROPEE or m.get('is_mondiale') \
-                                           else f" <span style='font-size:0.7em;color:#7f8c8d;'>(#{rank})</span>"
-                                st.markdown(f"<h4 style='margin-top:0;color:{colore};'>{icona} {nome}{rank_lbl}</h4>",
-                                            unsafe_allow_html=True)
-                                st.markdown(f"<div style='font-size:1.8em;font-weight:900;color:{colore};"
-                                            f"margin-bottom:10px;'>xG: {xg:.2f}</div>", unsafe_allow_html=True)
-                                st.write(f"**Forma:** <span class='form-box'>{forma}</span> ({stan})", unsafe_allow_html=True)
-                                sb = f" (<span class='star-testo'>{t1_s} Star</span>)" if t1_s > 0 else ""
-                                sqb = f" <span class='star-testo'>[{sq} 🟥]</span>" if sq > 0 else ""
-                                st.write(f"**Assenti:** 🚑 {count}{sb}{sqb}"
-                                         + (" 🧤🚫" if gk_out else "") + (" 🧱⚠️" if def_out >= 2 else ""),
-                                         unsafe_allow_html=True)
-                                if not m.get('is_mondiale'):
-                                    st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
-                                    st.write(f"**Stile:** {stile}")
-                                    st.write(f"Possesso: **{poss:.1f}%** | Parate: **{par:.1f}**")
-                                    st.write(f"Cinismo: **1 gol ogni {conv:.1f} tiri**")
-                                    st.write(f"Difesa: CS <span class='cs-testo'>{cs:.0f}%</span> | "
-                                             f"A secco <span class='fts-testo'>{fts:.0f}%</span>",
-                                             unsafe_allow_html=True)
-                                st.markdown("</div>", unsafe_allow_html=True)
+                                panel_cls = "team-panel-home" if icona == "🏠" else "team-panel-away"
+                                xg_cls    = "xg-home"        if icona == "🏠" else "xg-away"
+                                rank_lbl  = "" if camp in COPPE_EUROPEE or m.get("is_mondiale") \
+                                            else f'<span style="font-size:0.7rem;color:var(--text2);margin-left:6px;">#{rank}</span>'
+                                forma_html = ""
+                                for ch in (forma or ""):
+                                    fc = "form-W" if ch=="W" else ("form-D" if ch=="D" else "form-L")
+                                    forma_html += f'<span class="form-char {fc}">{ch}</span>'
+                                badge_assenti = ""
+                                if t1_s > 0:  badge_assenti += f'<span class="tag tag-rosso">⭐ {t1_s} Star out</span>'
+                                if sq > 0:    badge_assenti += f'<span class="tag tag-rosso">🟥 {sq} Squalif.</span>'
+                                if gk_out:    badge_assenti += '<span class="tag tag-rosso">🧤 PO out</span>'
+                                if def_out>=2: badge_assenti += '<span class="tag tag-rosso">🧱 2+ Dif. out</span>'
+                                xg_pct = min(100, int((xg / 3.2) * 100))
+                                bar_cls = "xg-bar-home" if icona == "🏠" else "xg-bar-away"
+                                fatica = "⚠️ Fatigue" if "Fatigue" in stan else "✅ Riposo"
+                                st.markdown(f"""
+<div class="team-panel {panel_cls}">
+  <div class="team-panel-shine"></div>
+  <div class="team-name">{icona} {nome} {rank_lbl}</div>
+  <div class="{xg_cls} xg-number">xG {xg:.2f}</div>
+  <div class="xg-bar-wrap"><div class="xg-bar-fill {bar_cls}" style="width:{xg_pct}%"></div></div>
+  <div style="margin-bottom:8px;">{forma_html}<span style="font-size:0.72rem;color:var(--text2);margin-left:8px;">{fatica}</span></div>
+  <div style="margin-bottom:10px;">{badge_assenti if badge_assenti else f'<span class="tag tag-verde">✅ Rosa al completo</span>' if count==0 else f'<span class="tag tag-giallo">🚑 {count} assenti</span>'}</div>
+  <div class="divider"></div>
+  <div class="stat-row"><span class="stat-label">Stile di gioco</span><span class="stat-value">{stile}</span></div>
+  <div class="stat-row"><span class="stat-label">Possesso medio</span><span class="stat-value">{poss:.0f}%</span></div>
+  <div class="stat-row"><span class="stat-label">Parate / gara</span><span class="stat-value">{par:.1f}</span></div>
+  <div class="stat-row"><span class="stat-label">Cinismo (da gioco)</span><span class="stat-value">1 gol / {conv:.1f} tiri</span></div>
+  <div class="stat-row"><span class="stat-label">Clean Sheet</span><span class="stat-value" style="color:var(--green)">{cs:.0f}%</span></div>
+  <div class="stat-row" style="border:none"><span class="stat-label">A Secco</span><span class="stat-value" style="color:var(--red)">{fts:.0f}%</span></div>
+</div>""", unsafe_allow_html=True)
+
 
                         scheda(ch, m['c_s'], m['rank_c'], m['xg_c'], m['forma_c'], m['stan_c'],
                                m['count_c'], m['t1_c'], m['sq_c'], m['gk_out_c'], m['def_out_c'],
                                m['stile_c'], m['poss_c'], m['parate_c'], m['conv_c'],
                                m['cs_c'], m['fts_c'], "#2980b9", "🏠")
                         with cvs:
-                            st.markdown("<div style='text-align:center;height:100%;display:flex;"
-                                        "align-items:center;justify-content:center;'>"
-                                        "<h3 style='color:#bdc3c7;'>VS</h3></div>", unsafe_allow_html=True)
+                            st.markdown("<div class='vs-badge'>VS</div>", unsafe_allow_html=True)
                         scheda(ca, m['t_s'], m['rank_t'], m['xg_t'], m['forma_t'], m['stan_t'],
                                m['count_t'], m['t1_t'], m['sq_t'], m['gk_out_t'], m['def_out_t'],
                                m['stile_t'], m['poss_t'], m['parate_t'], m['conv_t'],
@@ -1440,15 +2082,21 @@ if st.session_state.data_master:
                     pool_f, min_q, max_q, target, escludi_match=escludi, max_match_q=mq)
                 txt = f"{titolo} ({budget:.2f}€)\n"
                 for x in slip:
-                    bc  = "quota-badge" if x['Real'] else "quota-badge-calc"
+                    bc  = "quota-real" if x['Real'] else "quota-calc"
                     ed  = x.get('Edge', 0); kl = x.get('Kelly', 0) * 100
                     pt  = budget * x.get('Kelly', 0)
-                    ec  = "#27ae60" if ed > 0 else "#e74c3c"
-                    st.write(
-                        f"• <span class='orario-match'>[{x['Time']}]</span> {x['Match']}: "
-                        f"**{x['Tip']}** <span class='{bc}'>Q:{x['Quota']}</span> "
-                        f"<span style='color:{ec};font-size:0.85em;'>Edge:{ed:+.1f}%</span> "
-                        f"<span class='kelly-tag'>Kelly:{kl:.1f}% → {pt:.2f}€</span>",
+                    ec_cls = "edge-positive" if ed > 0 else "edge-negative"
+                    st.markdown(
+                        f"<div class='schedina-row'>"
+                        f"<div><div style='font-weight:600;color:var(--text);'>"
+                        f"<span style='color:var(--orange);font-family:DM Mono,monospace;font-size:0.8rem;'>[{x['Time']}]</span> "
+                        f"{x['Match']} → <strong>{x['Tip']}</strong></div>"
+                        f"<div class='schedina-match'>{x['League']}</div></div>"
+                        f"<div style='text-align:right;white-space:nowrap;'>"
+                        f"<span class='{bc}'>Q {x['Quota']}</span> "
+                        f"<span class='{ec_cls}'>{ed:+.0f}%</span> "
+                        f"<span class='kelly-pill'>{kl:.1f}% → {pt:.2f}€</span>"
+                        f"</div></div>",
                         unsafe_allow_html=True)
                     txt += f"  [{x['Time']}] {x['Match']} -> {x['Tip']} @ {x['Quota']:.2f} | Edge:{ed:+.1f}% | Kelly:{kl:.1f}% ({pt:.2f}€)\n"
                 c1, c2 = st.columns(2)
