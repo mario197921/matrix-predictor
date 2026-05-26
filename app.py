@@ -2198,16 +2198,21 @@ if st.session_state.data_master:
         st.info("💡 **Edge%** = valore della scommessa. Verde = edge positivo. "
                 "**Kelly%** = percentuale ottimale del budget da puntare su quel singolo evento.")
 
-        def mostra_tabella(titolo, tip_filter, min_q=1.01, max_rows=10):
+        def mostra_tabella(titolo, tip_filter, min_q=1.01, max_q=99.0, max_rows=10, sort_by="Edge"):
             st.subheader(titolo)
             pool = [x for x in st.session_state.all_tips_global
                     if (tip_filter(x['Tip']) if callable(tip_filter) else x['Tip'] in tip_filter)
-                    and float(x['Quota']) >= min_q]
+                    and float(x['Quota']) >= min_q
+                    and float(x['Quota']) <= max_q]
             if not pool:
                 st.info("Nessun dato per questa categoria.")
                 return []
-            df = pd.DataFrame(pool).sort_values("Edge", ascending=False).head(max_rows)
-            df = df[['Match','Tip','Prob','Quota','Edge','Kelly','Time','League']]
+            df = pd.DataFrame(pool).sort_values(sort_by, ascending=False).head(max_rows)
+            cols = ['Match','Tip','Prob','Quota','Edge','Kelly','Time','League']
+            if 'Score' in df.columns and sort_by == 'Score':
+                df = df[cols]   # Score usato solo per ordinamento, non mostrato
+            else:
+                df = df[cols]
             df['Kelly'] = (df['Kelly'] * 100).round(1)
             df.insert(0, "🛒", False)
             ed = st.data_editor(df,
@@ -2223,15 +2228,31 @@ if st.session_state.data_master:
                 key=f"ed_{titolo}")
             return ed[ed["🛒"] == True].to_dict('records')
 
-        sel_1  = mostra_tabella("👑 Top 10 Value Bet Assoluta",
-                                lambda t: t not in ["U4.5","Casa O0.5","Ospite O0.5"])
-        sel_2  = mostra_tabella("🛡️ Top 10 Doppie Chance",          ["1X","X2","12"])
-        sel_3  = mostra_tabella("⚽ Top 10 Over / Under",
-                                lambda t: (t.startswith("O") or t.startswith("U")) and "+" not in t)
-        sel_4  = mostra_tabella("🎯 Top 10 Goal / NoGoal",           ["Goal","NoGoal"])
-        sel_mg = mostra_tabella("🥅 Top 10 Multigol",                lambda t: t.startswith("MG"))
-        sel_co = mostra_tabella("🧩 Top 10 Combo Match",             lambda t: "+" in t)
-        sel_6  = mostra_tabella("🧨 Top 10 Azzardi (Quote ≥ 2.50)", lambda t: True, min_q=2.50)
+        # Score combinato per Top Assoluta: bilancia probabilità alta e edge positivo
+        for tip in st.session_state.all_tips_global:
+            tip['Score'] = (tip['Prob'] / 100.0) * max(0, tip['Edge']) if tip['Edge'] > 0 else 0.0
+
+        sel_1  = mostra_tabella("👑 Top 10 Value Bet Assoluta (1.05–1.50)",
+                                lambda t: t not in ["U4.5","Casa O0.5","Ospite O0.5"],
+                                min_q=1.10, max_q=1.50, sort_by="Score")
+        sel_2  = mostra_tabella("🛡️ Top 10 Doppie Chance (1.05–1.80)",
+                                ["1X","X2","12"],
+                                min_q=1.10, max_q=1.80, sort_by="Score")
+        sel_3  = mostra_tabella("⚽ Top 10 Over / Under (1.05–2.00)",
+                                lambda t: (t.startswith("O") or t.startswith("U")) and "+" not in t,
+                                min_q=1.10, max_q=2.00, sort_by="Score")
+        sel_4  = mostra_tabella("🎯 Top 10 Goal / NoGoal (1.05–2.00)",
+                                ["Goal","NoGoal"],
+                                min_q=1.10, max_q=2.00, sort_by="Score")
+        sel_mg = mostra_tabella("🥅 Top 10 Multigol (1.05–2.00)",
+                                lambda t: t.startswith("MG"),
+                                min_q=1.10, max_q=2.00, sort_by="Score")
+        sel_co = mostra_tabella("🧩 Top 10 Combo Match (1.05–2.50)",
+                                lambda t: "+" in t,
+                                min_q=1.10, max_q=2.50, sort_by="Score")
+        sel_6  = mostra_tabella("🧨 Top 10 Azzardi (Quote ≥ 2.50)",
+                                lambda t: True,
+                                min_q=2.50, sort_by="Edge")
 
         tutte = sel_1 + sel_2 + sel_3 + sel_4 + sel_mg + sel_co + sel_6
         viste: set = set(); carrello = []
