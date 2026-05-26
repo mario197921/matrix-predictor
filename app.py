@@ -169,6 +169,20 @@ p, span, label, div { color: var(--text) !important; }
   border: 1px solid var(--border) !important;
   border-radius: var(--radius-sm) !important;
 }
+/* Pills campionati selezionati — blu invece di rosso/arancione */
+.stMultiSelect [data-baseweb="tag"] {
+  background-color: rgba(79,142,247,0.20) !important;
+  border: 1px solid rgba(79,142,247,0.40) !important;
+  border-radius: 999px !important;
+}
+.stMultiSelect [data-baseweb="tag"] span {
+  color: #93c5fd !important;
+  font-family: 'DM Sans', sans-serif !important;
+  font-size: 0.78rem !important;
+}
+.stMultiSelect [data-baseweb="tag"] [role="presentation"] {
+  color: #93c5fd !important;
+}
 
 /* ── DATAFRAME ───────────────────────────────────────────── */
 [data-testid="stDataFrame"], .stDataEditor {
@@ -1089,6 +1103,9 @@ def analizza_statistiche_stagionali(league_id: int, team_id: int, season_lega):
             return 0.0, 0.0
         cs_p  = (stats.get('clean_sheet', {}).get('total', 0) / giocate) * 100
         fts_p = (stats.get('failed_to_score', {}).get('total', 0) / giocate) * 100
+        # Cap: su campioni piccoli (playoff, inizio stagione) i % possono essere 100/0 — irrealistici
+        cs_p  = min(85.0, cs_p)
+        fts_p = min(85.0, fts_p)
         return cs_p, fts_p
     except Exception:
         return 0.0, 0.0
@@ -1175,6 +1192,7 @@ def analizza_statistiche_avanzate_pro(team_id: int):
         gol_da_gioco  = max(0.1, avg_gf  - avg_rig)
         tiri_da_gioco = max(0.1, avg_tiri - avg_rig)
         conv = tiri_da_gioco / gol_da_gioco if gol_da_gioco > 0 else 10.0
+        conv = max(2.0, conv)   # floor: fisicamente impossibile segnare con meno di 2 tiri/gol in media
 
         # MIGLIORIA 2: medie casa/trasferta (usate per xG splitting)
         avg_gf_home = gf_home / max(1, n_home)
@@ -1535,6 +1553,71 @@ def analizza_h2h_dna_e_andata(id_casa: int, id_trasf: int):
         return 1.0, 1.0, 0, 0, "Dati N/D", 1.0, 1.0, "", "Nessun dato."
 
 @st.cache_data(ttl=3600)
+def rileva_contesto_spareggio(fix_id: int, c_id: int, t_id: int,
+                               league_id_c: int, league_id_t: int,
+                               match_date_str: str) -> dict:
+    """
+    Rileva se la partita è:
+    1. Uno spareggio inter-lega (squadre da serie diverse)
+    2. Una gara di ritorno (c'è stata un'andata recente tra le stesse squadre)
+    Ritorna un dict con i boost motivazionali corretti.
+    """
+    result = {
+        'is_interlega': league_id_c != league_id_t,
+        'is_ritorno': False,
+        'aggregato_c': 0, 'aggregato_t': 0,
+        'boost_c': 1.0, 'boost_t': 1.0,
+        'msg': '', 'peso_momentum': 0.80
+    }
+
+    # Cerca andata recente (ultimi 60 giorni tra le stesse squadre)
+    try:
+        h2h = requests.get(
+            "https://v3.football.api-sports.io/fixtures/headtohead",
+            headers=HEADERS,
+            params={'h2h': f"{c_id}-{t_id}", 'last': 4},
+            timeout=8
+        ).json()
+        matches = h2h.get('response', [])
+        for m in matches:
+            if str(m['fixture']['id']) == str(fix_id):
+                continue
+            data_m = datetime.strptime(m['fixture']['date'][:10], '%Y-%m-%d')
+            data_oggi = datetime.strptime(match_date_str, '%Y-%m-%d')
+            giorni_fa = (data_oggi - data_m).days
+            if 3 <= giorni_fa <= 21:   # finestra tipica andata/ritorno
+                result['is_ritorno'] = True
+                ih = m['teams']['home']['id'] == c_id
+                gc = m['goals']['home'] if ih else m['goals']['away']
+                gt = m['goals']['away'] if ih else m['goals']['home']
+                if gc is not None and gt is not None:
+                    result['aggregato_c'] = int(gc)
+                    result['aggregato_t'] = int(gt)
+                    diff = gc - gt
+                    if diff > 0:
+                        # Casa avanti nel ritorno: ospiti devono attaccare
+                        result['boost_t'] = 1.30
+                        result['boost_c'] = 0.90
+                        result['msg'] = f"🔄 RITORNO | Aggregato: {gc}-{gt} (Ospiti all'assalto)"
+                    elif diff < 0:
+                        result['boost_c'] = 1.30
+                        result['boost_t'] = 0.90
+                        result['msg'] = f"🔄 RITORNO | Aggregato: {gc}-{gt} (Casa all'assalto)"
+                    elif diff == 0:
+                        result['boost_c'] = 1.20
+                        result['boost_t'] = 1.20
+                        result['msg'] = f"🔄 RITORNO | Aggregato: {gc}-{gt} (Tutto aperto ⚖️)"
+                break
+    except Exception:
+        pass
+
+    if result['is_interlega']:
+        result['msg'] = (result['msg'] + " ⚡ SPAREGGIO INTER-LEGA").strip()
+        result['peso_momentum'] = 1.0   # 100% momentum, standings non confrontabili
+
+    return result
+
+@st.cache_data(ttl=3600)
 def scarica_meteo(citta: str):
     try:
         resp = requests.get(f"https://wttr.in/{citta}?format=j1", timeout=3).json()
@@ -1815,6 +1898,18 @@ if btn_genera:
                 (m_h2h_c, m_h2h_t, gol_h2h_c, gol_h2h_t, str_h2h,
                  b_and_c, b_and_t, andata_msg, det_h2h) = analizza_h2h_dna_e_andata(
                     db_stats[c_s]['id'], db_stats[t_s]['id'])
+
+                # Rilevamento spareggio inter-lega e gara di ritorno
+                ctx_spar = rileva_contesto_spareggio(
+                    fix_id, db_stats[c_s]['id'], db_stats[t_s]['id'],
+                    f_id, f_id, match_date_str)
+                if ctx_spar['is_ritorno'] or ctx_spar['is_interlega']:
+                    b_and_c *= ctx_spar['boost_c']
+                    b_and_t *= ctx_spar['boost_t']
+                    if ctx_spar['msg']:
+                        andata_msg = ctx_spar['msg']
+                is_interlega = ctx_spar['is_interlega']
+                peso_mom_override = ctx_spar['peso_momentum'] if ctx_spar['is_interlega'] else None
                 (poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c,
                  par_c, stile_c, sq_cert_c, gf_10_c, gs_10_c,
                  rig_c, gf_home_c, gs_home_c, gf_away_c, gs_away_c) = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
@@ -1976,8 +2071,13 @@ if btn_genera:
                 # Casa gioca in casa → usiamo i suoi gol_fatti_in_casa vs gol_subiti_in_casa dell'avversario
                 xg_mo_c = math.sqrt(max(0.01, gf_home_c) * max(0.01, gs_home_t))
                 xg_mo_t = math.sqrt(max(0.01, gf_away_t) * max(0.01, gs_away_c))
-                # Peso momentum: 80% per coppe/playoff/inizio stagione, 30% per campionati normali
-                peso_mom  = 0.80 if (is_coppa or is_playoff or db_stats[c_s]['giocate'] <= 5) else 0.30
+                # Peso momentum: inter-lega=100%, coppe/playoff=80%, normale=30%
+                if peso_mom_override is not None:
+                    peso_mom = peso_mom_override
+                elif is_coppa or is_playoff or db_stats[c_s]['giocate'] <= 5:
+                    peso_mom = 0.80
+                else:
+                    peso_mom = 0.30
                 peso_std  = 1.0 - peso_mom
                 xg_base_c = ((xg_st_c * peso_std) + (xg_mo_c * peso_mom)) * m_f_c * m_st_c
                 xg_base_t = ((xg_st_t * peso_std) + (xg_mo_t * peso_mom)) * m_f_t * m_st_t
@@ -2356,25 +2456,67 @@ if st.session_state.data_master:
             bud_p = budget_totale * (kp2 / tot_k)
             bud_a = budget_totale * (ka  / tot_k)
 
-            def mostra_schedina_auto(titolo, cls, pool_f, min_q, max_q, target, mq, escludi, budget, nota=""):
-                st.markdown(f"<div class='strategy-box {cls}'>", unsafe_allow_html=True)
-                st.subheader(titolo)
-                if nota: st.caption(nota)
-                st.markdown(f"<span class='budget-tag'>💰 Budget: {budget:.2f}€</span>", unsafe_allow_html=True)
+            # Config schedine: (titolo, emoji, cls, colore_header, colore_accent)
+            SCHEDINE_CFG = [
+                ("SAFETY",      "🟢", "safety-bg",      "#0a1f0f", "#22c55e",
+                 "Solo scommesse con edge > 0%, quota 1.12–1.50."),
+                ("PERFORMANCE", "🟠", "performance-bg", "#1f140a", "#f59e0b",
+                 "Quote medie, max un evento per partita."),
+                ("AZZARDO",     "🔴", "risk-bg",        "#1f0a0a", "#ef4444",
+                 "Quote alte — max 10% del capitale."),
+            ]
+            SCHEDINE_PARAMS = [
+                (pool_s := [x for x in kp if x['Tip'] not in ["Goal","O1.5","O2.5","O3.5","O4.5"]],
+                 1.12, 1.50, 2.0,  2.0,  set(),  bud_s),
+                (kp,   1.51, 2.20, 5.0,  2.20, None,  bud_p),
+                (kp,   2.21, 4.50, 30.0, 4.50, None,  bud_a),
+            ]
+
+            escludi_prev = set()
+            for idx, (nome, emoji, cls, bg_col, acc_col, nota) in enumerate(SCHEDINE_CFG):
+                pool_f, min_q, max_q, target, mq, _, budget = SCHEDINE_PARAMS[idx]
+                escludi = escludi_prev
+
                 slip, q_tot, prob, usate = costruisci_schedina_dinamica(
                     pool_f, min_q, max_q, target, escludi_match=escludi, max_match_q=mq)
-                txt = f"{titolo} ({budget:.2f}€)\n"
-                q_prog = 1.0; p_prog = 1.0
+                escludi_prev = usate
+                vincita_tot = budget * q_tot
+
+                txt = f"Schedina {nome} ({budget:.2f}€)\n"
+
+                # Header integrato nel banner
+                st.markdown(f"""
+<div class="strategy-box {cls}" style="padding:0;overflow:hidden;">
+  <div style="background:linear-gradient(135deg,{bg_col},{bg_col}dd);
+    padding:18px 24px 14px;border-bottom:1px solid rgba(255,255,255,0.06);">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:800;color:{acc_col};">
+          {emoji} Schedina {nome}
+        </div>
+        <div style="font-size:0.75rem;color:var(--text2);margin-top:3px;">{nota}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:0.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Budget</div>
+        <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;color:var(--text);">
+          {budget:.2f}€
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="padding:16px 24px;">
+""", unsafe_allow_html=True)
+
                 for x in slip:
-                    bc  = "quota-real" if x['Real'] else "quota-calc"
-                    ed  = x.get('Edge', 0); kl = x.get('Kelly', 0) * 100
-                    pt  = budget * x.get('Kelly', 0)
+                    bc     = "quota-real" if x['Real'] else "quota-calc"
+                    ed     = x.get('Edge', 0); kl = x.get('Kelly', 0) * 100
+                    pt     = budget * x.get('Kelly', 0)
                     ec_cls = "edge-positive" if ed > 0 else "edge-negative"
                     st.markdown(
                         f"<div class='schedina-row'>"
                         f"<div><div style='font-weight:600;color:var(--text);'>"
                         f"<span style='color:var(--orange);font-family:DM Mono,monospace;font-size:0.8rem;'>[{x['Time']}]</span> "
-                        f"{x['Match']} → <strong>{x['Tip']}</strong></div>"
+                        f" {x['Match']} → <strong>{x['Tip']}</strong></div>"
                         f"<div class='schedina-match'>{x['League']}</div></div>"
                         f"<div style='text-align:right;white-space:nowrap;'>"
                         f"<span class='{bc}'>Q {x['Quota']}</span> "
@@ -2382,37 +2524,34 @@ if st.session_state.data_master:
                         f"<span class='kelly-pill'>{kl:.1f}% → {pt:.2f}€</span>"
                         f"</div></div>",
                         unsafe_allow_html=True)
-                    q_prog *= float(x['Quota']); p_prog *= float(x['Prob'])/100.0
-                    vincita_prog = budget * q_prog
-                    st.markdown(f"""<div class="mult-box">
-                      <div><div class="mult-label">Moltiplicatore progressivo</div>
-                      <div class="mult-value">x{q_prog:.2f}</div></div>
-                      <div style="text-align:right"><div class="mult-prob">Prob: {p_prog*100:.1f}%</div>
-                      <div class="mult-vincita">~{vincita_prog:.2f}€</div></div>
-                    </div>""", unsafe_allow_html=True)
                     txt += f"  [{x['Time']}] {x['Match']} -> {x['Tip']} @ {x['Quota']:.2f} | Edge:{ed:+.1f}% | Kelly:{kl:.1f}% ({pt:.2f}€)\n"
-                c1, c2 = st.columns(2)
-                c1.metric("Vincita Finale Stimata", f"~{budget*q_tot:.2f}€")
-                c2.metric("Probabilità Congiunta",  f"{prob*100:.2f}%")
-                txt += f"Quota:{q_tot:.2f} | Prob:{prob*100:.2f}% | Vincita:~{budget*q_tot:.2f}€\n\n"
-                st.markdown("</div>", unsafe_allow_html=True)
-                return usate, txt
 
-            vietati_s = ["Goal","O1.5","O2.5","O3.5","O4.5"]
-            pool_s    = [x for x in kp if x['Tip'] not in vietati_s]
-
-            us, ts = mostra_schedina_auto("🟢 Schedina SAFETY (Value-First)", "safety-bg",
-                                          pool_s, 1.12, 1.50, 2.0, 2.0, set(), bud_s,
-                                          "Solo scommesse con edge > 0%, quota 1.12–1.50.")
-            testo_export += ts
-            up, tp = mostra_schedina_auto("🟠 Schedina PERFORMANCE", "performance-bg",
-                                          kp, 1.51, 2.20, 5.0, 2.20, us, bud_p,
-                                          "Quote medie, max un evento per partita.")
-            testo_export += tp
-            _, ta = mostra_schedina_auto("🔴 Schedina AZZARDO", "risk-bg",
-                                         kp, 2.21, 4.50, 30.0, 4.50, up, bud_a,
-                                         "Quote alte — max 10% del capitale.")
-            testo_export += ta
+                # Totale finale compatto dentro il banner
+                st.markdown(f"""
+    <div style="margin-top:14px;padding:14px 16px;
+      background:rgba(255,255,255,0.04);border-radius:var(--radius-sm);
+      border:1px solid rgba(255,255,255,0.07);
+      display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:20px;">
+        <div>
+          <div style="font-size:0.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Moltiplicatore</div>
+          <div style="font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;color:{acc_col};">x{q_tot:.2f}</div>
+        </div>
+        <div>
+          <div style="font-size:0.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Prob. congiunta</div>
+          <div style="font-family:'DM Mono',monospace;font-size:1rem;font-weight:600;color:var(--text);">{prob*100:.1f}%</div>
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:0.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Vincita stimata</div>
+        <div style="font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;color:var(--green);">~{vincita_tot:.2f}€</div>
+      </div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+                txt += f"Quota:{q_tot:.2f} | Prob:{prob*100:.2f}% | Vincita:~{vincita_tot:.2f}€\n\n"
+                testo_export += txt
 
             st.download_button("💾 SCARICA TUTTE LE 3 SCHEDINE (TXT)",
                                data=testo_export,
