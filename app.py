@@ -1661,8 +1661,7 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
     valid = [x for x in pool
              if min_q <= float(x['Quota']) <= max_q
              and float(x['Quota']) <= max_match_q
-             and float(x.get('Edge', 0)) > -15
-             and float(x.get('Kelly', 0)) > 0]   # FIX: escludi scommesse con Kelly=0 (non puntare)
+             and float(x.get('Edge', 0)) > 0]   # solo scommesse con edge positivo reale
     pool_ord = sorted(valid, key=lambda x: calcola_edge_pct(x['Prob'], float(x['Quota'])), reverse=True)
     sel = []; viste = set(); fam_cnt = {}; q_tot = prob_tot = 1.0
     for item in pool_ord:
@@ -2196,8 +2195,10 @@ if st.session_state.data_master:
     # ─── TAB 1 ──────────────────────────────────────────────────────────────────
     with t1:
         st.header("🛒 BET BUILDER & CLASSIFICHE OMNI-MARKET")
-        st.info("💡 **Edge%** = valore della scommessa. Verde = edge positivo. "
-                "**Kelly%** = percentuale ottimale del budget da puntare su quel singolo evento.")
+        st.info("💡 **Edge%** = valore della scommessa — mostrate solo scommesse con Edge positivo. "
+                "**Kelly%** = puntata suggerita sul budget totale. "
+                "⚠️ Su quote basse (< 1.50) il Kelly può essere 0% per via del margine sottile: "
+                "in quel caso usa il 1-2% del budget come puntata minima.")
 
         def mostra_tabella(titolo, tip_filter, min_q=1.01, max_q=99.0, max_rows=10, sort_by="Edge", solo_kelly_positivo=True):
             st.subheader(titolo)
@@ -2205,7 +2206,7 @@ if st.session_state.data_master:
                     if (tip_filter(x['Tip']) if callable(tip_filter) else x['Tip'] in tip_filter)
                     and float(x['Quota']) >= min_q
                     and float(x['Quota']) <= max_q
-                    and (float(x.get('Kelly', 0)) > 0 if solo_kelly_positivo else True)]
+                    and (float(x.get('Edge', 0)) > 0 if solo_kelly_positivo else True)]
             if not pool:
                 st.info("Nessun dato per questa categoria.")
                 return []
