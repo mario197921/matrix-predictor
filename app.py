@@ -2210,12 +2210,9 @@ if st.session_state.data_master:
             if not pool:
                 st.info("Nessun dato per questa categoria.")
                 return []
-            df = pd.DataFrame(pool).sort_values(sort_by, ascending=False).head(max_rows)
+            df = pd.DataFrame(pool).sort_values(sort_by, ascending=False).head(max_rows).copy()
             cols = ['Match','Tip','Prob','Quota','Edge','Kelly','Time','League']
-            if 'Score' in df.columns and sort_by == 'Score':
-                df = df[cols]   # Score usato solo per ordinamento, non mostrato
-            else:
-                df = df[cols]
+            df = df[cols].copy()   # .copy() evita che la modifica di Kelly corrompa all_tips_global
             df['Kelly'] = (df['Kelly'] * 100).round(1)
             df.insert(0, "🛒", False)
             ed = st.data_editor(df,
@@ -2533,8 +2530,11 @@ if st.session_state.data_master:
 
                 for x in slip:
                     bc     = "quota-real" if x['Real'] else "quota-calc"
-                    ed     = x.get('Edge', 0); kl = x.get('Kelly', 0) * 100
-                    pt     = budget * x.get('Kelly', 0)
+                    ed     = x.get('Edge', 0)
+                    # Kelly% e puntata calcolati sempre sul budget TOTALE
+                    # per essere coerenti con le tabelle Top 10
+                    kl     = x.get('Kelly', 0) * 100
+                    pt     = budget_totale * x.get('Kelly', 0)
                     ec_cls = "edge-positive" if ed > 0 else "edge-negative"
                     st.markdown(
                         f"<div class='schedina-row'>"
