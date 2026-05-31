@@ -2262,7 +2262,7 @@ if st.session_state.data_master:
             k = f"{item['Match']}_{item['Tip']}"
             if k not in viste: viste.add(k); carrello.append(item)
 
-       st.markdown("---")
+        st.markdown("---")
         st.markdown("<div class='strategy-box builder-bg'>", unsafe_allow_html=True)
         st.header("🧾 IL TUO CARRELLO")
         if carrello:
