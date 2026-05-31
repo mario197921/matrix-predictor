@@ -2463,19 +2463,14 @@ if st.session_state.data_master:
             testo_export = f"=== MATRIX V90: SCHEDINE ===\nPeriodo: {start_str}/{end_str}\n\n"
 
             # Allocazione dinamica Kelly per fascia
-            def kelly_pool_budget(pool, min_q, max_q, n=6):
-                sub = [x for x in pool if min_q <= float(x['Quota']) <= max_q][:n]
-                avg = sum(x.get('Kelly', 0) for x in sub) / max(1, len(sub))
-                return avg
-
             kp = st.session_state.all_tips_global
-            ks = kelly_pool_budget(kp, 1.12, 1.50)
-            kp2= kelly_pool_budget(kp, 1.51, 2.20)
-            ka = kelly_pool_budget(kp, 2.21, 4.50)
-            tot_k = max(ks + kp2 + ka, 0.001)
-            bud_s = budget_totale * (ks  / tot_k)
-            bud_p = budget_totale * (kp2 / tot_k)
-            bud_a = budget_totale * (ka  / tot_k)
+
+            # Allocazione fissa 60/30/10 — stabile e prevedibile.
+            # Il Kelly viene usato solo per la puntata suggerita per scommessa,
+            # non per determinare il budget di fascia (troppo volatile sulle quote basse).
+            bud_s = budget_totale * 0.60
+            bud_p = budget_totale * 0.30
+            bud_a = budget_totale * 0.10
 
             # Config schedine: (titolo, emoji, cls, colore_header, colore_accent)
             SCHEDINE_CFG = [
