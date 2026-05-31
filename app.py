@@ -1661,7 +1661,8 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
     valid = [x for x in pool
              if min_q <= float(x['Quota']) <= max_q
              and float(x['Quota']) <= max_match_q
-             and float(x.get('Edge', 0)) > -15]
+             and float(x.get('Edge', 0)) > -15
+             and float(x.get('Kelly', 0)) > 0]   # FIX: escludi scommesse con Kelly=0 (non puntare)
     pool_ord = sorted(valid, key=lambda x: calcola_edge_pct(x['Prob'], float(x['Quota'])), reverse=True)
     sel = []; viste = set(); fam_cnt = {}; q_tot = prob_tot = 1.0
     for item in pool_ord:
@@ -2198,12 +2199,13 @@ if st.session_state.data_master:
         st.info("💡 **Edge%** = valore della scommessa. Verde = edge positivo. "
                 "**Kelly%** = percentuale ottimale del budget da puntare su quel singolo evento.")
 
-        def mostra_tabella(titolo, tip_filter, min_q=1.01, max_q=99.0, max_rows=10, sort_by="Edge"):
+        def mostra_tabella(titolo, tip_filter, min_q=1.01, max_q=99.0, max_rows=10, sort_by="Edge", solo_kelly_positivo=True):
             st.subheader(titolo)
             pool = [x for x in st.session_state.all_tips_global
                     if (tip_filter(x['Tip']) if callable(tip_filter) else x['Tip'] in tip_filter)
                     and float(x['Quota']) >= min_q
-                    and float(x['Quota']) <= max_q]
+                    and float(x['Quota']) <= max_q
+                    and (float(x.get('Kelly', 0)) > 0 if solo_kelly_positivo else True)]
             if not pool:
                 st.info("Nessun dato per questa categoria.")
                 return []
@@ -2252,7 +2254,7 @@ if st.session_state.data_master:
                                 min_q=1.10, max_q=2.50, sort_by="Score")
         sel_6  = mostra_tabella("🧨 Top 10 Azzardi (Quote ≥ 2.50)",
                                 lambda t: True,
-                                min_q=2.50, sort_by="Edge")
+                                min_q=2.50, sort_by="Edge", solo_kelly_positivo=False)
 
         tutte = sel_1 + sel_2 + sel_3 + sel_4 + sel_mg + sel_co + sel_6
         viste: set = set(); carrello = []
@@ -2260,7 +2262,7 @@ if st.session_state.data_master:
             k = f"{item['Match']}_{item['Tip']}"
             if k not in viste: viste.add(k); carrello.append(item)
 
-        st.markdown("---")
+       st.markdown("---")
         st.markdown("<div class='strategy-box builder-bg'>", unsafe_allow_html=True)
         st.header("🧾 IL TUO CARRELLO")
         if carrello:
@@ -2309,6 +2311,7 @@ if st.session_state.data_master:
                                 else f"🕒 {m['orario']} | 🏟️ {m['c_u']} vs {m['t_u']} | ⚠️ No Bet")
                     with st.expander(titolo_e, expanded=False):
 
+                        # Badge Mondiale
                         if m.get('is_mondiale'):
                             st.markdown(f"<span class='mondiale-testo'>🌍 {m['fase_mondiale']}</span>",
                                         unsafe_allow_html=True)
@@ -2416,6 +2419,7 @@ if st.session_state.data_master:
   <div class="stat-row" style="border:none"><span class="stat-label">A Secco</span><span class="stat-value" style="color:var(--red)">{fts:.0f}%</span></div>
 </div>""", unsafe_allow_html=True)
 
+
                         scheda(ch, m['c_s'], m['rank_c'], m['xg_c'], m['forma_c'], m['stan_c'],
                                m['count_c'], m['t1_c'], m['sq_c'], m['gk_out_c'], m['def_out_c'],
                                m['stile_c'], m['poss_c'], m['parate_c'], m['conv_c'],
@@ -2460,6 +2464,7 @@ if st.session_state.data_master:
         if len(st.session_state.all_tips_global) >= 4:
             testo_export = f"=== MATRIX V90: SCHEDINE ===\nPeriodo: {start_str}/{end_str}\n\n"
 
+            # Allocazione dinamica Kelly per fascia
             def kelly_pool_budget(pool, min_q, max_q, n=6):
                 sub = [x for x in pool if min_q <= float(x['Quota']) <= max_q][:n]
                 avg = sum(x.get('Kelly', 0) for x in sub) / max(1, len(sub))
@@ -2474,6 +2479,7 @@ if st.session_state.data_master:
             bud_p = budget_totale * (kp2 / tot_k)
             bud_a = budget_totale * (ka  / tot_k)
 
+            # Config schedine: (titolo, emoji, cls, colore_header, colore_accent)
             SCHEDINE_CFG = [
                 ("SAFETY",      "🟢", "safety-bg",      "#0a1f0f", "#22c55e",
                  "Solo scommesse con edge > 0%, quota 1.12–1.50."),
@@ -2498,8 +2504,10 @@ if st.session_state.data_master:
                     pool_f, min_q, max_q, target, escludi_match=escludi, max_match_q=mq)
                 escludi_prev = usate
                 vincita_tot = budget * q_tot
+
                 txt = f"Schedina {nome} ({budget:.2f}€)\n"
 
+                # Header integrato nel banner
                 st.markdown(f"""
 <div class="strategy-box {cls}" style="padding:0;overflow:hidden;">
   <div style="background:linear-gradient(135deg,{bg_col},{bg_col}dd);
@@ -2541,6 +2549,7 @@ if st.session_state.data_master:
                         unsafe_allow_html=True)
                     txt += f"  [{x['Time']}] {x['Match']} -> {x['Tip']} @ {x['Quota']:.2f} | Edge:{ed:+.1f}% | Kelly:{kl:.1f}% ({pt:.2f}€)\n"
 
+                # Totale finale compatto dentro il banner
                 st.markdown(f"""
     <div style="margin-top:14px;padding:14px 16px;
       background:rgba(255,255,255,0.04);border-radius:var(--radius-sm);
