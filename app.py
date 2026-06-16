@@ -1237,49 +1237,139 @@ def get_ranking_fifa() -> dict:
     except Exception:
         return {}
 
+
+# Ranking FIFA approssimativo per le nazionali più importanti
+# Usato come fallback quando l'API non ha dati sufficienti
+# e come correttore del peso del modello
+RANKING_FIFA_PROXY = {
+    # Top 10 mondiali
+    "France": 1, "Brazil": 2, "England": 3, "Argentina": 4,
+    "Belgium": 5, "Portugal": 6, "Spain": 7, "Netherlands": 8,
+    "Germany": 9, "Croatia": 10,
+    # 11-30
+    "Italy": 11, "Uruguay": 12, "USA": 13, "Mexico": 14,
+    "Colombia": 15, "Senegal": 16, "Morocco": 17, "Switzerland": 18,
+    "Japan": 19, "Denmark": 20, "Austria": 21, "South Korea": 22,
+    "Ecuador": 23, "Hungary": 24, "Wales": 25, "Australia": 26,
+    "Iran": 27, "Serbia": 28, "Poland": 29, "Ukraine": 30,
+}
+
+def get_xg_da_ranking(rank: int) -> float:
+    """
+    xG base derivato dal ranking FIFA.
+    Top 5 → ~1.8 gol/partita, rank 50+ → ~1.0 gol/partita.
+    """
+    if rank <= 5:   return 1.80
+    elif rank <= 10: return 1.60
+    elif rank <= 20: return 1.40
+    elif rank <= 30: return 1.25
+    elif rank <= 50: return 1.10
+    else:            return 0.95
+
 @st.cache_data(ttl=86400)
 def get_stats_nazionale(team_id: int, stagione: int) -> dict:
     """
-    Statistiche di una nazionale: ultimi 10 match internazionali (tutte le comp.).
-    Ritorna dict con xg_att, xg_dif, forma, fifa_rank_approx.
+    Statistiche nazionali per il Mondiale.
+    MIGLIORIA: filtra amichevoli, usa ranking FIFA come ancora,
+    allarga il campione a 20 partite per nazionali con poco storico.
     """
+    _default = {'xg_att': 1.2, 'xg_dif': 1.2, 'forma': 'N/D',
+                'm_forma': 1.0, 'avg_gf': 1.2, 'avg_gs': 1.2,
+                'rank': 50, 'nome': ''}
+
     try:
+        # Prima cerca il nome della squadra per il ranking proxy
+        team_resp = requests.get(
+            "https://v3.football.api-sports.io/teams",
+            headers=HEADERS, params={'id': team_id}, timeout=6
+        ).json()
+        nome_naz = ""
+        if team_resp.get('response'):
+            nome_naz = team_resp['response'][0]['team']['name']
+        rank_proxy = RANKING_FIFA_PROXY.get(nome_naz, 50)
+
+        # Scarica ultime 20 partite (ampio campione per nazionali rare)
         resp = requests.get(
             "https://v3.football.api-sports.io/fixtures",
             headers=HEADERS,
-            params={'team': team_id, 'last': 10, 'status': 'FT'},
+            params={'team': team_id, 'last': 20, 'status': 'FT'},
             timeout=8
         ).json()
         matches = resp.get('response', [])
-        gf_tot = gs_tot = n = 0
+
+        gf_ufficiali = gs_ufficiali = n_uff = 0
+        gf_amichevoli = gs_amichevoli = n_ami = 0
         punti = 0
         forma_str = ""
-        for m in matches[:10]:
+
+        for m in matches:
             is_home = str(m['teams']['home']['id']) == str(team_id)
             gf = m['goals']['home'] if is_home else m['goals']['away']
             gs = m['goals']['away'] if is_home else m['goals']['home']
             if gf is None or gs is None:
                 continue
-            gf_tot += int(gf); gs_tot += int(gs); n += 1
-            if n <= 5:
-                if gf > gs:   forma_str += "W"; punti += 3
+
+            league_id = m['league']['id']
+            # Partite ufficiali: Mondiali(1), Qualificazioni(29,32,34),
+            # Nations League(5,6), Coppa America(9), AFCON(6), Euro(4)
+            is_ufficiale = league_id in [1, 4, 5, 6, 9, 10, 29, 32, 34, 35]
+
+            if is_ufficiale:
+                gf_ufficiali += int(gf); gs_ufficiali += int(gs); n_uff += 1
+            else:
+                gf_amichevoli += int(gf); gs_amichevoli += int(gs); n_ami += 1
+
+            if len(forma_str) < 5:
+                if gf > gs:    forma_str += "W"; punti += 3
                 elif gf == gs: forma_str += "D"; punti += 1
                 else:          forma_str += "L"
-        if n == 0:
-            return {'xg_att': 1.2, 'xg_dif': 1.2, 'forma': 'N/D', 'm_forma': 1.0, 'avg_gf': 1.2, 'avg_gs': 1.2}
-        avg_gf = gf_tot / n
-        avg_gs = gs_tot / n
-        m_forma = 0.9 + (punti / 15) * 0.2
+
+        # Calcolo xG: priorità alle partite ufficiali
+        # Se non ci sono dati ufficiali, usa amichevoli con peso ridotto
+        # Se non ci sono dati di nessun tipo, usa il ranking FIFA come proxy
+        if n_uff >= 3:
+            avg_gf = gf_ufficiali / n_uff
+            avg_gs = gs_ufficiali / n_uff
+            affidabilita = 1.0
+        elif n_uff > 0 and n_ami > 0:
+            # Mix: 70% ufficiali + 30% amichevoli
+            avg_gf = (gf_ufficiali/n_uff)*0.70 + (gf_amichevoli/n_ami)*0.30
+            avg_gs = (gs_ufficiali/n_uff)*0.70 + (gs_amichevoli/n_ami)*0.30
+            affidabilita = 0.80
+        elif n_ami >= 3:
+            avg_gf = gf_amichevoli / n_ami * 0.85  # sconto amichevoli
+            avg_gs = gs_amichevoli / n_ami * 0.85
+            affidabilita = 0.60
+        else:
+            # Nessun dato → usa ranking FIFA
+            xg_rank = get_xg_da_ranking(rank_proxy)
+            avg_gf = xg_rank
+            avg_gs = 1.5 - (xg_rank - 1.0) * 0.3  # top team subisce meno
+            affidabilita = 0.40
+
+        # Ancora al ranking: impedisce stime assurde
+        # Una nazionale top (rank<10) non può avere avg_gf < 1.2
+        # Una nazionale debole (rank>40) non può avere avg_gf > 1.8
+        xg_rank_min = get_xg_da_ranking(min(rank_proxy, 50)) * 0.70
+        xg_rank_max = get_xg_da_ranking(max(rank_proxy, 1))  * 1.30
+        avg_gf = min(xg_rank_max, max(xg_rank_min, avg_gf))
+
+        m_forma = 0.9 + (punti / 15) * 0.2 if len(forma_str) > 0 else 1.0
+
         return {
-            'xg_att':  avg_gf,
-            'xg_dif':  avg_gs,
-            'forma':   forma_str[::-1],
-            'm_forma': m_forma,
-            'avg_gf':  avg_gf,
-            'avg_gs':  avg_gs,
+            'xg_att':       avg_gf,
+            'xg_dif':       avg_gs,
+            'forma':        forma_str[::-1] if forma_str else 'N/D',
+            'm_forma':      m_forma,
+            'avg_gf':       avg_gf,
+            'avg_gs':       avg_gs,
+            'rank':         rank_proxy,
+            'nome':         nome_naz,
+            'affidabilita': affidabilita,
+            'n_uff':        n_uff,
         }
     except Exception:
-        return {'xg_att': 1.2, 'xg_dif': 1.2, 'forma': 'N/D', 'm_forma': 1.0, 'avg_gf': 1.2, 'avg_gs': 1.2}
+        return _default
 
 def calcola_fase_mondiale(round_str: str) -> dict:
     """
@@ -1661,7 +1751,7 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
     valid = [x for x in pool
              if min_q <= float(x['Quota']) <= max_q
              and float(x['Quota']) <= max_match_q
-             and float(x.get('Edge', 0)) > -15]
+             and float(x.get('Edge', 0)) > 0]   # solo scommesse con edge positivo reale
     pool_ord = sorted(valid, key=lambda x: calcola_edge_pct(x['Prob'], float(x['Quota'])), reverse=True)
     sel = []; viste = set(); fam_cnt = {}; q_tot = prob_tot = 1.0
     for item in pool_ord:
@@ -1784,10 +1874,10 @@ if btn_genera:
                                 'rank':    t['rank'],
                                 'giocate': t['all']['played'],
                                 'punti':   t['points'],
-                                'ac': t['home']['goals']['for']     / max(1, t['home']['played']),
-                                'dc': t['home']['goals']['against'] / max(1, t['home']['played']),
-                                'at': t['away']['goals']['for']     / max(1, t['away']['played']),
-                                'dt': t['away']['goals']['against'] / max(1, t['away']['played']),
+                                'ac': (t['home']['goals']['for']     or 0) / max(1, t['home']['played'] or 1),
+                                'dc': (t['home']['goals']['against'] or 0) / max(1, t['home']['played'] or 1),
+                                'at': (t['away']['goals']['for']     or 0) / max(1, t['away']['played'] or 1),
+                                'dt': (t['away']['goals']['against'] or 0) / max(1, t['away']['played'] or 1),
                             }
                 else:
                     # PLAYOFF RESCUE / STANDINGS FALLBACK
@@ -2195,24 +2285,24 @@ if st.session_state.data_master:
     # ─── TAB 1 ──────────────────────────────────────────────────────────────────
     with t1:
         st.header("🛒 BET BUILDER & CLASSIFICHE OMNI-MARKET")
-        st.info("💡 **Edge%** = valore della scommessa. Verde = edge positivo. "
-                "**Kelly%** = percentuale ottimale del budget da puntare su quel singolo evento.")
+        st.info("💡 **Edge%** = valore della scommessa — mostrate solo scommesse con Edge positivo. "
+                "**Kelly%** = puntata suggerita sul budget totale. "
+                "⚠️ Su quote basse (< 1.50) il Kelly può essere 0% per via del margine sottile: "
+                "in quel caso usa il 1-2% del budget come puntata minima.")
 
-        def mostra_tabella(titolo, tip_filter, min_q=1.01, max_q=99.0, max_rows=10, sort_by="Edge"):
+        def mostra_tabella(titolo, tip_filter, min_q=1.01, max_q=99.0, max_rows=10, sort_by="Edge", solo_kelly_positivo=True):
             st.subheader(titolo)
             pool = [x for x in st.session_state.all_tips_global
                     if (tip_filter(x['Tip']) if callable(tip_filter) else x['Tip'] in tip_filter)
                     and float(x['Quota']) >= min_q
-                    and float(x['Quota']) <= max_q]
+                    and float(x['Quota']) <= max_q
+                    and (float(x.get('Edge', 0)) > 0 if solo_kelly_positivo else True)]
             if not pool:
                 st.info("Nessun dato per questa categoria.")
                 return []
-            df = pd.DataFrame(pool).sort_values(sort_by, ascending=False).head(max_rows)
+            df = pd.DataFrame(pool).sort_values(sort_by, ascending=False).head(max_rows).copy()
             cols = ['Match','Tip','Prob','Quota','Edge','Kelly','Time','League']
-            if 'Score' in df.columns and sort_by == 'Score':
-                df = df[cols]   # Score usato solo per ordinamento, non mostrato
-            else:
-                df = df[cols]
+            df = df[cols].copy()   # .copy() evita che la modifica di Kelly corrompa all_tips_global
             df['Kelly'] = (df['Kelly'] * 100).round(1)
             df.insert(0, "🛒", False)
             ed = st.data_editor(df,
@@ -2252,7 +2342,7 @@ if st.session_state.data_master:
                                 min_q=1.10, max_q=2.50, sort_by="Score")
         sel_6  = mostra_tabella("🧨 Top 10 Azzardi (Quote ≥ 2.50)",
                                 lambda t: True,
-                                min_q=2.50, sort_by="Edge")
+                                min_q=2.50, sort_by="Edge", solo_kelly_positivo=False)
 
         tutte = sel_1 + sel_2 + sel_3 + sel_4 + sel_mg + sel_co + sel_6
         viste: set = set(); carrello = []
@@ -2463,19 +2553,14 @@ if st.session_state.data_master:
             testo_export = f"=== MATRIX V90: SCHEDINE ===\nPeriodo: {start_str}/{end_str}\n\n"
 
             # Allocazione dinamica Kelly per fascia
-            def kelly_pool_budget(pool, min_q, max_q, n=6):
-                sub = [x for x in pool if min_q <= float(x['Quota']) <= max_q][:n]
-                avg = sum(x.get('Kelly', 0) for x in sub) / max(1, len(sub))
-                return avg
-
             kp = st.session_state.all_tips_global
-            ks = kelly_pool_budget(kp, 1.12, 1.50)
-            kp2= kelly_pool_budget(kp, 1.51, 2.20)
-            ka = kelly_pool_budget(kp, 2.21, 4.50)
-            tot_k = max(ks + kp2 + ka, 0.001)
-            bud_s = budget_totale * (ks  / tot_k)
-            bud_p = budget_totale * (kp2 / tot_k)
-            bud_a = budget_totale * (ka  / tot_k)
+
+            # Allocazione fissa 60/30/10 — stabile e prevedibile.
+            # Il Kelly viene usato solo per la puntata suggerita per scommessa,
+            # non per determinare il budget di fascia (troppo volatile sulle quote basse).
+            bud_s = budget_totale * 0.60
+            bud_p = budget_totale * 0.30
+            bud_a = budget_totale * 0.10
 
             # Config schedine: (titolo, emoji, cls, colore_header, colore_accent)
             SCHEDINE_CFG = [
@@ -2530,8 +2615,11 @@ if st.session_state.data_master:
 
                 for x in slip:
                     bc     = "quota-real" if x['Real'] else "quota-calc"
-                    ed     = x.get('Edge', 0); kl = x.get('Kelly', 0) * 100
-                    pt     = budget * x.get('Kelly', 0)
+                    ed     = x.get('Edge', 0)
+                    # Kelly% e puntata calcolati sempre sul budget TOTALE
+                    # per essere coerenti con le tabelle Top 10
+                    kl     = x.get('Kelly', 0) * 100
+                    pt     = budget_totale * x.get('Kelly', 0)
                     ec_cls = "edge-positive" if ed > 0 else "edge-negative"
                     st.markdown(
                         f"<div class='schedina-row'>"
