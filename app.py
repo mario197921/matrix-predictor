@@ -556,27 +556,51 @@ p, span, label, div { color: var(--text) !important; }
   margin-bottom: 12px;
 }
 
-/* ── FIX CALENDARIO (testo visibile su sfondo chiaro) ────── */
-[data-testid="stDateInput"] input,
-[data-testid="stDateInput"] div,
+/* ── FIX CALENDARIO — campo visibile (sidebar) sempre scuro+chiaro ────── */
+[data-testid="stDateInput"] > div > div {
+  background: var(--bg3) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-sm) !important;
+}
+[data-testid="stDateInput"] input {
+  color: var(--text) !important;
+  background: var(--bg3) !important;
+  caret-color: var(--text) !important;
+}
+/* Le "pillole" con le date selezionate mostrate nel campo */
+[data-testid="stDateInput"] span {
+  color: var(--text) !important;
+}
+
+/* ── FIX CALENDARIO — popup (sempre chiaro, leggibile ovunque) ────────── */
+[data-baseweb="calendar"],
+[data-baseweb="datepicker"] {
+  background-color: #ffffff !important;
+}
 [data-baseweb="calendar"] *,
-[data-baseweb="datepicker"] *,
+[data-baseweb="datepicker"] * {
+  color: #1a1a1a !important;
+}
 [data-baseweb="calendar"] td,
 [data-baseweb="calendar"] th,
-[data-baseweb="calendar"] button {
-  color: #1a1a1a !important;
+[data-baseweb="calendar"] button,
+[data-baseweb="calendar"] div {
   background-color: #ffffff !important;
 }
 [data-baseweb="calendar"] [aria-selected="true"] {
   background-color: var(--accent) !important;
   color: #ffffff !important;
 }
+[data-baseweb="calendar"] [aria-selected="true"] * {
+  color: #ffffff !important;
+}
 [data-baseweb="calendar"] button:hover {
   background-color: #e8f0fe !important;
 }
-[data-testid="stDateInput"] input {
-  color: var(--text) !important;
-  background: var(--bg3) !important;
+/* Header mese/anno e frecce navigazione nel popup */
+[data-baseweb="calendar"] [role="presentation"] {
+  color: #1a1a1a !important;
+  background-color: #ffffff !important;
 }
 
 /* ── FIX EXPANDER — sempre visibile anche su mobile ──────── */
@@ -707,8 +731,13 @@ def _load_api_key() -> str:
     return key
 
 API_KEY_FOOTBALL = _load_api_key()
-STAGIONE         = "2025"
 HEADERS          = {'x-apisports-key': API_KEY_FOOTBALL}
+
+# Stagione dinamica: le leghe europee usano l'anno di inizio stagione.
+# Agosto-dicembre → stagione = anno corrente (es. agosto 2026 → "2026")
+# Gennaio-luglio  → stagione = anno precedente (es. marzo 2026 → "2025")
+_oggi = datetime.now()
+STAGIONE = str(_oggi.year) if _oggi.month >= 8 else str(_oggi.year - 1)
 XG_MAX           = 3.2
 XG_MIN           = 0.10
 MARGINE_BK       = 0.93   # ~7% margine bookmaker
@@ -728,8 +757,6 @@ MARGINE_BK       = 0.93   # ~7% margine bookmaker
 #   1. Division Danimarca (playoff): 120
 
 MASTER_LEAGUES = {
-    # ── MONDIALE ───────────────────────────────────────────────────
-    "🌍 FIFA World Cup 2026":         1,    # league=1, season=2026 (confermato API-Sports)
 
     # ── COPPE EUROPEE ──────────────────────────────────────────────
     "🇪🇺 Champions League":           2,
@@ -792,6 +819,62 @@ MASTER_LEAGUES = {
     "🇲🇽 Liga MX":                  262,
     "🇺🇸 MLS":                      253,
 }
+
+# ==========================================
+# 🎯 LIVELLO AFFIDABILITÀ DATI
+# ==========================================
+# Classifica ogni campionato in base alla profondità dei dati disponibili
+# su API-Sports: standings, statistiche avanzate, infortuni, quote reali.
+#
+# ALTA:  standings + stats avanzate + infortuni + quote reali quasi sempre disponibili
+# MEDIA: dati buoni ma con qualche lacuna (es. infortuni parziali, quote non sempre reali)
+# BASSA: fallback pesanti attivi (no standings, no infortuni, stats scarse)
+LIVELLO_AFFIDABILITA = {
+    # ── ALTA — Top 5 Europei + Coppe Europee ────────────────────────────────
+    "🇪🇺 Champions League": "ALTA", "🇪🇺 Europa League": "ALTA", "🇪🇺 Conference League": "ALTA",
+    "🇮🇹 Serie A": "ALTA", "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": "ALTA", "🇪🇸 La Liga": "ALTA",
+    "🇩🇪 Bundesliga": "ALTA", "🇫🇷 Ligue 1": "ALTA",
+
+    # ── MEDIA — Seconde linee Top 5 + campionati europei consolidati ───────
+    "🇮🇹 Serie B": "MEDIA", "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship": "MEDIA",
+    "🇳🇱 Eerste Divisie": "MEDIA", "🇩🇪 2. Bundesliga": "MEDIA", "🇪🇸 La Liga 2": "MEDIA",
+    "🇳🇱 Eredivisie": "MEDIA", "🇵🇹 Primeira Liga": "MEDIA",
+    "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Prem.": "MEDIA", "🇹🇷 Süper Lig": "MEDIA", "🇧🇪 Pro League": "MEDIA",
+    "🇬🇷 Super League": "MEDIA", "🇨🇭 Super League": "MEDIA", "🇦🇹 Bundesliga": "MEDIA",
+    "🇸🇦 Saudi Pro League": "MEDIA",
+    "🇧🇷 Brasileirão Série A": "MEDIA", "🇦🇷 Liga Profesional": "MEDIA",
+    "🇲🇽 Liga MX": "MEDIA", "🇺🇸 MLS": "MEDIA",
+    "🇮🇹 Coppa Italia": "MEDIA", "🏴󠁧󠁢󠁥󠁮󠁧󠁿 FA Cup": "MEDIA", "🇪🇸 Copa del Rey": "MEDIA",
+    "🇩🇪 DFB Pokal": "MEDIA", "🇫🇷 Coupe de France": "MEDIA",
+
+    # ── BASSA — Leghe minori, playoff, coppe minori, sudamericani minori ───
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 League One": "BASSA", "🏴󠁧󠁢󠁥󠁮󠁧󠁿 League Two": "BASSA",
+    "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Championship": "BASSA", "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish League One": "BASSA",
+    "🇳🇴 Eliteserien": "BASSA", "🇳🇴 1. divisjon (Playoff NO)": "BASSA",
+    "🇸🇪 Allsvenskan": "BASSA", "🇸🇪 Superettan (Playoff SE)": "BASSA",
+    "🇫🇮 Veikkausliiga": "BASSA", "🇫🇮 Ykkönen (Playoff FI)": "BASSA",
+    "🇩🇰 Superliga": "BASSA", "🇩🇰 1. Division (Playoff DK)": "BASSA",
+    "🇧🇷 Brasileirão Série B": "BASSA", "🇨🇱 Primera División Chile": "BASSA",
+    "🇺🇾 Primera División Uruguay": "BASSA", "🇨🇴 Liga BetPlay": "BASSA",
+    "🇵🇪 Liga 1 Perù": "BASSA", "🇪🇨 LigaPro Ecuador": "BASSA",
+    "🇧🇴 División Profesional": "BASSA", "🇵🇾 División Profesional PY": "BASSA",
+    "🇻🇪 Liga FUTVE": "BASSA",
+    "🇫🇮 Finnish Cup": "BASSA", "🇳🇴 Norwegian Cup": "BASSA",
+    "🇸🇪 Svenska Cupen": "BASSA", "🇩🇰 DBU Pokalen": "BASSA",
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 EFL Cup": "BASSA", "🇳🇱 KNVB Beker": "BASSA", "🇵🇹 Taça de Portugal": "BASSA",
+    "🇧🇪 Croky Cup": "BASSA", "🇹🇷 Türkiye Kupası": "BASSA", "🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Cup": "BASSA",
+    "🇨🇭 Schweizer Cup": "BASSA", "🇦🇹 ÖFB Cup": "BASSA",
+}
+
+AFFIDABILITA_ORDINE = {"ALTA": 3, "MEDIA": 2, "BASSA": 1}
+AFFIDABILITA_BADGE = {
+    "ALTA":  ("🟢", "#22c55e", "Dati completi"),
+    "MEDIA": ("🟡", "#f59e0b", "Dati parziali"),
+    "BASSA": ("🔴", "#ef4444", "Dati limitati — stime da momentum"),
+}
+
+def get_affidabilita(nome_lega: str) -> str:
+    return LIVELLO_AFFIDABILITA.get(nome_lega, "MEDIA")   # default prudente
 
 # Campionati che usano anno solare come stagione
 LEGHE_ANNO_SOLARE = {
@@ -1212,198 +1295,6 @@ def analizza_statistiche_avanzate_pro(team_id: int):
         return (50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5,
                 "Bilanciato", 0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0)
 
-# ==========================================
-# 🌍 MODULO MONDIALE — Logica dedicata per Nazionali
-# ==========================================
-@st.cache_data(ttl=86400)
-def get_ranking_fifa() -> dict:
-    """
-    Scarica il ranking FIFA corrente e restituisce {team_id: rank}.
-    Usato per calibrare l'xG delle nazionali in sostituzione delle standings di lega.
-    """
-    try:
-        resp = requests.get(
-            "https://v3.football.api-sports.io/teams",
-            headers=HEADERS,
-            params={'league': 1, 'season': 2026},
-            timeout=8
-        ).json()
-        # L'API non espone direttamente il ranking FIFA, usiamo le statistiche
-        # del Mondiale come proxy. Fallback: ranking 50 (mediano)
-        ranking = {}
-        for t in resp.get('response', []):
-            ranking[t['team']['id']] = 50  # default mediano
-        return ranking
-    except Exception:
-        return {}
-
-
-# Ranking FIFA approssimativo per le nazionali più importanti
-# Usato come fallback quando l'API non ha dati sufficienti
-# e come correttore del peso del modello
-RANKING_FIFA_PROXY = {
-    # Top 10 mondiali
-    "France": 1, "Brazil": 2, "England": 3, "Argentina": 4,
-    "Belgium": 5, "Portugal": 6, "Spain": 7, "Netherlands": 8,
-    "Germany": 9, "Croatia": 10,
-    # 11-30
-    "Italy": 11, "Uruguay": 12, "USA": 13, "Mexico": 14,
-    "Colombia": 15, "Senegal": 16, "Morocco": 17, "Switzerland": 18,
-    "Japan": 19, "Denmark": 20, "Austria": 21, "South Korea": 22,
-    "Ecuador": 23, "Hungary": 24, "Wales": 25, "Australia": 26,
-    "Iran": 27, "Serbia": 28, "Poland": 29, "Ukraine": 30,
-}
-
-def get_xg_da_ranking(rank: int) -> float:
-    """
-    xG base derivato dal ranking FIFA.
-    Top 5 → ~1.8 gol/partita, rank 50+ → ~1.0 gol/partita.
-    """
-    if rank <= 5:   return 1.80
-    elif rank <= 10: return 1.60
-    elif rank <= 20: return 1.40
-    elif rank <= 30: return 1.25
-    elif rank <= 50: return 1.10
-    else:            return 0.95
-
-@st.cache_data(ttl=86400)
-def get_stats_nazionale(team_id: int, stagione: int) -> dict:
-    """
-    Statistiche nazionali per il Mondiale.
-    MIGLIORIA: filtra amichevoli, usa ranking FIFA come ancora,
-    allarga il campione a 20 partite per nazionali con poco storico.
-    """
-    _default = {'xg_att': 1.2, 'xg_dif': 1.2, 'forma': 'N/D',
-                'm_forma': 1.0, 'avg_gf': 1.2, 'avg_gs': 1.2,
-                'rank': 50, 'nome': ''}
-
-    try:
-        # Prima cerca il nome della squadra per il ranking proxy
-        team_resp = requests.get(
-            "https://v3.football.api-sports.io/teams",
-            headers=HEADERS, params={'id': team_id}, timeout=6
-        ).json()
-        nome_naz = ""
-        if team_resp.get('response'):
-            nome_naz = team_resp['response'][0]['team']['name']
-        rank_proxy = RANKING_FIFA_PROXY.get(nome_naz, 50)
-
-        # Scarica ultime 20 partite (ampio campione per nazionali rare)
-        resp = requests.get(
-            "https://v3.football.api-sports.io/fixtures",
-            headers=HEADERS,
-            params={'team': team_id, 'last': 20, 'status': 'FT'},
-            timeout=8
-        ).json()
-        matches = resp.get('response', [])
-
-        gf_ufficiali = gs_ufficiali = n_uff = 0
-        gf_amichevoli = gs_amichevoli = n_ami = 0
-        punti = 0
-        forma_str = ""
-
-        for m in matches:
-            is_home = str(m['teams']['home']['id']) == str(team_id)
-            gf = m['goals']['home'] if is_home else m['goals']['away']
-            gs = m['goals']['away'] if is_home else m['goals']['home']
-            if gf is None or gs is None:
-                continue
-
-            league_id = m['league']['id']
-            # Partite ufficiali: Mondiali(1), Qualificazioni(29,32,34),
-            # Nations League(5,6), Coppa America(9), AFCON(6), Euro(4)
-            is_ufficiale = league_id in [1, 4, 5, 6, 9, 10, 29, 32, 34, 35]
-
-            if is_ufficiale:
-                gf_ufficiali += int(gf); gs_ufficiali += int(gs); n_uff += 1
-            else:
-                gf_amichevoli += int(gf); gs_amichevoli += int(gs); n_ami += 1
-
-            if len(forma_str) < 5:
-                if gf > gs:    forma_str += "W"; punti += 3
-                elif gf == gs: forma_str += "D"; punti += 1
-                else:          forma_str += "L"
-
-        # Calcolo xG: priorità alle partite ufficiali
-        # Se non ci sono dati ufficiali, usa amichevoli con peso ridotto
-        # Se non ci sono dati di nessun tipo, usa il ranking FIFA come proxy
-        if n_uff >= 3:
-            avg_gf = gf_ufficiali / n_uff
-            avg_gs = gs_ufficiali / n_uff
-            affidabilita = 1.0
-        elif n_uff > 0 and n_ami > 0:
-            # Mix: 70% ufficiali + 30% amichevoli
-            avg_gf = (gf_ufficiali/n_uff)*0.70 + (gf_amichevoli/n_ami)*0.30
-            avg_gs = (gs_ufficiali/n_uff)*0.70 + (gs_amichevoli/n_ami)*0.30
-            affidabilita = 0.80
-        elif n_ami >= 3:
-            avg_gf = gf_amichevoli / n_ami * 0.85  # sconto amichevoli
-            avg_gs = gs_amichevoli / n_ami * 0.85
-            affidabilita = 0.60
-        else:
-            # Nessun dato → usa ranking FIFA
-            xg_rank = get_xg_da_ranking(rank_proxy)
-            avg_gf = xg_rank
-            avg_gs = 1.5 - (xg_rank - 1.0) * 0.3  # top team subisce meno
-            affidabilita = 0.40
-
-        # Ancora al ranking: impedisce stime assurde
-        # Una nazionale top (rank<10) non può avere avg_gf < 1.2
-        # Una nazionale debole (rank>40) non può avere avg_gf > 1.8
-        xg_rank_min = get_xg_da_ranking(min(rank_proxy, 50)) * 0.70
-        xg_rank_max = get_xg_da_ranking(max(rank_proxy, 1))  * 1.30
-        avg_gf = min(xg_rank_max, max(xg_rank_min, avg_gf))
-
-        m_forma = 0.9 + (punti / 15) * 0.2 if len(forma_str) > 0 else 1.0
-
-        return {
-            'xg_att':       avg_gf,
-            'xg_dif':       avg_gs,
-            'forma':        forma_str[::-1] if forma_str else 'N/D',
-            'm_forma':      m_forma,
-            'avg_gf':       avg_gf,
-            'avg_gs':       avg_gs,
-            'rank':         rank_proxy,
-            'nome':         nome_naz,
-            'affidabilita': affidabilita,
-            'n_uff':        n_uff,
-        }
-    except Exception:
-        return _default
-
-def calcola_fase_mondiale(round_str: str) -> dict:
-    """
-    Determina il boost motivazionale in base alla fase del torneo.
-    round_str viene dall'API (es. 'Group Stage', 'Round of 16', 'Quarter-finals', ecc.)
-    """
-    rs = str(round_str).lower()
-    if 'final' in rs and 'semi' not in rs and 'quarter' not in rs:
-        return {'boost': 1.50, 'label': '🏆 FINALE MONDIALE'}
-    elif 'semi' in rs:
-        return {'boost': 1.40, 'label': '🥊 SEMIFINALE'}
-    elif 'quarter' in rs:
-        return {'boost': 1.30, 'label': '⚡ QUARTI'}
-    elif 'round of 16' in rs or 'last 16' in rs or 'ottavi' in rs:
-        return {'boost': 1.20, 'label': '🎯 OTTAVI'}
-    elif 'group' in rs or 'girone' in rs:
-        return {'boost': 1.10, 'label': '🌍 FASE A GIRONI'}
-    else:
-        return {'boost': 1.15, 'label': '🏟️ Fase Eliminazione'}
-
-def calcola_xg_mondiale(stats_c: dict, stats_t: dict, fase: dict) -> tuple:
-    """
-    xG per partite del Mondiale: basato al 100% sullo storico recente
-    della nazionale, non sulle standings (che non esistono nel formato classico).
-    """
-    xg_c = math.sqrt(max(0.01, stats_c['avg_gf']) * max(0.01, stats_t['avg_gs']))
-    xg_t = math.sqrt(max(0.01, stats_t['avg_gf']) * max(0.01, stats_c['avg_gs']))
-    # Boost motivazione Mondiale
-    xg_c *= fase['boost'] * stats_c['m_forma']
-    xg_t *= fase['boost'] * stats_t['m_forma']
-    # Cap
-    xg_c = min(XG_MAX, max(XG_MIN, xg_c))
-    xg_t = min(XG_MAX, max(XG_MIN, xg_t))
-    return xg_c, xg_t
 
 # ==========================================
 # 📊 CORE — CALCOLO MERCATI (POISSON)
@@ -1807,7 +1698,32 @@ if 'active_leagues' not in st.session_state:
     st.session_state['active_leagues'] = MASTER_LEAGUES
 active_dict = st.session_state['active_leagues']
 if not active_dict: st.sidebar.warning("Nessun campionato supportato attivo.")
-scelte     = st.sidebar.multiselect("Campionati:", list(active_dict.keys()), default=list(active_dict.keys()))
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("**🎯 Filtro Affidabilità Dati**")
+filtro_affidabilita = st.sidebar.multiselect(
+    "Includi solo:",
+    ["🟢 ALTA", "🟡 MEDIA", "🔴 BASSA"],
+    default=["🟢 ALTA", "🟡 MEDIA", "🔴 BASSA"],
+    help="ALTA = standings+stats+infortuni+quote reali. MEDIA = dati buoni con qualche lacuna. "
+         "BASSA = fallback pesanti attivi, stime basate su momentum recente."
+)
+livelli_ok = {f.split(" ")[1] for f in filtro_affidabilita}
+
+leghe_filtrate = {
+    k: v for k, v in active_dict.items()
+    if get_affidabilita(k) in livelli_ok
+}
+if not leghe_filtrate:
+    st.sidebar.warning("Nessun campionato nel livello di affidabilità selezionato.")
+
+# Ordina i campionati per affidabilità (Alta prima) poi alfabetico
+leghe_ordinate = sorted(
+    leghe_filtrate.keys(),
+    key=lambda n: (-AFFIDABILITA_ORDINE.get(get_affidabilita(n), 2), n)
+)
+
+scelte     = st.sidebar.multiselect("Campionati:", leghe_ordinate, default=leghe_ordinate)
 btn_genera = st.sidebar.button("⚡ ESTRAI MATRIX V90")
 
 # ==========================================
@@ -1822,14 +1738,13 @@ if btn_genera:
 
     for name in scelte:
         f_id         = active_dict[name]
-        is_mondiale  = (f_id == 1)
         is_coppa_eu  = name in COPPE_EUROPEE
         is_coppa_naz = name in COPPE_NAZIONALI
         is_coppa     = is_coppa_eu or is_coppa_naz
         is_anno_sol  = name in LEGHE_ANNO_SOLARE
         is_playoff   = name in LEGHE_PLAYOFF
         is_lega_cieca = f_id in LEGHE_CIECHE
-        stagione_lega = start_date.year if (is_anno_sol or is_mondiale) else STAGIONE
+        stagione_lega = start_date.year if is_anno_sol else STAGIONE
 
         with st.spinner(f"Analisi V90 {name}..."):
             fix = requests.get(
@@ -1848,50 +1763,45 @@ if btn_genera:
             tot_squadre     = 20
             partite_tot_camp = 38
 
-            if not is_mondiale:
-                std = requests.get(
-                    "https://v3.football.api-sports.io/standings",
-                    headers=HEADERS,
-                    params={'league': f_id, 'season': stagione_lega},
-                    timeout=10
-                ).json()
+            std = requests.get(
+                "https://v3.football.api-sports.io/standings",
+                headers=HEADERS,
+                params={'league': f_id, 'season': stagione_lega},
+                timeout=10
+            ).json()
 
-                if (std.get('response') and len(std['response']) > 0
-                        and 'league' in std['response'][0]
-                        and 'standings' in std['response'][0]['league']):
-                    tutti_gironi = std['response'][0]['league']['standings']
-                    for gruppo in tutti_gironi:
-                        tot_squadre      = len(gruppo)
-                        partite_tot_camp = max((tot_squadre - 1) * 2, 38)
-                        # FIX: punti_champions e punti_salvezza dalla classifica reale
-                        if tot_squadre >= 4:
-                            punti_champions = gruppo[3]['points']
-                            punti_salvezza  = gruppo[tot_squadre - 4]['points']
-                        for t in gruppo:
-                            n = semplifica_nome(t['team']['name'])
-                            db_stats[n] = {
-                                'id':      t['team']['id'],
-                                'rank':    t['rank'],
-                                'giocate': t['all']['played'],
-                                'punti':   t['points'],
-                                'ac': (t['home']['goals']['for']     or 0) / max(1, t['home']['played'] or 1),
-                                'dc': (t['home']['goals']['against'] or 0) / max(1, t['home']['played'] or 1),
-                                'at': (t['away']['goals']['for']     or 0) / max(1, t['away']['played'] or 1),
-                                'dt': (t['away']['goals']['against'] or 0) / max(1, t['away']['played'] or 1),
-                            }
-                else:
-                    # PLAYOFF RESCUE / STANDINGS FALLBACK
-                    # Se l'API non restituisce standings (playoff, gironi, fasi finali):
-                    # costruiamo un db di emergenza dalle partite stesse.
-                    # Il motore xG userà al 100% lo storico recente (momentum).
-                    for f in fix['response']:
-                        for tt in ['home', 'away']:
-                            n    = semplifica_nome(f['teams'][tt]['name'])
-                            t_id = f['teams'][tt]['id']
-                            if n not in db_stats:
-                                db_stats[n] = {'id': t_id, 'rank': 10, 'giocate': 0,
-                                               'punti': 0, 'ac': 0.0, 'dc': 0.0,
-                                               'at': 0.0, 'dt': 0.0}
+            if (std.get('response') and len(std['response']) > 0
+                    and 'league' in std['response'][0]
+                    and 'standings' in std['response'][0]['league']):
+                tutti_gironi = std['response'][0]['league']['standings']
+                for gruppo in tutti_gironi:
+                    tot_squadre      = len(gruppo)
+                    partite_tot_camp = max((tot_squadre - 1) * 2, 38)
+                    if tot_squadre >= 4:
+                        punti_champions = gruppo[3]['points']
+                        punti_salvezza  = gruppo[tot_squadre - 4]['points']
+                    for t in gruppo:
+                        n = semplifica_nome(t['team']['name'])
+                        db_stats[n] = {
+                            'id':      t['team']['id'],
+                            'rank':    t['rank'],
+                            'giocate': t['all']['played'],
+                            'punti':   t['points'],
+                            'ac': (t['home']['goals']['for']     or 0) / max(1, t['home']['played'] or 1),
+                            'dc': (t['home']['goals']['against'] or 0) / max(1, t['home']['played'] or 1),
+                            'at': (t['away']['goals']['for']     or 0) / max(1, t['away']['played'] or 1),
+                            'dt': (t['away']['goals']['against'] or 0) / max(1, t['away']['played'] or 1),
+                        }
+            else:
+                # PLAYOFF RESCUE / STANDINGS FALLBACK
+                for f in fix['response']:
+                    for tt in ['home', 'away']:
+                        n    = semplifica_nome(f['teams'][tt]['name'])
+                        t_id = f['teams'][tt]['id']
+                        if n not in db_stats:
+                            db_stats[n] = {'id': t_id, 'rank': 10, 'giocate': 0,
+                                           'punti': 0, 'ac': 0.0, 'dc': 0.0,
+                                           'at': 0.0, 'dt': 0.0}
 
             # ── CACHE QUOTE ────────────────────────────────────────
             date_giocate = {f['fixture']['date'][:10] for f in fix['response']}
@@ -1917,61 +1827,6 @@ if btn_genera:
                 t_s = semplifica_nome(t_u)
 
                 quote_reali_match = odds_cache.get(match_date_str, {}).get(fix_id, {})
-
-                # ── BRANCH MONDIALE ────────────────────────────────
-                if is_mondiale:
-                    c_id = f['teams']['home']['id']
-                    t_id = f['teams']['away']['id']
-                    fase = calcola_fase_mondiale(f['fixture'].get('round') or 'Group Stage')
-                    stats_c = get_stats_nazionale(c_id, stagione_lega)
-                    stats_t = get_stats_nazionale(t_id, stagione_lega)
-                    xg_c, xg_t = calcola_xg_mondiale(stats_c, stats_t, fase)
-                    m_met, d_met = scarica_meteo(f['fixture'].get('venue', {}).get('city') or c_s)
-                    xg_c *= m_met; xg_t *= m_met
-                    full_tips = calcola_tutti_i_mercati(xg_c, xg_t, 8.0, 3.5, False, 18.0)
-                    best_key  = max(["1", "X", "2"], key=lambda k: full_tips[k])
-                    if full_tips[best_key] < 40.0:
-                        best_key = "No Segno Fisso"; best_prob = 0.0; best_q = "-"; best_real = False
-                    else:
-                        best_prob = full_tips[best_key]
-                        best_q, best_real = get_quota_finale(best_key, best_prob, quote_reali_match)
-                    for k, v in full_tips.items():
-                        q_fin, is_real = get_quota_finale(k, v, quote_reali_match)
-                        st.session_state.all_tips_global.append({
-                            "Match":  f"{c_u} vs {t_u}", "League": name, "Tip": k,
-                            "Prob":   v, "Quota": q_fin, "Real": is_real, "Time": orario_ita,
-                            "Edge":   calcola_edge_pct(v, q_fin),
-                            "Kelly":  kelly_fraction(v, q_fin),
-                        })
-                    matches_list.append({
-                        "orario": orario_ita, "c_u": c_u, "t_u": t_u, "c_s": c_s, "t_s": t_s,
-                        "is_mondiale": True, "fase_mondiale": fase['label'],
-                        "rank_c": "–", "rank_t": "–",
-                        "cs_c": 0, "fts_c": 0, "cs_t": 0, "fts_t": 0,
-                        "all_tips": full_tips,
-                        "best_1x2": (best_key, best_prob if best_key != "No Segno Fisso" else 0.0, best_q, best_real),
-                        "quote_reali": quote_reali_match,
-                        "xg_c": xg_c, "xg_t": xg_t, "arb": "N/D", "is_sev": False,
-                        "count_c": 0, "sq_c": 0, "t1_c": 0, "t2_c": 0, "t3_c": 0,
-                        "gk_out_c": False, "def_out_c": 0,
-                        "count_t": 0, "sq_t": 0, "t1_t": 0, "t2_t": 0, "t3_t": 0,
-                        "gk_out_t": False, "def_out_t": 0,
-                        "meteo": d_met, "msg_radar": "",
-                        "dna_h2h": "Dati H2H non disponibili per Nazionali",
-                        "dettagli_h2h": "",
-                        "streak_msg": "", "andata_msg": fase['label'],
-                        "msg_mot": fase['label'],
-                        "stan_c": "✅", "stan_t": "✅",
-                        "forma_c": stats_c['forma'], "forma_t": stats_t['forma'],
-                        "rit_c": [], "rit_t": [],
-                        "pressione_c": 0.0, "pressione_t": 0.0, "msg_pressione": "",
-                        "poss_c": 50, "tiri_c": 4, "conv_c": 5, "stile_c": "Nazionale",
-                        "box_c": 4, "falli_c": 10, "parate_c": 2,
-                        "poss_t": 50, "tiri_t": 4, "conv_t": 5, "stile_t": "Nazionale",
-                        "box_t": 4, "falli_t": 10, "parate_t": 2,
-                        "corn_tot": 8.0, "cart_tot": 3.5, "falli_tot": 18.0,
-                    })
-                    continue   # salta tutta la logica club
 
                 # ── BRANCH CLUB (campionati + playoff) ─────────────
                 # Playoff rescue: squadre nei playoff non in classifica principale
@@ -2229,7 +2084,6 @@ if btn_genera:
                     })
                 matches_list.append({
                     "orario": orario_ita, "c_u": c_u, "t_u": t_u, "c_s": c_s, "t_s": t_s,
-                    "is_mondiale": False, "fase_mondiale": "",
                     "rank_c": db_stats[c_s]['rank'], "rank_t": db_stats[t_s]['rank'],
                     "cs_c": cs_c, "fts_c": fts_c, "cs_t": cs_t, "fts_t": fts_t,
                     "all_tips": full_tips,
@@ -2304,6 +2158,8 @@ if st.session_state.data_master:
             cols = ['Match','Tip','Prob','Quota','Edge','Kelly','Time','League']
             df = df[cols].copy()   # .copy() evita che la modifica di Kelly corrompa all_tips_global
             df['Kelly'] = (df['Kelly'] * 100).round(1)
+            # Colonna Affidabilità: badge visivo per capire quanto fidarsi del dato
+            df['Aff'] = df['League'].apply(lambda l: AFFIDABILITA_BADGE[get_affidabilita(l)][0])
             df.insert(0, "🛒", False)
             ed = st.data_editor(df,
                 column_config={
@@ -2312,9 +2168,10 @@ if st.session_state.data_master:
                     "Quota": st.column_config.NumberColumn("Quota",           format="%.2f"),
                     "Edge":  st.column_config.NumberColumn("Edge (%)",        format="%.1f%%"),
                     "Kelly": st.column_config.NumberColumn("Kelly (%)",        format="%.1f%%"),
+                    "Aff":   st.column_config.TextColumn("Dati", help="🟢 Alta 🟡 Media 🔴 Bassa affidabilità"),
                 },
                 hide_index=True, use_container_width=True,
-                disabled=['Match','Tip','Prob','Quota','Edge','Kelly','Time','League'],
+                disabled=['Match','Tip','Prob','Quota','Edge','Kelly','Time','League','Aff'],
                 key=f"ed_{titolo}")
             return ed[ed["🛒"] == True].to_dict('records')
 
@@ -2391,18 +2248,19 @@ if st.session_state.data_master:
     with t2:
         st.write(f"Partite per il periodo **{start_str} / {end_str}**.")
         for camp, matches in st.session_state.data_master.items():
-            with st.expander(f"🏆 {camp}", expanded=False):
+            aff = get_affidabilita(camp)
+            aff_icon, aff_color, aff_desc = AFFIDABILITA_BADGE[aff]
+            with st.expander(f"🏆 {camp}  {aff_icon}", expanded=False):
+                st.markdown(
+                    f"<span class='tag' style='background:{aff_color}22;border:1px solid {aff_color}55;"
+                    f"color:{aff_color} !important;'>{aff_icon} Affidabilità {aff} — {aff_desc}</span>",
+                    unsafe_allow_html=True)
                 for m in sorted(matches, key=lambda x: x['orario']):
                     titolo_e = (f"🕒 {m['orario']} | 🏟️ {m['c_u']} vs {m['t_u']} | "
                                 f"👑 {m['best_1x2'][0]}"
                                 if m['best_1x2'][0] != "No Segno Fisso"
                                 else f"🕒 {m['orario']} | 🏟️ {m['c_u']} vs {m['t_u']} | ⚠️ No Bet")
                     with st.expander(titolo_e, expanded=False):
-
-                        # Badge Mondiale
-                        if m.get('is_mondiale'):
-                            st.markdown(f"<span class='mondiale-testo'>🌍 {m['fase_mondiale']}</span>",
-                                        unsafe_allow_html=True)
 
                         st.markdown(
                             f"<div style='font-size:0.85em;color:#7f8c8d;margin-bottom:10px;'>"
@@ -2413,7 +2271,7 @@ if st.session_state.data_master:
                         if m.get('msg_radar'): st.warning(m['msg_radar'])
                         tags = ""
                         if m['msg_mot']:    tags += f"<span class='tag tag-giallo'>{m['msg_mot']}</span> "
-                        if m.get('msg_pressione'): tags += f"<span class='tag tag-rosso'>{m['msg_pressione'].strip()}</span> "
+                        if                         if m.get('msg_pressione'): tags += f"<span class='tag tag-rosso'>{m['msg_pressione'].strip()}</span> "
                         if m['andata_msg']: tags += f"<span class='tag tag-blu'>{m['andata_msg']}</span> "
                         if m['streak_msg']: tags += f"<span class='tag tag-rosso'>{m['streak_msg']}</span> "
                         if tags: st.markdown(f"<div style='margin-bottom:15px;'>{tags}</div>", unsafe_allow_html=True)
@@ -2476,7 +2334,7 @@ if st.session_state.data_master:
                             with col:
                                 panel_cls = "team-panel-home" if icona == "🏠" else "team-panel-away"
                                 xg_cls    = "xg-home"        if icona == "🏠" else "xg-away"
-                                rank_lbl  = "" if camp in COPPE_EUROPEE or m.get("is_mondiale") \
+                                rank_lbl  = "" if camp in COPPE_EUROPEE \
                                             else f'<span style="font-size:0.7rem;color:var(--text2);margin-left:6px;">#{rank}</span>'
                                 forma_html = ""
                                 for ch in (forma or ""):
