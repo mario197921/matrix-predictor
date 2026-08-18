@@ -2271,7 +2271,7 @@ if st.session_state.data_master:
                         if m.get('msg_radar'): st.warning(m['msg_radar'])
                         tags = ""
                         if m['msg_mot']:    tags += f"<span class='tag tag-giallo'>{m['msg_mot']}</span> "
-                        if                         if m.get('msg_pressione'): tags += f"<span class='tag tag-rosso'>{m['msg_pressione'].strip()}</span> "
+                        if m.get('msg_pressione'): tags += f"<span class='tag tag-rosso'>{m['msg_pressione'].strip()}</span> "
                         if m['andata_msg']: tags += f"<span class='tag tag-blu'>{m['andata_msg']}</span> "
                         if m['streak_msg']: tags += f"<span class='tag tag-rosso'>{m['streak_msg']}</span> "
                         if tags: st.markdown(f"<div style='margin-bottom:15px;'>{tags}</div>", unsafe_allow_html=True)
