@@ -1894,7 +1894,7 @@ if btn_genera:
 
                 # Squad Depth Buffer
                 if not is_coppa:
-                    gap_c = db_stats[c_s]['punti'] - db_stats[t_s]['punti']
+                    gap_c = db_stats[c_s].get('punti', 0) - db_stats[t_s].get('punti', 0)
                     gap_t = -gap_c
                     if gap_c >= 15:
                         a = max(0.20, 1.0 - gap_c/45.0); malus_att_c *= a; boost_opp_t *= a
@@ -1919,9 +1919,9 @@ if btn_genera:
                 elif is_playoff:
                     m_mot_c = m_mot_t = 1.30; tension_idx += 0.4; msg_mot = "⚡ PLAYOFF"
                 elif not is_coppa:
-                    punti_c  = db_stats[c_s]['punti']; punti_t  = db_stats[t_s]['punti']
-                    rank_c   = db_stats[c_s]['rank'];  rank_t   = db_stats[t_s]['rank']
-                    gioc_c   = db_stats[c_s]['giocate']; gioc_t = db_stats[t_s]['giocate']
+                    punti_c  = db_stats[c_s].get('punti', 0);  punti_t = db_stats[t_s].get('punti', 0)
+                    rank_c   = db_stats[c_s].get('rank', 10);  rank_t  = db_stats[t_s].get('rank', 10)
+                    gioc_c   = db_stats[c_s].get('giocate', 0); gioc_t = db_stats[t_s].get('giocate', 0)
                     gap_ch_c = punti_champions - punti_c
                     gap_ch_t = punti_champions - punti_t
                     part_rim_c = max(1, partite_tot_camp - gioc_c)
@@ -2010,8 +2010,8 @@ if btn_genera:
                 m_mot_t = m_mot_t * (1 - pressione_t)
 
                 # Hybrid xG
-                xg_st_c = math.sqrt(max(0.01, db_stats[c_s]['ac']) * max(0.01, db_stats[t_s]['dt']))
-                xg_st_t = math.sqrt(max(0.01, db_stats[t_s]['at']) * max(0.01, db_stats[c_s]['dc']))
+                xg_st_c = math.sqrt(max(0.01, db_stats[c_s].get('ac', 0.0)) * max(0.01, db_stats[t_s].get('dt', 0.0)))
+                xg_st_t = math.sqrt(max(0.01, db_stats[t_s].get('at', 0.0)) * max(0.01, db_stats[c_s].get('dc', 0.0)))
                 # MIGLIORIA 2: xG momentum usa casa/trasferta separati
                 # Casa gioca in casa → usiamo i suoi gol_fatti_in_casa vs gol_subiti_in_casa dell'avversario
                 xg_mo_c = math.sqrt(max(0.01, gf_home_c) * max(0.01, gs_home_t))
@@ -2019,7 +2019,7 @@ if btn_genera:
                 # Peso momentum: inter-lega=100%, coppe/playoff=80%, normale=30%
                 if peso_mom_override is not None:
                     peso_mom = peso_mom_override
-                elif is_coppa or is_playoff or db_stats[c_s]['giocate'] <= 5:
+                elif is_coppa or is_playoff or db_stats[c_s].get('giocate', 0) <= 5:
                     peso_mom = 0.80
                 else:
                     peso_mom = 0.30
@@ -2084,7 +2084,7 @@ if btn_genera:
                     })
                 matches_list.append({
                     "orario": orario_ita, "c_u": c_u, "t_u": t_u, "c_s": c_s, "t_s": t_s,
-                    "rank_c": db_stats[c_s]['rank'], "rank_t": db_stats[t_s]['rank'],
+                    "rank_c": db_stats[c_s].get('rank', 10), "rank_t": db_stats[t_s].get('rank', 10),
                     "cs_c": cs_c, "fts_c": fts_c, "cs_t": cs_t, "fts_t": fts_t,
                     "all_tips": full_tips,
                     "best_1x2": (best_key, best_prob, best_q, best_real),
