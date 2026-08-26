@@ -1235,6 +1235,12 @@ if btn_genera:
                     else:
                         peso_mom = 0.30
                     peso_std  = 1.0 - peso_mom
+                    # Stima instabile = il modello sta usando un blend a forte momentum
+                    # (coppa, playoff, inter-lega o inizio stagione con <=5 partite giocate):
+                    # su questi casi l'edge dichiarato può gonfiarsi in modo non affidabile
+                    # (poche partite = xG di momentum molto rumoroso). Usato più sotto per
+                    # non proporre come "value bet" edge sospetti finché i dati non maturano.
+                    stima_instabile = peso_mom > 0.30
                     xg_base_c = ((xg_st_c * peso_std) + (xg_mo_c * peso_mom)) * m_f_c * m_st_c
                     xg_base_t = ((xg_st_t * peso_std) + (xg_mo_t * peso_mom)) * m_f_t * m_st_t
 
@@ -1287,12 +1293,22 @@ if btn_genera:
                         best_prob = full_tips[best_key]
                         best_q, best_real = get_quota_finale(best_key, best_prob, quote_reali_match)
 
+                    SOGLIA_EDGE_SOSPETTO = 60.0  # oltre questa soglia, un edge su dati
+                                                 # instabili è quasi certamente rumore, non valore reale
                     for k, v in full_tips.items():
                         q_fin, is_real = get_quota_finale(k, v, quote_reali_match)
+                        edge_v = calcola_edge_pct(v, q_fin)
+                        # Nasconde dalle tabelle Value Bet/schedine solo i pick con edge
+                        # sospetto su dati ancora instabili (inizio stagione, coppe, playoff).
+                        # Non è un taglio permanente: appena la squadra accumula partite
+                        # (o non è più in un contesto a momentum forzato) il pick ricompare
+                        # regolarmente. La partita resta comunque visibile in "Esplora Partite".
+                        if stima_instabile and edge_v > SOGLIA_EDGE_SOSPETTO:
+                            continue
                         st.session_state.all_tips_global.append({
                             "Match":  f"{c_u} vs {t_u}", "League": name, "Tip": k,
                             "Prob":   v, "Quota": q_fin, "Real": is_real, "Time": orario_ita,
-                            "Edge":   calcola_edge_pct(v, q_fin),
+                            "Edge":   edge_v,
                             "Kelly":  kelly_fraction(v, q_fin),
                             "Aff":    aff_match,
                         })
