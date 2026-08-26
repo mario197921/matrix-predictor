@@ -99,7 +99,7 @@ def get_quota_finale(tip: str, prob: float, quote_reali: dict):
 def calcola_edge_pct(prob: float, quota: float) -> float:
     return ((prob / 100.0) * quota - 1.0) * 100.0
 
-def kelly_fraction(prob: float, quota: float, fraz: float = 0.25) -> float:
+def kelly_fraction(prob: float, quota: float, fraz: float = 0.08) -> float:
     p = prob / 100.0; b = quota - 1.0
     if b <= 0: return 0.0
     return max(0.0, ((b * p - (1 - p)) / b) * fraz)

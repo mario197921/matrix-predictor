@@ -267,7 +267,7 @@ def report_roi(bets: pd.DataFrame, bilancio_flat: float, bilancio_kelly: float, 
           f"Edge medio dichiarato: {bets['edge_pct'].mean():.1f}%")
     print(f"\nStake flat (1 unità a scommessa): P/L = {bilancio_flat:+.2f} unità "
           f"({bilancio_flat / n * 100:+.1f}% ROI per scommessa)")
-    print(f"Stake Kelly (25%, bankroll iniziale {budget_kelly:.0f}): "
+    print(f"Stake Kelly (8%, bankroll iniziale {budget_kelly:.0f}): "
           f"P/L = {bilancio_kelly:+.2f}  "
           f"({bilancio_kelly / budget_kelly * 100:+.1f}% sul bankroll iniziale)")
     print("\n⚠️  Su un solo campione storico limitato questi numeri sono indicativi, "

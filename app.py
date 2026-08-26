@@ -1633,8 +1633,9 @@ if st.session_state.data_master:
     # ─── TAB 3 ──────────────────────────────────────────────────────────────────
     with t3:
         st.header("🏆 Generatore Automatico Ottimizzato V90")
-        st.info("Budget allocato con **Kelly Criterion** (25% frazionato) — "
-                "ogni fascia riceve un budget proporzionale al proprio edge medio reale.")
+        st.info("Budget allocato con **Kelly Criterion** (8% frazionato, ridotto da 25% per "
+                "prudenza — il backtest storico ha mostrato un edge dichiarato spesso poco "
+                "affidabile) — ogni fascia riceve un budget proporzionale al proprio edge medio reale.")
 
         if len(st.session_state.all_tips_global) >= 4:
             testo_export = f"=== MATRIX V90: SCHEDINE ===\nPeriodo: {start_str}/{end_str}\n\n"
