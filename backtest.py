@@ -58,6 +58,9 @@ from matrix_modello import (
 
 XG_MIN, XG_MAX = 0.10, 3.2
 FINESTRA_ROLLING = 6          # ultime N partite per la media gol casa/trasferta
+QUOTA_CAP = 6.0                # tetto massimo alla quota su cui si scommette (correzione
+                                # empirica: oltre questa soglia il modello sovrastima
+                                # sistematicamente l'edge, vedi nota in fondo al file)
 QUOTE_COLONNE_PRIORITA = [
     ("B365H", "B365D", "B365A"),
     ("BWH", "BWD", "BWA"),
@@ -201,7 +204,7 @@ def esegui_backtest(cartella: str):
                     quota = quote_reali[tip]
                     prob = tips[tip]
                     edge = calcola_edge_pct(prob, quota)
-                    if edge > 0:
+                    if edge > 0 and quota <= QUOTA_CAP:
                         vinta = 1 if tip == esito_1x2 else 0
                         bilancio_flat += (quota - 1) if vinta else -1
                         k = kelly_fraction(prob, quota)
@@ -253,7 +256,7 @@ def report_calibrazione(val: pd.DataFrame):
 
 def report_roi(bets: pd.DataFrame, bilancio_flat: float, bilancio_kelly: float, budget_kelly: float):
     print("\n" + "═" * 70)
-    print("ROI SUI PICK CON EDGE POSITIVO (1X2, quote reali del CSV)")
+    print(f"ROI SUI PICK CON EDGE POSITIVO (1X2, quote reali del CSV, quota <= {QUOTA_CAP})")
     print("═" * 70)
     if bets.empty:
         print("Nessuna scommessa con Edge>0 trovata (o quote non disponibili nei CSV).")
