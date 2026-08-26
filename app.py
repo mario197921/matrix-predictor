@@ -740,6 +740,14 @@ _oggi = datetime.now()
 STAGIONE = str(_oggi.year) if _oggi.month >= 8 else str(_oggi.year - 1)
 XG_MAX           = 3.2
 XG_MIN           = 0.10
+# PERF: analizza_statistiche_avanzate_pro faceva una chiamata
+# fixtures/statistics per OGNI partita nelle ultime 10 (fino a 10
+# chiamate extra a squadra) solo per possesso/tiri/corner/cartellini.
+# I gol (usati per xG casa/trasferta) vengono invece dalla risposta
+# /fixtures gia' scaricata, senza chiamate aggiuntive: limitiamo quindi
+# le chiamate fixtures/statistics alle ultime N partite, mantenendo
+# comunque le ultime 10 per la media gol.
+N_PARTITE_STATS_AVANZATE = 5
 MARGINE_BK       = 0.93   # ~7% margine bookmaker
 
 # ==========================================
@@ -1201,18 +1209,20 @@ def analizza_statistiche_stagionali(league_id: int, team_id: int, season_lega):
         ).json()
         stats = resp.get('response', {})
         if not stats:
-            return 0.0, 0.0
+            return 0.0, 0.0, True
         giocate = stats.get('fixtures', {}).get('played', {}).get('total', 0)
         if giocate == 0:
-            return 0.0, 0.0
+            return 0.0, 0.0, True
         cs_p  = (stats.get('clean_sheet', {}).get('total', 0) / giocate) * 100
         fts_p = (stats.get('failed_to_score', {}).get('total', 0) / giocate) * 100
         # Cap: su campioni piccoli (playoff, inizio stagione) i % possono essere 100/0 — irrealistici
         cs_p  = min(85.0, cs_p)
         fts_p = min(85.0, fts_p)
-        return cs_p, fts_p
+        return cs_p, fts_p, True
     except Exception:
-        return 0.0, 0.0
+        # ok=False: qui la funzione e' davvero fallita (errore/timeout API),
+        # a differenza dei return sopra dove i dati sono semplicemente assenti.
+        return 0.0, 0.0, False
 
 @st.cache_data(ttl=1800)
 def analizza_statistiche_avanzate_pro(team_id: int):
@@ -1259,24 +1269,28 @@ def analizza_statistiche_avanzate_pro(team_id: int):
                         if e["type"] == "Card" and "Red" in e.get("detail", ""):
                             sq_certi += 1
 
-            sr = requests.get(
-                "https://v3.football.api-sports.io/fixtures/statistics",
-                headers=HEADERS, params={"fixture": fid}, timeout=8
-            ).json()
-            for ts in sr.get("response", []):
-                if str(ts["team"]["id"]) == str(team_id):
-                    s = {x["type"]: x["value"] for x in ts["statistics"]}
-                    poss = str(s.get("Ball Possession", "50%")).replace("%", "")
-                    tot_poss  += int(poss) if poss.isdigit() else 50
-                    tot_tiri  += int(s.get("Shots on Goal", 0)    or 0)
-                    tot_area  += int(s.get("Shots insidebox", 0)  or 0)
-                    tot_corn  += int(s.get("Corner Kicks", 0)     or 0)
-                    tot_falli += int(s.get("Fouls", 0)            or 0)
-                    tot_par   += int(s.get("Goalkeeper Saves", 0) or 0)
-                    tot_cart  += int(s.get("Yellow Cards", 0) or 0) + int(s.get("Red Cards", 0) or 0)
-                    # MIGLIORIA 1: estrai rigori segnati
-                    tot_rigori += int(s.get("Penalty Goals", 0) or 0)
-                    mv_stats   += 1
+            # PERF: fixtures/statistics interrogato solo per le ultime
+            # N_PARTITE_STATS_AVANZATE partite (non tutte e 10) — riduce
+            # sensibilmente il numero di chiamate API per squadra.
+            if i < N_PARTITE_STATS_AVANZATE:
+                sr = requests.get(
+                    "https://v3.football.api-sports.io/fixtures/statistics",
+                    headers=HEADERS, params={"fixture": fid}, timeout=8
+                ).json()
+                for ts in sr.get("response", []):
+                    if str(ts["team"]["id"]) == str(team_id):
+                        s = {x["type"]: x["value"] for x in ts["statistics"]}
+                        poss = str(s.get("Ball Possession", "50%")).replace("%", "")
+                        tot_poss  += int(poss) if poss.isdigit() else 50
+                        tot_tiri  += int(s.get("Shots on Goal", 0)    or 0)
+                        tot_area  += int(s.get("Shots insidebox", 0)  or 0)
+                        tot_corn  += int(s.get("Corner Kicks", 0)     or 0)
+                        tot_falli += int(s.get("Fouls", 0)            or 0)
+                        tot_par   += int(s.get("Goalkeeper Saves", 0) or 0)
+                        tot_cart  += int(s.get("Yellow Cards", 0) or 0) + int(s.get("Red Cards", 0) or 0)
+                        # MIGLIORIA 1: estrai rigori segnati
+                        tot_rigori += int(s.get("Penalty Goals", 0) or 0)
+                        mv_stats   += 1
 
         if mv_stats == 0: mv_stats = 1
         if mv_goals == 0: mv_goals = 1
@@ -1311,10 +1325,11 @@ def analizza_statistiche_avanzate_pro(team_id: int):
         # Return esteso: aggiunge avg_rig, avg_gf_home, avg_gs_home, avg_gf_away, avg_gs_away
         return (avg_poss, avg_tiri, avg_area, conv, avg_corn, avg_cart, avg_falli, avg_par,
                 stile, sq_certi, avg_gf, avg_gs,
-                avg_rig, avg_gf_home, avg_gs_home, avg_gf_away, avg_gs_away)
+                avg_rig, avg_gf_home, avg_gs_home, avg_gf_away, avg_gs_away, True)
     except Exception:
+        # ok=False: fallback totale su errore/timeout API.
         return (50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5,
-                "Bilanciato", 0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0)
+                "Bilanciato", 0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, False)
 
 
 # ==========================================
@@ -1440,7 +1455,7 @@ def analizza_squadra_globale(team_id: int):
         ).json()
         matches = resp.get('response', [])
         if not matches:
-            return 1.0, False, "N/D", 1.0, [], 0, 0
+            return 1.0, False, "N/D", 1.0, [], 0, 0, True
 
         ultima_data  = datetime.strptime(matches[0]['fixture']['date'][:10], '%Y-%m-%d')
         diff_giorni  = (datetime.now() - ultima_data).days
@@ -1501,9 +1516,10 @@ def analizza_squadra_globale(team_id: int):
                     'label': f"{livello} {label_map[evento]}: {n}p ({peso:.1f}x media)"
                 })
 
-        return m_stanchezza, is_stanca, forma_str, m_forma, ritardi, punti_5, punti_prev_5
+        return m_stanchezza, is_stanca, forma_str, m_forma, ritardi, punti_5, punti_prev_5, True
     except Exception:
-        return 1.0, False, "N/D", 1.0, [], 0, 0
+        # ok=False: fallback su errore/timeout API.
+        return 1.0, False, "N/D", 1.0, [], 0, 0, False
 
 @st.cache_data(ttl=3600)
 def analizza_h2h_dna_e_andata(id_casa: int, id_trasf: int):
@@ -1514,7 +1530,7 @@ def analizza_h2h_dna_e_andata(id_casa: int, id_trasf: int):
         ).json()
         matches = resp.get('response', [])
         if not matches:
-            return 1.0, 1.0, 0, 0, "Nessun Precedente", 1.0, 1.0, "", "Nessun match."
+            return 1.0, 1.0, 0, 0, "Nessun Precedente", 1.0, 1.0, "", "Nessun match.", True
         vittorie_c = vittorie_t = gol_c = gol_t = 0
         andata_msg = ""; boost_c = boost_t = 1.0
         dettagli = []
@@ -1550,9 +1566,10 @@ def analizza_h2h_dna_e_andata(id_casa: int, id_trasf: int):
         m_h2h_c = min(1.20, max(0.80, 0.90 + (vittorie_c/cnt)*0.20 + (gol_c/(cnt*tot))*0.10))
         m_h2h_t = min(1.20, max(0.80, 0.90 + (vittorie_t/cnt)*0.20 + (gol_t/(cnt*tot))*0.10))
         storico = f"Vittorie: 🏠 {vittorie_c} - {vittorie_t} ✈️ | Gol H2H: {gol_c} a {gol_t}"
-        return m_h2h_c, m_h2h_t, gol_c, gol_t, storico, boost_c, boost_t, andata_msg, det_str
+        return m_h2h_c, m_h2h_t, gol_c, gol_t, storico, boost_c, boost_t, andata_msg, det_str, True
     except Exception:
-        return 1.0, 1.0, 0, 0, "Dati N/D", 1.0, 1.0, "", "Nessun dato."
+        # ok=False: fallback su errore/timeout API.
+        return 1.0, 1.0, 0, 0, "Dati N/D", 1.0, 1.0, "", "Nessun dato.", False
 
 @st.cache_data(ttl=86400)
 def trova_lega_squadra(team_id: int, season, fallback_id: int) -> int:
@@ -1883,10 +1900,10 @@ if btn_genera:
                             db_stats[sn] = {'id': tid, 'rank': 10, 'giocate': 0, 'punti': 0,
                                             'ac': 0.0, 'dc': 0.0, 'at': 0.0, 'dt': 0.0}
 
-                    m_st_c, is_stanca_c, forma_c, m_f_c, rit_c, punti_5_c, punti_prev_5_c = analizza_squadra_globale(db_stats[c_s]['id'])
-                    m_st_t, is_stanca_t, forma_t, m_f_t, rit_t, punti_5_t, punti_prev_5_t = analizza_squadra_globale(db_stats[t_s]['id'])
-                    cs_c, fts_c = analizza_statistiche_stagionali(f_id, db_stats[c_s]['id'], stagione_lega)
-                    cs_t, fts_t = analizza_statistiche_stagionali(f_id, db_stats[t_s]['id'], stagione_lega)
+                    m_st_c, is_stanca_c, forma_c, m_f_c, rit_c, punti_5_c, punti_prev_5_c, ok_squadra_c = analizza_squadra_globale(db_stats[c_s]['id'])
+                    m_st_t, is_stanca_t, forma_t, m_f_t, rit_t, punti_5_t, punti_prev_5_t, ok_squadra_t = analizza_squadra_globale(db_stats[t_s]['id'])
+                    cs_c, fts_c, ok_stag_c = analizza_statistiche_stagionali(f_id, db_stats[c_s]['id'], stagione_lega)
+                    cs_t, fts_t, ok_stag_t = analizza_statistiche_stagionali(f_id, db_stats[t_s]['id'], stagione_lega)
                     # BUGFIX: prima veniva passato il nome-squadra semplificato
                     # a wttr.in al posto di una citta' reale (es. "Inter" non e'
                     # una citta'); ora si usa la citta' dello stadio dalla fixture,
@@ -1894,7 +1911,7 @@ if btn_genera:
                     citta_match = (f['fixture'].get('venue') or {}).get('city') or c_s
                     m_met, d_met = scarica_meteo(citta_match)
                     (m_h2h_c, m_h2h_t, gol_h2h_c, gol_h2h_t, str_h2h,
-                     b_and_c, b_and_t, andata_msg, det_h2h) = analizza_h2h_dna_e_andata(
+                     b_and_c, b_and_t, andata_msg, det_h2h, ok_h2h) = analizza_h2h_dna_e_andata(
                         db_stats[c_s]['id'], db_stats[t_s]['id'])
 
                     # Rilevamento spareggio inter-lega e gara di ritorno
@@ -1917,10 +1934,29 @@ if btn_genera:
                     peso_mom_override = ctx_spar['peso_momentum'] if ctx_spar['is_interlega'] else None
                     (poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c,
                      par_c, stile_c, sq_cert_c, gf_10_c, gs_10_c,
-                     rig_c, gf_home_c, gs_home_c, gf_away_c, gs_away_c) = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
+                     rig_c, gf_home_c, gs_home_c, gf_away_c, gs_away_c, ok_avz_c) = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
                     (poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t,
                      par_t, stile_t, sq_cert_t, gf_10_t, gs_10_t,
-                     rig_t, gf_home_t, gs_home_t, gf_away_t, gs_away_t) = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
+                     rig_t, gf_home_t, gs_home_t, gf_away_t, gs_away_t, ok_avz_t) = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
+
+                    # ── AFFIDABILITÀ DINAMICA (punto 5) ─────────────────────
+                    # Il badge statico per lega non diceva se, in QUESTA run,
+                    # una o piu' fonti dati erano cadute in fallback silenzioso
+                    # (timeout/errore API). Qui contiamo i fallback reali
+                    # avvenuti per questa specifica partita e degradiamo il
+                    # livello di affidabilita' mostrato di conseguenza.
+                    n_degradati = sum(0 if ok else 1 for ok in [
+                        ok_squadra_c, ok_squadra_t, ok_stag_c, ok_stag_t,
+                        ok_h2h, ok_avz_c, ok_avz_t,
+                    ])
+                    _aff_base = get_affidabilita(name)
+                    if n_degradati >= 4:
+                        aff_match = "BASSA"
+                    elif n_degradati >= 1:
+                        _rank = max(1, AFFIDABILITA_ORDINE[_aff_base] - 1)
+                        aff_match = {3: "ALTA", 2: "MEDIA", 1: "BASSA"}[_rank]
+                    else:
+                        aff_match = _aff_base
 
                     c_id = db_stats[c_s]['id']; t_id = db_stats[t_s]['id']
                     msg_radar = ("⚠️ Radar Infortuni Offline (Lega Minore)" if is_lega_cieca else "")
@@ -2143,6 +2179,7 @@ if btn_genera:
                             "Prob":   v, "Quota": q_fin, "Real": is_real, "Time": orario_ita,
                             "Edge":   calcola_edge_pct(v, q_fin),
                             "Kelly":  kelly_fraction(v, q_fin),
+                            "Aff":    aff_match,
                         })
                     matches_list.append({
                         "orario": orario_ita, "c_u": c_u, "t_u": t_u, "c_s": c_s, "t_s": t_s,
@@ -2172,6 +2209,7 @@ if btn_genera:
                         "box_t": box_t, "falli_t": falli_t, "parate_t": par_t, "rig_t": rig_t,
                         "gf_away_t": gf_away_t, "gs_away_t": gs_away_t,
                         "corn_tot": avg_corn, "cart_tot": avg_cart, "falli_tot": tot_falli,
+                        "aff_dinamica": aff_match, "n_degradati": n_degradati,
                     })
 
                 if matches_list:
@@ -2220,11 +2258,12 @@ if st.session_state.data_master:
                 st.info("Nessun dato per questa categoria.")
                 return []
             df = pd.DataFrame(pool).sort_values(sort_by, ascending=False).head(max_rows).copy()
-            cols = ['Match','Tip','Prob','Quota','Edge','Kelly','Time','League']
+            cols = ['Match','Tip','Prob','Quota','Edge','Kelly','Time','League','Aff']
             df = df[cols].copy()   # .copy() evita che la modifica di Kelly corrompa all_tips_global
             df['Kelly'] = (df['Kelly'] * 100).round(1)
-            # Colonna Affidabilità: badge visivo per capire quanto fidarsi del dato
-            df['Aff'] = df['League'].apply(lambda l: AFFIDABILITA_BADGE[get_affidabilita(l)][0])
+            # Colonna Affidabilità: badge visivo, calcolato per-partita in QUESTA
+            # run (aff_match) invece che dalla sola classificazione statica per lega.
+            df['Aff'] = df['Aff'].apply(lambda a: AFFIDABILITA_BADGE[a][0])
             df.insert(0, "🛒", False)
             ed = st.data_editor(df,
                 column_config={
@@ -2313,18 +2352,28 @@ if st.session_state.data_master:
     with t2:
         st.write(f"Partite per il periodo **{start_str} / {end_str}**.")
         for camp, matches in st.session_state.data_master.items():
-            aff = get_affidabilita(camp)
+            # Affidabilità dinamica: il peggior livello osservato tra le
+            # partite di questa lega in QUESTA run — non solo la
+            # classificazione statica — così un fallback API temporaneo
+            # si vede subito invece di restare nascosto dietro un 🟢.
+            aff = min((m.get('aff_dinamica', get_affidabilita(camp)) for m in matches),
+                      key=lambda a: AFFIDABILITA_ORDINE.get(a, 2), default=get_affidabilita(camp))
+            n_degr_lega = sum(1 for m in matches if m.get('n_degradati', 0) > 0)
             aff_icon, aff_color, aff_desc = AFFIDABILITA_BADGE[aff]
             with st.expander(f"🏆 {camp}  {aff_icon}", expanded=False):
                 st.markdown(
                     f"<span class='tag' style='background:{aff_color}22;border:1px solid {aff_color}55;"
                     f"color:{aff_color} !important;'>{aff_icon} Affidabilità {aff} — {aff_desc}</span>",
                     unsafe_allow_html=True)
+                if n_degr_lega > 0:
+                    st.caption(f"⚠️ {n_degr_lega}/{len(matches)} partite con almeno una fonte dati "
+                               f"caduta in fallback in questa sessione (vedi ⚠️ nel titolo).")
                 for m in sorted(matches, key=lambda x: x['orario']):
+                    _degr_tag = " ⚠️" if m.get('n_degradati', 0) > 0 else ""
                     titolo_e = (f"🕒 {m['orario']} | 🏟️ {m['c_u']} vs {m['t_u']} | "
-                                f"👑 {m['best_1x2'][0]}"
+                                f"👑 {m['best_1x2'][0]}{_degr_tag}"
                                 if m['best_1x2'][0] != "No Segno Fisso"
-                                else f"🕒 {m['orario']} | 🏟️ {m['c_u']} vs {m['t_u']} | ⚠️ No Bet")
+                                else f"🕒 {m['orario']} | 🏟️ {m['c_u']} vs {m['t_u']} | ⚠️ No Bet{_degr_tag}")
                     with st.expander(titolo_e, expanded=False):
 
                         st.markdown(
