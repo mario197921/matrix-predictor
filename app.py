@@ -1416,9 +1416,9 @@ if st.session_state.data_master:
         sel_co = mostra_tabella("🧩 Top 10 Combo Match (1.05–2.50)",
                                 lambda t: "+" in t,
                                 min_q=1.10, max_q=2.50, sort_by="Score")
-        sel_6  = mostra_tabella("🧨 Top 10 Azzardi (Quote ≥ 2.50)",
+        sel_6  = mostra_tabella("🧨 Top 10 Azzardi (Quote 2.50–5.00)",
                                 lambda t: True,
-                                min_q=2.50, sort_by="Edge", solo_kelly_positivo=False)
+                                min_q=2.50, max_q=5.00, sort_by="Edge", solo_kelly_positivo=False)
 
         tutte = sel_1 + sel_2 + sel_3 + sel_4 + sel_mg + sel_co + sel_6
         viste: set = set(); carrello = []
