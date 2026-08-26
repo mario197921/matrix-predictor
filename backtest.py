@@ -9,20 +9,24 @@ Questo script usa le STESSE funzioni di produzione di matrix_modello.py
 kelly_fraction) — non una riscrittura — quindi il motore Poisson/Kelly
 testato qui è esattamente quello che gira nell'app.
 
-Lo xG in ingresso, però, è un PROXY semplificato: usa solo la media
-gol fatti/subiti in casa/trasferta delle ultime N partite di ciascuna
-squadra (la stessa formula "momentum" di app.py, xg = sqrt(gf * gs
-avversario)), calcolata esclusivamente sui dati storici del CSV, PRIMA
-della partita in esame (nessun look-ahead). Non include: infortuni,
-H2H, motivazione/pressione, meteo, arbitro, correttivi di lega — tutta
-la parte che nell'app vive nel loop principale e richiede l'API live.
+Lo xG in ingresso è un PROXY che replica la stessa struttura usata da
+app.py per le partite di campionato "normali": un blend 70% standings
+(media gol fatti/subiti in casa/trasferta da inizio stagione, come
+db_stats['ac']/['dc']/['at']/['dt']) + 30% momentum (media sulle ultime
+N partite, come xg_mo_c/xg_mo_t) — stesso peso_std/peso_mom di app.py
+(righe ~2023-2026). Tutto calcolato SOLO su partite già giocate nel CSV
+prima di quella in esame (nessun look-ahead), stagione per stagione
+(le statistiche ripartono da zero a ogni nuovo file CSV, non si
+mescolano tra stagioni diverse).
 
-Quindi: un risultato positivo qui dice "il motore Poisson di base +
-il momentum xG sono ragionevolmente calibrati e non distruggono valore
-nel tempo". NON dice "l'app intera, con tutti i correttivi, è
-profittevole" — quello richiederebbe rigiocare l'intera pipeline con
-dati storici di infortuni/quote/H2H, che l'API non fornisce per il
-passato in un formato comodo da backtestare.
+Quello che NON include, perché richiede l'API live e non è
+backtestabile sul passato senza un archivio storico dedicato:
+infortuni, H2H/andata, motivazione/pressione classifica, meteo,
+arbitro, correttivi di lega (mal_lega), boost coppa/playoff — tutta la
+parte che nell'app vive nel loop principale sopra il blend di xG di
+base. Un risultato qui dice quindi "il motore Poisson + il blend
+standings/momentum di base sono calibrati", non "l'app intera con
+tutti i correttivi è profittevole".
 
 USO
 ----
@@ -97,25 +101,50 @@ def trova_colonne_quote(df: pd.DataFrame):
     return None
 
 
-def xg_momentum(storico_squadra: dict, casa: str, ospite: str):
-    """Replica la formula 'momentum' di app.py: xg = sqrt(gf_lato * gs_lato_avversario),
-    usando SOLO le partite già viste (nessun look-ahead)."""
-    def media(dq, chiave):
-        vals = [m[chiave] for m in dq]
-        return sum(vals) / len(vals) if vals else None
+PESO_MOM = 0.30   # stesso peso di app.py per le partite di campionato "normali"
+PESO_STD = 1.0 - PESO_MOM
+MIN_PARTITE_STANDINGS = 3   # minimo di partite casa/trasferta per fidarsi della media stagionale
 
-    dq_casa = storico_squadra[casa]["casa"]
-    dq_osp  = storico_squadra[ospite]["trasferta"]
-    if len(dq_casa) < FINESTRA_ROLLING or len(dq_osp) < FINESTRA_ROLLING:
+
+def _nuovo_stato_squadra():
+    return {
+        "casa": deque(maxlen=FINESTRA_ROLLING), "trasferta": deque(maxlen=FINESTRA_ROLLING),
+        "cum_casa_gf": 0, "cum_casa_gs": 0, "n_casa": 0,
+        "cum_trasf_gf": 0, "cum_trasf_gs": 0, "n_trasf": 0,
+    }
+
+
+def stima_xg(storico_stagione: dict, casa: str, ospite: str):
+    """Blend 70% standings (media stagionale casa/trasferta) + 30% momentum
+    (ultime FINESTRA_ROLLING partite) — stessa struttura di app.py per le
+    partite di campionato normali. Usa SOLO partite già giocate (nessun
+    look-ahead); richiede un minimo storico per entrambe le componenti."""
+    st_c = storico_stagione[casa]
+    st_t = storico_stagione[ospite]
+    if (st_c["n_casa"] < MIN_PARTITE_STANDINGS or st_t["n_trasf"] < MIN_PARTITE_STANDINGS
+            or len(st_c["casa"]) < FINESTRA_ROLLING or len(st_t["trasferta"]) < FINESTRA_ROLLING):
         return None, None   # warm-up insufficiente
 
-    gf_home_c = media(dq_casa, "gf")
-    gs_home_c = media(dq_casa, "gs")
-    gf_away_t = media(dq_osp, "gf")
-    gs_away_t = media(dq_osp, "gs")
+    # Componente standings (media stagionale da inizio stagione ad oggi)
+    ac = st_c["cum_casa_gf"] / st_c["n_casa"]
+    dc = st_c["cum_casa_gs"] / st_c["n_casa"]
+    at = st_t["cum_trasf_gf"] / st_t["n_trasf"]
+    dt = st_t["cum_trasf_gs"] / st_t["n_trasf"]
+    xg_st_c = math.sqrt(max(0.01, ac) * max(0.01, dt))
+    xg_st_t = math.sqrt(max(0.01, at) * max(0.01, dc))
 
-    xg_c = math.sqrt(max(0.01, gf_home_c) * max(0.01, gs_away_t))
-    xg_t = math.sqrt(max(0.01, gf_away_t) * max(0.01, gs_home_c))
+    # Componente momentum (ultime FINESTRA_ROLLING partite)
+    def media(dq, chiave):
+        vals = [m[chiave] for m in dq]
+        return sum(vals) / len(vals)
+
+    gf_home_c = media(st_c["casa"], "gf");  gs_home_c = media(st_c["casa"], "gs")
+    gf_away_t = media(st_t["trasferta"], "gf"); gs_away_t = media(st_t["trasferta"], "gs")
+    xg_mo_c = math.sqrt(max(0.01, gf_home_c) * max(0.01, gs_away_t))
+    xg_mo_t = math.sqrt(max(0.01, gf_away_t) * max(0.01, gs_home_c))
+
+    xg_c = xg_st_c * PESO_STD + xg_mo_c * PESO_MOM
+    xg_t = xg_st_t * PESO_STD + xg_mo_t * PESO_MOM
     xg_c = min(XG_MAX, max(XG_MIN, xg_c))
     xg_t = min(XG_MAX, max(XG_MIN, xg_t))
     return xg_c, xg_t
@@ -126,8 +155,8 @@ def esegui_backtest(cartella: str):
     print(f"Caricate {len(df)} partite da {df['__file__'].nunique()} file "
           f"({df['Date'].min().date()} → {df['Date'].max().date()})\n")
 
-    storico = defaultdict(lambda: {"casa": deque(maxlen=FINESTRA_ROLLING),
-                                    "trasferta": deque(maxlen=FINESTRA_ROLLING)})
+    # Storico separato per stagione (file CSV): niente mescolanza tra stagioni diverse.
+    storico_per_stagione = defaultdict(lambda: defaultdict(_nuovo_stato_squadra))
 
     valutazioni = []   # una riga per (partita, mercato valutato)
     bilancio_flat = bilancio_kelly = 0.0
@@ -135,11 +164,13 @@ def esegui_backtest(cartella: str):
     puntate = []
 
     for _, riga in df.iterrows():
+        stagione_key = riga["__file__"]
+        storico = storico_per_stagione[stagione_key]
         casa = semplifica_nome(str(riga["HomeTeam"]))
         ospite = semplifica_nome(str(riga["AwayTeam"]))
         gf_c, gf_t = int(riga["FTHG"]), int(riga["FTAG"])
 
-        xg_c, xg_t = xg_momentum(storico, casa, ospite)
+        xg_c, xg_t = stima_xg(storico, casa, ospite)
         if xg_c is not None:
             tips = calcola_tutti_i_mercati(xg_c, xg_t, 9.0, 4.0, False, 22.0)
 
@@ -182,9 +213,13 @@ def esegui_backtest(cartella: str):
                             "edge_pct": round(edge, 1), "vinta": bool(vinta),
                         })
 
-        # aggiorna lo storico DOPO aver valutato/scommesso questa partita
+        # aggiorna lo storico (rolling + cumulativo) DOPO aver valutato/scommesso questa partita
         storico[casa]["casa"].append({"gf": gf_c, "gs": gf_t})
+        storico[casa]["cum_casa_gf"] += gf_c; storico[casa]["cum_casa_gs"] += gf_t
+        storico[casa]["n_casa"] += 1
         storico[ospite]["trasferta"].append({"gf": gf_t, "gs": gf_c})
+        storico[ospite]["cum_trasf_gf"] += gf_t; storico[ospite]["cum_trasf_gs"] += gf_c
+        storico[ospite]["n_trasf"] += 1
 
     return pd.DataFrame(valutazioni), pd.DataFrame(puntate), bilancio_flat, bilancio_kelly, budget_kelly
 
