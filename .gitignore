@@ -31,3 +31,6 @@ Thumbs.db
 # ── Output e log ──────────────────────────────────────────────────────────────
 *.log
 Matrix_*.txt
+# ── Backtest: CSV storici scaricati (voluminosi, rigenerabili) e risultati ────
+backtest_data/*.csv
+backtest_risultati.csv
