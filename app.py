@@ -953,6 +953,27 @@ MASTER_LEAGUES["🇳🇴 Eliteserien"]              = _no_leagues.get("Eliteseri
 MASTER_LEAGUES["🇳🇴 1. divisjon (Playoff NO)"] = _no_leagues.get("Norwegian First Division", 70)
 
 # ==========================================
+# 🕵️ AUTO-DISCOVERY ID LEGHE SUDAMERICANE/MLS IN COLLISIONE
+# ==========================================
+# BUGFIX: in MASTER_LEAGUES, "Liga 1 Perù", "División Profesional PY" e "MLS"
+# condividevano lo stesso ID hardcoded di un'altra lega non correlata
+# (281 = Scottish Prem., 239 = Liga BetPlay, 253 = LigaPro Ecuador),
+# causando la sovrapposizione silenziosa dei dati tra le due leghe ogni
+# volta che una delle due aveva partite nel periodo selezionato.
+# Risolti a runtime cercando per nome all'interno del paese, come già
+# fatto sopra per la Norvegia.
+def _risolvi_id_per_nome(nazione: str, chiave_nome: str, fallback_id: int) -> int:
+    leghe = trova_id_multipli(nazione, {})
+    for nome_lega, lid in leghe.items():
+        if chiave_nome.lower() in nome_lega.lower():
+            return lid
+    return fallback_id
+
+MASTER_LEAGUES["🇵🇪 Liga 1 Perù"]             = _risolvi_id_per_nome("Peru", "Liga 1", 281)
+MASTER_LEAGUES["🇵🇾 División Profesional PY"] = _risolvi_id_per_nome("Paraguay", "Division Profesional", 239)
+MASTER_LEAGUES["🇺🇸 MLS"]                     = _risolvi_id_per_nome("USA", "Major League Soccer", 253)
+
+# ==========================================
 # 🏆 AUTO-DISCOVERY COPPE NAZIONALI
 # ==========================================
 # Le coppe nazionali hanno ID che cambiano ogni stagione su API-Sports.
@@ -1533,6 +1554,29 @@ def analizza_h2h_dna_e_andata(id_casa: int, id_trasf: int):
     except Exception:
         return 1.0, 1.0, 0, 0, "Dati N/D", 1.0, 1.0, "", "Nessun dato."
 
+@st.cache_data(ttl=86400)
+def trova_lega_squadra(team_id: int, season, fallback_id: int) -> int:
+    """
+    Trova l'ID della lega principale (type=League) in cui gioca una squadra
+    in una data stagione. Usata per rilevare correttamente gli spareggi
+    promozione/retrocessione tra divisioni diverse (es. Bundesliga vs
+    2.Bundesliga), dove le due squadre appartengono a leghe differenti
+    pur giocando la partita sotto un unico fixture/league id di playoff.
+    """
+    try:
+        resp = requests.get(
+            "https://v3.football.api-sports.io/leagues",
+            headers=HEADERS,
+            params={'team': team_id, 'season': season},
+            timeout=6
+        ).json()
+        for entry in resp.get('response', []):
+            if entry.get('league', {}).get('type') == 'League':
+                return entry['league']['id']
+    except Exception:
+        pass
+    return fallback_id
+
 @st.cache_data(ttl=3600)
 def rileva_contesto_spareggio(fix_id: int, c_id: int, t_id: int,
                                league_id_c: int, league_id_t: int,
@@ -1845,9 +1889,16 @@ if btn_genera:
                     db_stats[c_s]['id'], db_stats[t_s]['id'])
 
                 # Rilevamento spareggio inter-lega e gara di ritorno
+                # BUGFIX: prima venivano passati due volte f_id (la lega della
+                # partita), rendendo is_interlega strutturalmente sempre False.
+                # Ora si risale alla lega "di casa" di ciascuna squadra per
+                # rilevare i veri spareggi promozione/retrocessione tra
+                # divisioni diverse.
+                lega_c_reale = trova_lega_squadra(db_stats[c_s]['id'], stagione_lega, f_id)
+                lega_t_reale = trova_lega_squadra(db_stats[t_s]['id'], stagione_lega, f_id)
                 ctx_spar = rileva_contesto_spareggio(
                     fix_id, db_stats[c_s]['id'], db_stats[t_s]['id'],
-                    f_id, f_id, match_date_str)
+                    lega_c_reale, lega_t_reale, match_date_str)
                 if ctx_spar['is_ritorno'] or ctx_spar['is_interlega']:
                     b_and_c *= ctx_spar['boost_c']
                     b_and_t *= ctx_spar['boost_t']
@@ -2047,7 +2098,9 @@ if btn_genera:
                 if fts_t > 35: xg_base_t *= 0.85
                 if cs_c  > 35: xg_base_t *= 0.85
 
-                sg_c = "C.Sgombra" in msg_mot; sg_t = "O.Sgombra" in msg_mot
+                # BUGFIX: i tag generati sopra sono "C.Salva"/"O.Salva", non "Sgombra"
+                # (refuso di rename mai propagato) — il boost 1.10x non scattava mai.
+                sg_c = "C.Salva" in msg_mot; sg_t = "O.Salva" in msg_mot
                 xg_c = (xg_base_c * (1-malus_att_c) * (1+boost_opp_t) * m_h2h_c * b_and_c * m_mot_c * (1.10 if sg_t else 1.0))
                 xg_t = (xg_base_t * (1-malus_att_t) * (1+boost_opp_c) * m_h2h_t * b_and_t * m_mot_t * (1.10 if sg_c else 1.0))
 
