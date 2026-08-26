@@ -48,7 +48,7 @@ from collections import defaultdict, deque
 import pandas as pd
 
 from matrix_modello import (
-    calcola_tutti_i_mercati, get_quota_finale, calcola_edge_pct,
+    calcola_tutti_i_mercati, calcola_edge_pct,
     kelly_fraction, semplifica_nome,
 )
 
