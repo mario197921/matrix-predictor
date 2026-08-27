@@ -1311,6 +1311,7 @@ if btn_genera:
                             "Edge":   edge_v,
                             "Kelly":  kelly_fraction(v, q_fin),
                             "Aff":    aff_match,
+                            "Instabile": stima_instabile,
                         })
                     matches_list.append({
                         "orario": orario_ita, "c_u": c_u, "t_u": t_u, "c_s": c_s, "t_s": t_s,

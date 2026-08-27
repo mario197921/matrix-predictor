@@ -130,21 +130,31 @@ def get_family(tip: str) -> str:
 def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
                                   target_mult: float, escludi_match=None,
                                   max_match_q: float = 5.0, max_righe: int = 12,
-                                  max_same_family: int = 2):
+                                  max_same_family: int = 2, max_instabili: int = 1):
+    """max_instabili: numero massimo di selezioni "instabili" (coppe/playoff/
+    inter-lega/squadre con poche partite giocate — vedi flag 'Instabile' in
+    app.py) che possono finire nella STESSA schedina combo. In una multipla
+    basta che una gamba salti per perdere tutto, quindi concentrare più
+    selezioni a dato rumoroso nella stessa giocata somma il rischio invece
+    di diversificarlo. Le voci senza il flag (es. nei test) sono trattate
+    come stabili di default."""
     if escludi_match is None: escludi_match = set()
     valid = [x for x in pool
              if min_q <= float(x['Quota']) <= max_q
              and float(x['Quota']) <= max_match_q
              and float(x.get('Edge', 0)) > 0]   # solo scommesse con edge positivo reale
     pool_ord = sorted(valid, key=lambda x: calcola_edge_pct(x['Prob'], float(x['Quota'])), reverse=True)
-    sel = []; viste = set(); fam_cnt = {}; q_tot = prob_tot = 1.0
+    sel = []; viste = set(); fam_cnt = {}; q_tot = prob_tot = 1.0; instabili_cnt = 0
     for item in pool_ord:
         fam  = get_family(item['Tip'])
         nome = item['Match']
+        instabile = bool(item.get('Instabile', False))
         if (nome not in viste and nome not in escludi_match
-                and fam_cnt.get(fam, 0) < max_same_family):
+                and fam_cnt.get(fam, 0) < max_same_family
+                and (not instabile or instabili_cnt < max_instabili)):
             sel.append(item); viste.add(nome)
             fam_cnt[fam] = fam_cnt.get(fam, 0) + 1
+            if instabile: instabili_cnt += 1
             q_tot    *= float(item['Quota'])
             prob_tot *= item['Prob'] / 100.0
         if q_tot >= target_mult or len(sel) >= max_righe: break

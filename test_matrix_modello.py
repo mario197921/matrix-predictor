@@ -189,6 +189,38 @@ def test_schedina_rispetta_max_righe():
     assert len(sel) <= 5
 
 
+def test_schedina_limita_selezioni_instabili_per_combo():
+    # 4 partite tutte "instabili" (es. coppe/inizio stagione): la combo non
+    # deve concentrarne più di max_instabili (default 1), anche se tutte
+    # avrebbero edge sufficiente a entrare.
+    pool_instabile = [
+        {"Match": f"M{i}", "Tip": "1", "Prob": 60.0, "Quota": 1.8, "Edge": 8.0, "Instabile": True}
+        for i in range(4)
+    ]
+    sel, q_tot, prob_tot, usati = costruisci_schedina_dinamica(
+        pool_instabile, min_q=1.01, max_q=99.0, target_mult=9999.0, max_righe=10)
+    instabili_in_sel = sum(1 for x in sel if x.get("Instabile"))
+    assert instabili_in_sel <= 1
+
+
+def test_schedina_instabili_non_bloccano_le_stabili():
+    # Con un mix di instabili e stabili, le selezioni stabili devono comunque
+    # entrare normalmente: il tetto riguarda solo le "Instabile": True.
+    # (Edge coerente con Prob/Quota: la funzione lo ricalcola internamente
+    # per l'ordinamento, non si fida del campo "Edge" passato in ingresso.)
+    pool_misto = (
+        [{"Match": f"I{i}", "Tip": "1", "Prob": 70.0, "Quota": 1.8, "Edge": 26.0, "Instabile": True}
+         for i in range(3)]
+        + [{"Match": "S0", "Tip": "O2.5", "Prob": 65.0, "Quota": 1.7, "Edge": 10.5, "Instabile": False},
+           {"Match": "S1", "Tip": "Goal", "Prob": 65.0, "Quota": 1.7, "Edge": 10.5, "Instabile": False},
+           {"Match": "S2", "Tip": "MG 1-3", "Prob": 65.0, "Quota": 1.7, "Edge": 10.5, "Instabile": False}]
+    )
+    sel, q_tot, prob_tot, usati = costruisci_schedina_dinamica(
+        pool_misto, min_q=1.01, max_q=99.0, target_mult=9999.0, max_righe=10)
+    stabili_in_sel = sum(1 for x in sel if not x.get("Instabile"))
+    assert stabili_in_sel == 3
+
+
 ALL_TESTS = [v for k, v in list(globals().items()) if k.startswith("test_")]
 
 
