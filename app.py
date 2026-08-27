@@ -726,12 +726,12 @@ from matrix_api import (
     get_active_leagues, analizza_infortuni_pesati_v90,
     scarica_quote_native, analizza_statistiche_stagionali, analizza_statistiche_avanzate_pro,
     analizza_squadra_globale, analizza_h2h_dna_e_andata, trova_lega_squadra,
-    rileva_contesto_spareggio, scarica_meteo,
+    rileva_contesto_spareggio, scarica_meteo, scarica_standings_pregressi,
 )
 from matrix_modello import (
     calcola_tutti_i_mercati, get_quota_finale,
     calcola_edge_pct, kelly_fraction, semplifica_nome,
-    costruisci_schedina_dinamica, applica_blend_mercato_1x2,
+    costruisci_schedina_dinamica, applica_blend_mercato_1x2, blend_prior_stagione,
 )
 
 # ==========================================
@@ -982,6 +982,26 @@ if btn_genera:
                                 db_stats[n] = {'id': t_id, 'rank': 10, 'giocate': 0,
                                                'punti': 0, 'ac': 0.0, 'dc': 0.0,
                                                'at': 0.0, 'dt': 0.0}
+
+                # ── PRIOR STAGIONE PRECEDENTE ───────────────────────────
+                # A inizio stagione (poche 'giocate') le medie gol casa/trasferta
+                # sopra sono calcolate su un campione minuscolo (1-2 partite) e
+                # sono quindi rumorose. Le si sfuma con le stesse medie della
+                # stagione precedente (se disponibile per quella squadra/lega),
+                # dando sempre meno peso al dato storico man mano che la
+                # stagione corrente accumula partite reali (vedi
+                # blend_prior_stagione). Nessun effetto su leghe ad anno solare
+                # inter-stagione o su squadre neopromosse (prior assente).
+                stats_prev_stagione = scarica_standings_pregressi(f_id, stagione_lega - 1)
+                if stats_prev_stagione:
+                    for n, st_sq in db_stats.items():
+                        prev = stats_prev_stagione.get(st_sq['id'])
+                        if prev is None:
+                            continue
+                        giocate_sq = st_sq.get('giocate', 0)
+                        for campo in ('ac', 'dc', 'at', 'dt'):
+                            st_sq[campo] = blend_prior_stagione(
+                                st_sq[campo], prev[campo], giocate_sq)
 
                 # ── CACHE QUOTE ────────────────────────────────────────
                 date_giocate = {f['fixture']['date'][:10] for f in fix['response']}

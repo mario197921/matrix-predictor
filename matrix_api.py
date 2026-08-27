@@ -282,6 +282,34 @@ def analizza_statistiche_stagionali(league_id: int, team_id: int, season_lega):
         # a differenza dei return sopra dove i dati sono semplicemente assenti.
         return 0.0, 0.0, False
 
+@st.cache_data(ttl=604800)   # 7 giorni: una stagione passata non cambia mai
+def scarica_standings_pregressi(league_id: int, season: int):
+    """Statistiche gol casa/trasferta della classifica finale di una stagione
+    passata, usate come "prior" quando la stagione corrente ha ancora poche
+    partite giocate (vedi blend_prior_stagione in matrix_modello.py). Ritorna
+    un dict team_id -> {'ac','dc','at','dt'}, vuoto se non disponibile
+    (es. squadra/lega non presente in quella stagione — prime stagioni di
+    un abbonamento API, leghe nuove, squadre neopromosse dall'estero)."""
+    try:
+        resp = requests.get(
+            "https://v3.football.api-sports.io/standings",
+            headers=HEADERS, params={'league': league_id, 'season': season}, timeout=10
+        ).json()
+        out = {}
+        if not resp.get('response'):
+            return out
+        for gruppo in resp['response'][0]['league']['standings']:
+            for t in gruppo:
+                out[t['team']['id']] = {
+                    'ac': (t['home']['goals']['for']     or 0) / max(1, t['home']['played'] or 1),
+                    'dc': (t['home']['goals']['against'] or 0) / max(1, t['home']['played'] or 1),
+                    'at': (t['away']['goals']['for']     or 0) / max(1, t['away']['played'] or 1),
+                    'dt': (t['away']['goals']['against'] or 0) / max(1, t['away']['played'] or 1),
+                }
+        return out
+    except Exception:
+        return {}
+
 @st.cache_data(ttl=1800)
 def analizza_statistiche_avanzate_pro(team_id: int):
     """

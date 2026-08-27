@@ -178,6 +178,20 @@ def semplifica_nome(nome: str) -> str:
             nome = nome[len(token):]
     return nome.strip()
 
+def blend_prior_stagione(valore_corrente: float, valore_precedente,
+                          giocate: int, soglia_partite: int = 10) -> float:
+    """Sfuma un valore (es. media gol casa/trasferta) della stagione
+    corrente con quello della stagione precedente, quando quest'ultimo e'
+    disponibile. A 'giocate' (partite gia' giocate in stagione corrente)
+    uguale a 0, ci si affida quasi del tutto alla stagione precedente; da
+    'soglia_partite' partite in su, ci si affida solo alla corrente. Se
+    valore_precedente e' None (dato non disponibile, es. neopromossa),
+    ritorna semplicemente il valore corrente invariato."""
+    if valore_precedente is None:
+        return valore_corrente
+    peso_precedente = max(0.0, 1.0 - (giocate / soglia_partite))
+    return valore_corrente * (1.0 - peso_precedente) + valore_precedente * peso_precedente
+
 def get_family(tip: str) -> str:
     if tip in ["1", "X", "2", "1X", "X2", "12"]:                      return "1X2"
     if ("U" in tip or "O" in tip) and "+" not in tip \

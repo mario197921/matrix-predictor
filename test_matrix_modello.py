@@ -14,7 +14,7 @@ from matrix_modello import (
     calcola_prob_poisson, calcola_tutti_i_mercati, get_quota_finale,
     calcola_edge_pct, kelly_fraction, semplifica_nome, get_family,
     costruisci_schedina_dinamica, devig_1x2, blend_prob_mercato,
-    applica_blend_mercato_1x2,
+    applica_blend_mercato_1x2, blend_prior_stagione,
 )
 
 
@@ -321,6 +321,28 @@ def test_applica_blend_mercato_1x2_nessuna_quota_reale_non_cambia_nulla():
     full_tips = calcola_tutti_i_mercati(1.4, 1.1, 9.0, 4.0, False, 22.0)
     invariato = applica_blend_mercato_1x2(full_tips, {}, peso_mercato=0.55)
     assert invariato == full_tips
+
+
+# ── blend_prior_stagione ─────────────────────────────────────────────────
+
+def test_blend_prior_stagione_zero_partite_si_affida_al_precedente():
+    v = blend_prior_stagione(valore_corrente=0.0, valore_precedente=2.0, giocate=0, soglia_partite=10)
+    assert abs(v - 2.0) < 1e-9
+
+
+def test_blend_prior_stagione_oltre_soglia_si_affida_al_corrente():
+    v = blend_prior_stagione(valore_corrente=1.5, valore_precedente=2.0, giocate=15, soglia_partite=10)
+    assert abs(v - 1.5) < 1e-9   # oltre la soglia, peso_precedente=0 -> solo corrente
+
+
+def test_blend_prior_stagione_a_meta_soglia():
+    v = blend_prior_stagione(valore_corrente=1.0, valore_precedente=3.0, giocate=5, soglia_partite=10)
+    assert abs(v - 2.0) < 1e-9   # peso_precedente=0.5 -> media semplice
+
+
+def test_blend_prior_stagione_nessun_precedente_disponibile():
+    v = blend_prior_stagione(valore_corrente=1.2, valore_precedente=None, giocate=0, soglia_partite=10)
+    assert v == 1.2   # neopromossa/lega nuova: nessun dato storico, resta il valore corrente
 
 
 ALL_TESTS = [v for k, v in list(globals().items()) if k.startswith("test_")]
