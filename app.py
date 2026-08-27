@@ -992,7 +992,7 @@ if btn_genera:
                 # stagione corrente accumula partite reali (vedi
                 # blend_prior_stagione). Nessun effetto su leghe ad anno solare
                 # inter-stagione o su squadre neopromosse (prior assente).
-                stats_prev_stagione = scarica_standings_pregressi(f_id, stagione_lega - 1)
+                stats_prev_stagione = scarica_standings_pregressi(f_id, int(stagione_lega) - 1)
                 if stats_prev_stagione:
                     for n, st_sq in db_stats.items():
                         prev = stats_prev_stagione.get(st_sq['id'])
