@@ -1708,26 +1708,24 @@ if st.session_state.data_master:
                 ("AZZARDO",     "🔴", "risk-bg",        "#1f0a0a", "#ef4444",
                  "Quote alte — max 10% del capitale."),
             ]
-            SOGLIA_PROB_SAFETY = 0.75  # sotto questa probabilita' congiunta, meglio
-                                       # saltare la schedina Safety che proporne una
-                                       # troppo incerta (riduce le partite "atipiche")
-            SOGLIA_PROB_SAFETY_MAX = 1.00
-
             SCHEDINE_PARAMS = [
                 # campi: pool, min_q, max_q, target_mult, max_match_q, (inutilizzato),
                 # budget, max_righe, ordina_per, min_prob, max_prob.
-                # Safety fissata a 2 selezioni, scelte con "prob_range": fra tutte le
-                # combinazioni possibili con probabilita' congiunta nella fascia
-                # 80-100%, sceglie quella con l'edge combinato piu' alto — un
-                # compromesso fra sicurezza (fascia di probabilita') e valore (edge),
-                # invece di ottimizzare uno solo dei due.
+                # Safety fissata a 2 selezioni, scelte con "prob_range" ma SENZA
+                # vincolo di probabilita' congiunta (min/max=None): su richiesta
+                # dell'utente, il filtro a soglia fissa (75-100%) bloccava troppo
+                # spesso la Safety nei giorni con poche partite, e non era comunque
+                # legato al calcolo di probabilita' della matrix in modo diretto.
+                # Resta la ricerca esaustiva fra tutte le combo da 2 gambe valide
+                # (quota 1.12-1.50, edge positivo) per scegliere quella a edge
+                # combinato piu' alto.
                 # Include anche i mercati Over/Goal nel pool (in precedenza esclusi):
                 # nei giorni con molte partite di coppa erano quasi le uniche voci
                 # a edge positivo, ed escluderle lasciava la Safety senza abbastanza
                 # selezioni per completare la combo.
                 (pool_s := kp,
                  1.12, 1.50, 2.0,  2.0,  set(),  bud_s, 2, "prob_range",
-                 SOGLIA_PROB_SAFETY, SOGLIA_PROB_SAFETY_MAX),
+                 None, None),
                 (kp,   1.51, 2.20, 5.0,  2.20, None,  bud_p, 12, "edge", None, None),
                 (kp,   2.21, 4.50, 30.0, 4.50, None,  bud_a, 12, "edge", None, None),
             ]
@@ -1745,16 +1743,14 @@ if st.session_state.data_master:
                 escludi_prev = usate
                 vincita_tot = budget * q_tot
 
-                # Guardia specifica per Safety: se anche le 2 migliori selezioni
-                # per probabilita' non raggiungono la soglia, salta la schedina
-                # invece di proporre una combo troppo incerta con l'etichetta "safety".
-                if idx == 0 and (not slip or prob < SOGLIA_PROB_SAFETY):
+                # Guardia specifica per Safety: se non ci sono abbastanza selezioni
+                # idonee per completare la combo da 2 gambe, salta la schedina
+                # invece di proporne una incompleta con l'etichetta "safety".
+                if idx == 0 and not slip:
                     motivo_skip = (
                         f"le selezioni idonee disponibili oggi non bastano a comporre una "
-                        f"combinazione da {max_righe_f} eventi (troppe partite escluse dai "
-                        f"mercati Over/Goal o quota fuori fascia)"
-                        if not slip else
-                        f"le migliori selezioni disponibili arrivano al {prob*100:.1f}%"
+                        f"combinazione da {max_righe_f} eventi (quota fuori fascia 1.12-1.50 "
+                        f"o edge non positivo su abbastanza partite)"
                     )
                     st.markdown(f"""
 <div class="strategy-box {cls}" style="padding:0;overflow:hidden;">
@@ -1766,13 +1762,12 @@ if st.session_state.data_master:
     <div style="font-size:0.75rem;color:var(--text2);margin-top:3px;">{nota}</div>
   </div>
   <div style="padding:16px 24px;color:var(--text2);font-size:0.9rem;">
-    Nessuna combinazione con probabilità congiunta ≥ {SOGLIA_PROB_SAFETY*100:.0f}% trovata oggi
-    ({motivo_skip}) — meglio saltare
-    la Safety oggi piuttosto che proporre una combo troppo incerta.
+    Nessuna combinazione trovata oggi ({motivo_skip}) — meglio saltare
+    la Safety oggi piuttosto che proporre una combo incompleta.
   </div>
 </div>
 """, unsafe_allow_html=True)
-                    testo_export += f"Schedina {nome}: saltata, {motivo_skip} (soglia richiesta {SOGLIA_PROB_SAFETY*100:.0f}%).\n\n"
+                    testo_export += f"Schedina {nome}: saltata, {motivo_skip}.\n\n"
                     continue
 
                 txt = f"Schedina {nome} ({budget:.2f}€)\n"
