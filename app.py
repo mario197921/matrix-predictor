@@ -1677,19 +1677,24 @@ if st.session_state.data_master:
                  "Quote alte — max 10% del capitale."),
             ]
             SCHEDINE_PARAMS = [
+                # ultimo campo: max_righe. Safety fissata a 2 selezioni (non di
+                # più anche se il moltiplicatore x2.0 non e' ancora raggiunto) —
+                # con 2 gambe la probabilita' congiunta resta ragionevole, con 3+
+                # cala troppo in fretta per un target di moltiplicatore cosi' basso.
                 (pool_s := [x for x in kp if x['Tip'] not in ["Goal","O1.5","O2.5","O3.5","O4.5"]],
-                 1.12, 1.50, 2.0,  2.0,  set(),  bud_s),
-                (kp,   1.51, 2.20, 5.0,  2.20, None,  bud_p),
-                (kp,   2.21, 4.50, 30.0, 4.50, None,  bud_a),
+                 1.12, 1.50, 2.0,  2.0,  set(),  bud_s, 2),
+                (kp,   1.51, 2.20, 5.0,  2.20, None,  bud_p, 12),
+                (kp,   2.21, 4.50, 30.0, 4.50, None,  bud_a, 12),
             ]
 
             escludi_prev = set()
             for idx, (nome, emoji, cls, bg_col, acc_col, nota) in enumerate(SCHEDINE_CFG):
-                pool_f, min_q, max_q, target, mq, _, budget = SCHEDINE_PARAMS[idx]
+                pool_f, min_q, max_q, target, mq, _, budget, max_righe_f = SCHEDINE_PARAMS[idx]
                 escludi = escludi_prev
 
                 slip, q_tot, prob, usate = costruisci_schedina_dinamica(
-                    pool_f, min_q, max_q, target, escludi_match=escludi, max_match_q=mq)
+                    pool_f, min_q, max_q, target, escludi_match=escludi, max_match_q=mq,
+                    max_righe=max_righe_f)
                 escludi_prev = usate
                 vincita_tot = budget * q_tot
 
