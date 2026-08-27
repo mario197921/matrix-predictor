@@ -5,6 +5,7 @@ chiamata di rete, nessun uso di streamlit) — sono tutte testabili in
 isolamento con semplici assert su input/output.
 """
 
+import itertools
 import math
 
 from matrix_leghe import MARGINE_BK
@@ -131,7 +132,9 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
                                   target_mult: float, escludi_match=None,
                                   max_match_q: float = 5.0, max_righe: int = 12,
                                   max_same_family: int = 2, max_instabili: int = 1,
-                                  ordina_per: str = "edge"):
+                                  ordina_per: str = "edge",
+                                  min_prob_congiunta: float = None,
+                                  max_prob_congiunta: float = None):
     """max_instabili: numero massimo di selezioni "instabili" (coppe/playoff/
     inter-lega/squadre con poche partite giocate — vedi flag 'Instabile' in
     app.py) che possono finire nella STESSA schedina combo. In una multipla
@@ -143,8 +146,59 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
     ordina_per: "edge" (default) sceglie le gambe a edge più alto — massimizza
     il valore atteso dichiarato. "prob" sceglie le gambe a probabilità più
     alta — utile per una schedina "safety" dove l'obiettivo è massimizzare
-    la probabilità congiunta di vincere tutta la combo, non l'edge."""
+    la probabilità congiunta. "prob_range" cerca fra tutte le combinazioni
+    possibili di max_righe gambe quella con l'edge combinato più alto TRA
+    QUELLE la cui probabilità congiunta rientra in
+    [min_prob_congiunta, max_prob_congiunta] — un compromesso fra le due:
+    resta dentro una fascia di sicurezza scelta, ma dentro quella fascia
+    massimizza comunque il valore, invece di ignorarlo del tutto."""
     if escludi_match is None: escludi_match = set()
+
+    if ordina_per == "prob_range":
+        lo = 0.0 if min_prob_congiunta is None else min_prob_congiunta
+        hi = 1.0 if max_prob_congiunta is None else max_prob_congiunta
+        valid_pr = [x for x in pool
+                    if min_q <= float(x['Quota']) <= max_q
+                    and float(x['Quota']) <= max_match_q
+                    and float(x.get('Edge', 0)) > 0
+                    and x['Match'] not in escludi_match]
+        # limita la combinatoria alle migliori candidate per edge (bastano
+        # poche decine di partite al giorno per questa fascia di quota)
+        candidati = sorted(valid_pr, key=lambda x: calcola_edge_pct(x['Prob'], float(x['Quota'])),
+                            reverse=True)[:30]
+        if len(candidati) < max_righe:
+            return [], 1.0, 1.0, set(escludi_match)   # non abbastanza candidate per una combo completa
+        miglior_combo = None; miglior_edge_tot = None
+        for combo in itertools.combinations(candidati, max_righe):
+            nomi = [c['Match'] for c in combo]
+            if len(set(nomi)) != len(nomi):
+                continue   # stessa partita due volte nella combo
+            fam_cnt = {}
+            supera_family = False
+            for c in combo:
+                fam = get_family(c['Tip'])
+                fam_cnt[fam] = fam_cnt.get(fam, 0) + 1
+                if fam_cnt[fam] > max_same_family:
+                    supera_family = True; break
+            if supera_family:
+                continue
+            if sum(1 for c in combo if c.get('Instabile', False)) > max_instabili:
+                continue
+            prob_j = 1.0; edge_tot = 0.0
+            for c in combo:
+                prob_j    *= c['Prob'] / 100.0
+                edge_tot  += calcola_edge_pct(c['Prob'], float(c['Quota']))
+            if lo <= prob_j <= hi and (miglior_edge_tot is None or edge_tot > miglior_edge_tot):
+                miglior_edge_tot = edge_tot; miglior_combo = combo
+        if miglior_combo is None:
+            return [], 1.0, 1.0, set(escludi_match)
+        sel = list(miglior_combo)
+        q_tot = prob_tot = 1.0
+        for c in sel:
+            q_tot *= float(c['Quota']); prob_tot *= c['Prob'] / 100.0
+        usati = {c['Match'] for c in sel}
+        return sel, q_tot, prob_tot, usati.union(escludi_match)
+
     valid = [x for x in pool
              if min_q <= float(x['Quota']) <= max_q
              and float(x['Quota']) <= max_match_q

@@ -1676,31 +1676,36 @@ if st.session_state.data_master:
                 ("AZZARDO",     "🔴", "risk-bg",        "#1f0a0a", "#ef4444",
                  "Quote alte — max 10% del capitale."),
             ]
-            SOGLIA_PROB_SAFETY = 0.90  # sotto questa probabilita' congiunta, meglio
+            SOGLIA_PROB_SAFETY = 0.80  # sotto questa probabilita' congiunta, meglio
                                        # saltare la schedina Safety che proporne una
                                        # troppo incerta (riduce le partite "atipiche")
+            SOGLIA_PROB_SAFETY_MAX = 1.00
 
             SCHEDINE_PARAMS = [
                 # campi: pool, min_q, max_q, target_mult, max_match_q, (inutilizzato),
-                # budget, max_righe, ordina_per.
-                # Safety fissata a 2 selezioni, scelte per PROBABILITA' più alta (non
-                # edge) — con 2 gambe la probabilita' congiunta resta ragionevole, e
-                # ordinare per prob invece che per edge privilegia le partite più
-                # "tipiche"/affidabili a parita' di quota, riducendo quelle atipiche.
+                # budget, max_righe, ordina_per, min_prob, max_prob.
+                # Safety fissata a 2 selezioni, scelte con "prob_range": fra tutte le
+                # combinazioni possibili con probabilita' congiunta nella fascia
+                # 80-100%, sceglie quella con l'edge combinato piu' alto — un
+                # compromesso fra sicurezza (fascia di probabilita') e valore (edge),
+                # invece di ottimizzare uno solo dei due.
                 (pool_s := [x for x in kp if x['Tip'] not in ["Goal","O1.5","O2.5","O3.5","O4.5"]],
-                 1.12, 1.50, 2.0,  2.0,  set(),  bud_s, 2, "prob"),
-                (kp,   1.51, 2.20, 5.0,  2.20, None,  bud_p, 12, "edge"),
-                (kp,   2.21, 4.50, 30.0, 4.50, None,  bud_a, 12, "edge"),
+                 1.12, 1.50, 2.0,  2.0,  set(),  bud_s, 2, "prob_range",
+                 SOGLIA_PROB_SAFETY, SOGLIA_PROB_SAFETY_MAX),
+                (kp,   1.51, 2.20, 5.0,  2.20, None,  bud_p, 12, "edge", None, None),
+                (kp,   2.21, 4.50, 30.0, 4.50, None,  bud_a, 12, "edge", None, None),
             ]
 
             escludi_prev = set()
             for idx, (nome, emoji, cls, bg_col, acc_col, nota) in enumerate(SCHEDINE_CFG):
-                pool_f, min_q, max_q, target, mq, _, budget, max_righe_f, ordina_per_f = SCHEDINE_PARAMS[idx]
+                (pool_f, min_q, max_q, target, mq, _, budget, max_righe_f,
+                 ordina_per_f, min_prob_f, max_prob_f) = SCHEDINE_PARAMS[idx]
                 escludi = escludi_prev
 
                 slip, q_tot, prob, usate = costruisci_schedina_dinamica(
                     pool_f, min_q, max_q, target, escludi_match=escludi, max_match_q=mq,
-                    max_righe=max_righe_f, ordina_per=ordina_per_f)
+                    max_righe=max_righe_f, ordina_per=ordina_per_f,
+                    min_prob_congiunta=min_prob_f, max_prob_congiunta=max_prob_f)
                 escludi_prev = usate
                 vincita_tot = budget * q_tot
 

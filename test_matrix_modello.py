@@ -238,6 +238,42 @@ def test_schedina_ordina_per_prob_sceglie_prob_piu_alta():
     assert sel_edge[0]["Match"] == "A"
 
 
+def test_schedina_prob_range_sceglie_edge_migliore_nella_fascia():
+    # 3 possibili coppie di partite indipendenti; solo alcune combinazioni
+    # cadono nella fascia di probabilita' congiunta 80-100%. Fra quelle
+    # ammesse, deve scegliere la combinazione con l'edge combinato piu' alto,
+    # non necessariamente quella con la probabilita' congiunta piu' alta.
+    pool = [
+        {"Match": "A", "Tip": "1",    "Prob": 95.0, "Quota": 1.15, "Edge": 9.25},   # molto sicura, poco edge
+        {"Match": "B", "Tip": "1",    "Prob": 95.0, "Quota": 1.15, "Edge": 9.25},   # molto sicura, poco edge
+        {"Match": "C", "Tip": "X2",   "Prob": 88.0, "Quota": 1.30, "Edge": 14.4},   # meno sicura, piu' edge
+        {"Match": "D", "Tip": "O2.5", "Prob": 60.0, "Quota": 2.50, "Edge": 50.0},   # troppo rischiosa da sola
+    ]
+    # A+B: prob congiunta 0.9025 (in fascia), edge combinato ~18.5
+    # A+C: prob congiunta 0.836 (in fascia), edge combinato ~23.65 <- il migliore in fascia
+    # A+D / B+D / C+D: prob congiunta troppo bassa (fuori fascia 0.80-1.00)
+    sel, q_tot, prob_tot, usati = costruisci_schedina_dinamica(
+        pool, min_q=1.01, max_q=99.0, target_mult=9999.0, max_righe=2,
+        ordina_per="prob_range", min_prob_congiunta=0.80, max_prob_congiunta=1.00)
+    scelti = sorted(x["Match"] for x in sel)
+    assert scelti == ["A", "C"], scelti
+    assert 0.80 <= prob_tot <= 1.00
+
+
+def test_schedina_prob_range_nessuna_combo_in_fascia():
+    # Se nessuna coppia possibile rientra nella fascia richiesta, la funzione
+    # deve restituire una selezione vuota (segnale per "salta la schedina"),
+    # non forzare comunque una combinazione fuori fascia.
+    pool = [
+        {"Match": "A", "Tip": "1", "Prob": 95.0, "Quota": 1.15, "Edge": 9.25},
+        {"Match": "B", "Tip": "1", "Prob": 30.0, "Quota": 2.00, "Edge": -40.0},
+    ]
+    sel, q_tot, prob_tot, usati = costruisci_schedina_dinamica(
+        pool, min_q=1.01, max_q=99.0, target_mult=9999.0, max_righe=2,
+        ordina_per="prob_range", min_prob_congiunta=0.95, max_prob_congiunta=1.00)
+    assert sel == []
+
+
 ALL_TESTS = [v for k, v in list(globals().items()) if k.startswith("test_")]
 
 
