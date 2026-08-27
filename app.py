@@ -1721,7 +1721,11 @@ if st.session_state.data_master:
                 # 80-100%, sceglie quella con l'edge combinato piu' alto — un
                 # compromesso fra sicurezza (fascia di probabilita') e valore (edge),
                 # invece di ottimizzare uno solo dei due.
-                (pool_s := [x for x in kp if x['Tip'] not in ["Goal","O1.5","O2.5","O3.5","O4.5"]],
+                # Include anche i mercati Over/Goal nel pool (in precedenza esclusi):
+                # nei giorni con molte partite di coppa erano quasi le uniche voci
+                # a edge positivo, ed escluderle lasciava la Safety senza abbastanza
+                # selezioni per completare la combo.
+                (pool_s := kp,
                  1.12, 1.50, 2.0,  2.0,  set(),  bud_s, 2, "prob_range",
                  SOGLIA_PROB_SAFETY, SOGLIA_PROB_SAFETY_MAX),
                 (kp,   1.51, 2.20, 5.0,  2.20, None,  bud_p, 12, "edge", None, None),
