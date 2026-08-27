@@ -1676,7 +1676,7 @@ if st.session_state.data_master:
                 ("AZZARDO",     "🔴", "risk-bg",        "#1f0a0a", "#ef4444",
                  "Quote alte — max 10% del capitale."),
             ]
-            SOGLIA_PROB_SAFETY = 0.80  # sotto questa probabilita' congiunta, meglio
+            SOGLIA_PROB_SAFETY = 0.75  # sotto questa probabilita' congiunta, meglio
                                        # saltare la schedina Safety che proporne una
                                        # troppo incerta (riduce le partite "atipiche")
             SOGLIA_PROB_SAFETY_MAX = 1.00
