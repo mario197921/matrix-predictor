@@ -1745,6 +1745,13 @@ if st.session_state.data_master:
                 # per probabilita' non raggiungono la soglia, salta la schedina
                 # invece di proporre una combo troppo incerta con l'etichetta "safety".
                 if idx == 0 and (not slip or prob < SOGLIA_PROB_SAFETY):
+                    motivo_skip = (
+                        f"le selezioni idonee disponibili oggi non bastano a comporre una "
+                        f"combinazione da {max_righe_f} eventi (troppe partite escluse dai "
+                        f"mercati Over/Goal o quota fuori fascia)"
+                        if not slip else
+                        f"le migliori selezioni disponibili arrivano al {prob*100:.1f}%"
+                    )
                     st.markdown(f"""
 <div class="strategy-box {cls}" style="padding:0;overflow:hidden;">
   <div style="background:linear-gradient(135deg,{bg_col},{bg_col}dd);
@@ -1756,12 +1763,12 @@ if st.session_state.data_master:
   </div>
   <div style="padding:16px 24px;color:var(--text2);font-size:0.9rem;">
     Nessuna combinazione con probabilità congiunta ≥ {SOGLIA_PROB_SAFETY*100:.0f}% trovata oggi
-    (le migliori selezioni disponibili arrivano al {prob*100:.1f}%) — meglio saltare
+    ({motivo_skip}) — meglio saltare
     la Safety oggi piuttosto che proporre una combo troppo incerta.
   </div>
 </div>
 """, unsafe_allow_html=True)
-                    testo_export += f"Schedina {nome}: saltata, probabilità congiunta insufficiente oggi ({prob*100:.1f}% < {SOGLIA_PROB_SAFETY*100:.0f}%).\n\n"
+                    testo_export += f"Schedina {nome}: saltata, {motivo_skip} (soglia richiesta {SOGLIA_PROB_SAFETY*100:.0f}%).\n\n"
                     continue
 
                 txt = f"Schedina {nome} ({budget:.2f}€)\n"
