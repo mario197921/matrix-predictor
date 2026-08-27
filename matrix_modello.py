@@ -100,6 +100,70 @@ def get_quota_finale(tip: str, prob: float, quote_reali: dict):
 def calcola_edge_pct(prob: float, quota: float) -> float:
     return ((prob / 100.0) * quota - 1.0) * 100.0
 
+def devig_1x2(quote_reali: dict):
+    """Toglie il margine del bookmaker dalle quote reali 1/X/2 e restituisce
+    le probabilita' "eque" implicite dal mercato (sommano a 100). Ritorna
+    None se non sono disponibili tutte e tre le quote reali (es. mercato
+    non coperto per quella partita) — in quel caso non si puo' devigare
+    correttamente e non va usato come prior."""
+    if not quote_reali or not all(k in quote_reali for k in ("1", "X", "2")):
+        return None
+    grezze = {k: 1.0 / float(quote_reali[k]) for k in ("1", "X", "2") if float(quote_reali[k]) > 0}
+    if len(grezze) != 3:
+        return None
+    tot = sum(grezze.values())
+    if tot <= 0:
+        return None
+    return {k: (v / tot) * 100.0 for k, v in grezze.items()}
+
+def blend_prob_mercato(prob_modello: float, prob_mercato: float, peso_mercato: float) -> float:
+    """Media pesata fra la probabilita' del modello e quella implicita dal
+    mercato (devigata). peso_mercato in [0,1]: 0 = fidati solo del modello,
+    1 = fidati solo del mercato. Usata per correggere le stime nei contesti
+    "instabili" (inizio stagione, coppe) dove il modello ha pochi dati e
+    puo' discostarsi molto dal mercato senza una vera ragione."""
+    peso_mercato = max(0.0, min(1.0, peso_mercato))
+    return prob_modello * (1.0 - peso_mercato) + prob_mercato * peso_mercato
+
+def applica_blend_mercato_1x2(full_tips: dict, quote_reali: dict, peso_mercato: float) -> dict:
+    """Mescola le probabilita' 1/X/2 del modello con quelle devigate dal
+    mercato reale (vedi blend_prob_mercato) e RICALCOLA tutti i mercati
+    derivati da 1/X/2 (doppie chance, combo con Over/Under, HT/FT) così da
+    restituire un dizionario internamente coerente — senza questo, i mercati
+    derivati resterebbero calcolati sulle probabilità pre-blend. Se le
+    quote reali 1X2 non sono disponibili (devig_1x2 restituisce None),
+    restituisce full_tips invariato."""
+    prob_mercato = devig_1x2(quote_reali)
+    if prob_mercato is None:
+        return full_tips
+    p = dict(full_tips)
+    for k in ("1", "X", "2"):
+        p[k] = blend_prob_mercato(p[k], prob_mercato[k], peso_mercato)
+
+    p["1X"] = p["1"] + p["X"]
+    p["X2"] = p["X"] + p["2"]
+    p["12"] = p["1"] + p["2"]
+
+    if "O1.5" in p:
+        p["1X + Over 1.5"]  = (p["1X"] / 100) * (p["O1.5"] / 100) * 100 * 0.92
+        p["X2 + Over 1.5"]  = (p["X2"] / 100) * (p["O1.5"] / 100) * 100 * 0.92
+    if "U3.5" in p:
+        p["1X + Under 3.5"] = (p["1X"] / 100) * (p["U3.5"] / 100) * 100 * 0.95
+        p["X2 + Under 3.5"] = (p["X2"] / 100) * (p["U3.5"] / 100) * 100 * 0.95
+    if "O2.5" in p:
+        p["1 + Over 2.5"]   = (p["1"]  / 100) * (p["O2.5"] / 100) * 100 * 0.90
+        p["2 + Over 2.5"]   = (p["2"]  / 100) * (p["O2.5"] / 100) * 100 * 0.90
+
+    ht_raw  = {"1": p["1"] * 0.9, "X": p["X"] * 1.5, "2": p["2"] * 0.9}
+    tot_ht  = sum(ht_raw.values())
+    if tot_ht > 0:
+        ht_prob = {k: v / tot_ht for k, v in ht_raw.items()}
+        for ht in ("1", "X", "2"):
+            for ft in ("1", "X", "2"):
+                p[f"HT/FT {ht}/{ft}"] = ht_prob[ht] * (p[ft] / 100.0) * 100.0
+
+    return p
+
 def kelly_fraction(prob: float, quota: float, fraz: float = 0.08) -> float:
     p = prob / 100.0; b = quota - 1.0
     if b <= 0: return 0.0

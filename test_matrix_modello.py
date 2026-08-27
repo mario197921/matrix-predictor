@@ -13,7 +13,8 @@ import math
 from matrix_modello import (
     calcola_prob_poisson, calcola_tutti_i_mercati, get_quota_finale,
     calcola_edge_pct, kelly_fraction, semplifica_nome, get_family,
-    costruisci_schedina_dinamica,
+    costruisci_schedina_dinamica, devig_1x2, blend_prob_mercato,
+    applica_blend_mercato_1x2,
 )
 
 
@@ -272,6 +273,54 @@ def test_schedina_prob_range_nessuna_combo_in_fascia():
         pool, min_q=1.01, max_q=99.0, target_mult=9999.0, max_righe=2,
         ordina_per="prob_range", min_prob_congiunta=0.95, max_prob_congiunta=1.00)
     assert sel == []
+
+
+# ── devig_1x2 / blend_prob_mercato / applica_blend_mercato_1x2 ─────────────
+
+def test_devig_1x2_somma_100():
+    prob = devig_1x2({"1": 1.50, "X": 4.20, "2": 6.00})
+    assert abs(sum(prob.values()) - 100.0) < 1e-9
+
+
+def test_devig_1x2_toglie_il_margine():
+    # Quote leggermente "vig-gate": probabilita' grezze sommano a piu' di 100,
+    # il devig deve riportarle a somma 100 mantenendo le proporzioni relative.
+    quote = {"1": 1.50, "X": 4.20, "2": 6.00}
+    grezzo_1 = 1.0 / 1.50 * 100.0
+    prob = devig_1x2(quote)
+    assert prob["1"] < grezzo_1  # dopo il devig, ogni prob scende (il margine viene tolto)
+
+
+def test_devig_1x2_none_se_quote_incomplete():
+    assert devig_1x2({"1": 1.50, "X": 4.20}) is None   # manca "2"
+    assert devig_1x2({}) is None
+    assert devig_1x2(None) is None
+
+
+def test_blend_prob_mercato_estremi():
+    assert blend_prob_mercato(50.0, 80.0, 0.0) == 50.0    # peso 0 -> solo modello
+    assert blend_prob_mercato(50.0, 80.0, 1.0) == 80.0    # peso 1 -> solo mercato
+    assert blend_prob_mercato(50.0, 80.0, 0.5) == 65.0    # a meta'
+
+
+def test_applica_blend_mercato_1x2_corregge_favorito_sottostimato():
+    # Caso "Barcellona": il modello stima il favorito solo al 51.8% (1X2 quasi
+    # equilibrato) ma il mercato reale (quota molto bassa) lo dà nettamente
+    # favorito. Con peso alto (contesto instabile) la stima blendata deve
+    # avvicinarsi parecchio al mercato, non restare vicina al modello.
+    full_tips = calcola_tutti_i_mercati(1.35, 1.30, 9.0, 4.0, False, 22.0)  # xG quasi pari -> "1" ~debole
+    quote_reali = {"1": 1.22, "X": 6.50, "2": 12.00}   # mercato: favorito nettissimo
+    prob_prima = full_tips["1"]
+    blended = applica_blend_mercato_1x2(full_tips, quote_reali, peso_mercato=0.55)
+    assert blended["1"] > prob_prima + 10   # si e' avvicinata parecchio al mercato
+    # coerenza interna: 1X deve ancora essere 1+X dopo il ricalcolo
+    assert abs(blended["1X"] - (blended["1"] + blended["X"])) < 1e-6
+
+
+def test_applica_blend_mercato_1x2_nessuna_quota_reale_non_cambia_nulla():
+    full_tips = calcola_tutti_i_mercati(1.4, 1.1, 9.0, 4.0, False, 22.0)
+    invariato = applica_blend_mercato_1x2(full_tips, {}, peso_mercato=0.55)
+    assert invariato == full_tips
 
 
 ALL_TESTS = [v for k, v in list(globals().items()) if k.startswith("test_")]

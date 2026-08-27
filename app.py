@@ -731,7 +731,7 @@ from matrix_api import (
 from matrix_modello import (
     calcola_tutti_i_mercati, get_quota_finale,
     calcola_edge_pct, kelly_fraction, semplifica_nome,
-    costruisci_schedina_dinamica,
+    costruisci_schedina_dinamica, applica_blend_mercato_1x2,
 )
 
 # ==========================================
@@ -1285,6 +1285,18 @@ if btn_genera:
 
                     avg_corn = corn_c + corn_t; avg_cart = cart_c + cart_t
                     full_tips = calcola_tutti_i_mercati(xg_c, xg_t, avg_corn, avg_cart, is_sev, tot_falli)
+
+                    # Blend modello+mercato sul mercato 1X2 (e su tutto cio' che ne
+                    # deriva: doppie chance, combo con O/U, HT/FT). Nei contesti
+                    # "instabili" (coppe/playoff/inter-lega/inizio stagione) il
+                    # modello ha pochi dati e puo' discostarsi molto dal mercato
+                    # senza una vera ragione (es. un grande favorito valutato ~50%
+                    # solo per 1-2 partite giocate) — si da' quindi piu' peso al
+                    # mercato reale (devigato) proprio quando i dati del modello
+                    # sono meno affidabili. Nessun effetto se le quote reali 1X2
+                    # non sono disponibili per questa partita.
+                    peso_mercato_1x2 = 0.55 if stima_instabile else 0.15
+                    full_tips = applica_blend_mercato_1x2(full_tips, quote_reali_match, peso_mercato_1x2)
 
                     best_key = max(["1","X","2"], key=lambda k: full_tips[k])
                     if full_tips[best_key] < 45.0:
