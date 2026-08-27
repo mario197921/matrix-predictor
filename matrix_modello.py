@@ -130,20 +130,29 @@ def get_family(tip: str) -> str:
 def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
                                   target_mult: float, escludi_match=None,
                                   max_match_q: float = 5.0, max_righe: int = 12,
-                                  max_same_family: int = 2, max_instabili: int = 1):
+                                  max_same_family: int = 2, max_instabili: int = 1,
+                                  ordina_per: str = "edge"):
     """max_instabili: numero massimo di selezioni "instabili" (coppe/playoff/
     inter-lega/squadre con poche partite giocate — vedi flag 'Instabile' in
     app.py) che possono finire nella STESSA schedina combo. In una multipla
     basta che una gamba salti per perdere tutto, quindi concentrare più
     selezioni a dato rumoroso nella stessa giocata somma il rischio invece
     di diversificarlo. Le voci senza il flag (es. nei test) sono trattate
-    come stabili di default."""
+    come stabili di default.
+
+    ordina_per: "edge" (default) sceglie le gambe a edge più alto — massimizza
+    il valore atteso dichiarato. "prob" sceglie le gambe a probabilità più
+    alta — utile per una schedina "safety" dove l'obiettivo è massimizzare
+    la probabilità congiunta di vincere tutta la combo, non l'edge."""
     if escludi_match is None: escludi_match = set()
     valid = [x for x in pool
              if min_q <= float(x['Quota']) <= max_q
              and float(x['Quota']) <= max_match_q
              and float(x.get('Edge', 0)) > 0]   # solo scommesse con edge positivo reale
-    pool_ord = sorted(valid, key=lambda x: calcola_edge_pct(x['Prob'], float(x['Quota'])), reverse=True)
+    if ordina_per == "prob":
+        pool_ord = sorted(valid, key=lambda x: float(x['Prob']), reverse=True)
+    else:
+        pool_ord = sorted(valid, key=lambda x: calcola_edge_pct(x['Prob'], float(x['Quota'])), reverse=True)
     sel = []; viste = set(); fam_cnt = {}; q_tot = prob_tot = 1.0; instabili_cnt = 0
     for item in pool_ord:
         fam  = get_family(item['Tip'])

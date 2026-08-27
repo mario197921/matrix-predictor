@@ -221,6 +221,23 @@ def test_schedina_instabili_non_bloccano_le_stabili():
     assert stabili_in_sel == 3
 
 
+def test_schedina_ordina_per_prob_sceglie_prob_piu_alta():
+    # Con ordina_per="prob", a parita' di edge la combo deve preferire le
+    # gambe a probabilita' più alta (non quelle a edge più alto) — usato
+    # dalla schedina Safety per massimizzare la probabilita' congiunta.
+    pool = [
+        {"Match": "A", "Tip": "1", "Prob": 60.0, "Quota": 2.0, "Edge": 20.0},  # edge alto, prob bassa
+        {"Match": "B", "Tip": "1", "Prob": 90.0, "Quota": 1.15, "Edge": 3.5},  # edge basso, prob alta
+    ]
+    sel, q_tot, prob_tot, usati = costruisci_schedina_dinamica(
+        pool, min_q=1.01, max_q=99.0, target_mult=9999.0, max_righe=1, ordina_per="prob")
+    assert sel[0]["Match"] == "B"
+
+    sel_edge, _, _, _ = costruisci_schedina_dinamica(
+        pool, min_q=1.01, max_q=99.0, target_mult=9999.0, max_righe=1, ordina_per="edge")
+    assert sel_edge[0]["Match"] == "A"
+
+
 ALL_TESTS = [v for k, v in list(globals().items()) if k.startswith("test_")]
 
 

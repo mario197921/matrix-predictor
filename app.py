@@ -1676,27 +1676,56 @@ if st.session_state.data_master:
                 ("AZZARDO",     "🔴", "risk-bg",        "#1f0a0a", "#ef4444",
                  "Quote alte — max 10% del capitale."),
             ]
+            SOGLIA_PROB_SAFETY = 0.90  # sotto questa probabilita' congiunta, meglio
+                                       # saltare la schedina Safety che proporne una
+                                       # troppo incerta (riduce le partite "atipiche")
+
             SCHEDINE_PARAMS = [
-                # ultimo campo: max_righe. Safety fissata a 2 selezioni (non di
-                # più anche se il moltiplicatore x2.0 non e' ancora raggiunto) —
-                # con 2 gambe la probabilita' congiunta resta ragionevole, con 3+
-                # cala troppo in fretta per un target di moltiplicatore cosi' basso.
+                # campi: pool, min_q, max_q, target_mult, max_match_q, (inutilizzato),
+                # budget, max_righe, ordina_per.
+                # Safety fissata a 2 selezioni, scelte per PROBABILITA' più alta (non
+                # edge) — con 2 gambe la probabilita' congiunta resta ragionevole, e
+                # ordinare per prob invece che per edge privilegia le partite più
+                # "tipiche"/affidabili a parita' di quota, riducendo quelle atipiche.
                 (pool_s := [x for x in kp if x['Tip'] not in ["Goal","O1.5","O2.5","O3.5","O4.5"]],
-                 1.12, 1.50, 2.0,  2.0,  set(),  bud_s, 2),
-                (kp,   1.51, 2.20, 5.0,  2.20, None,  bud_p, 12),
-                (kp,   2.21, 4.50, 30.0, 4.50, None,  bud_a, 12),
+                 1.12, 1.50, 2.0,  2.0,  set(),  bud_s, 2, "prob"),
+                (kp,   1.51, 2.20, 5.0,  2.20, None,  bud_p, 12, "edge"),
+                (kp,   2.21, 4.50, 30.0, 4.50, None,  bud_a, 12, "edge"),
             ]
 
             escludi_prev = set()
             for idx, (nome, emoji, cls, bg_col, acc_col, nota) in enumerate(SCHEDINE_CFG):
-                pool_f, min_q, max_q, target, mq, _, budget, max_righe_f = SCHEDINE_PARAMS[idx]
+                pool_f, min_q, max_q, target, mq, _, budget, max_righe_f, ordina_per_f = SCHEDINE_PARAMS[idx]
                 escludi = escludi_prev
 
                 slip, q_tot, prob, usate = costruisci_schedina_dinamica(
                     pool_f, min_q, max_q, target, escludi_match=escludi, max_match_q=mq,
-                    max_righe=max_righe_f)
+                    max_righe=max_righe_f, ordina_per=ordina_per_f)
                 escludi_prev = usate
                 vincita_tot = budget * q_tot
+
+                # Guardia specifica per Safety: se anche le 2 migliori selezioni
+                # per probabilita' non raggiungono la soglia, salta la schedina
+                # invece di proporre una combo troppo incerta con l'etichetta "safety".
+                if idx == 0 and (not slip or prob < SOGLIA_PROB_SAFETY):
+                    st.markdown(f"""
+<div class="strategy-box {cls}" style="padding:0;overflow:hidden;">
+  <div style="background:linear-gradient(135deg,{bg_col},{bg_col}dd);
+    padding:18px 24px;border-bottom:1px solid rgba(255,255,255,0.06);">
+    <div style="font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:800;color:{acc_col};">
+      {emoji} Schedina {nome}
+    </div>
+    <div style="font-size:0.75rem;color:var(--text2);margin-top:3px;">{nota}</div>
+  </div>
+  <div style="padding:16px 24px;color:var(--text2);font-size:0.9rem;">
+    Nessuna combinazione con probabilità congiunta ≥ {SOGLIA_PROB_SAFETY*100:.0f}% trovata oggi
+    (le migliori selezioni disponibili arrivano al {prob*100:.1f}%) — meglio saltare
+    la Safety oggi piuttosto che proporre una combo troppo incerta.
+  </div>
+</div>
+""", unsafe_allow_html=True)
+                    testo_export += f"Schedina {nome}: saltata, probabilità congiunta insufficiente oggi ({prob*100:.1f}% < {SOGLIA_PROB_SAFETY*100:.0f}%).\n\n"
+                    continue
 
                 txt = f"Schedina {nome} ({budget:.2f}€)\n"
 
