@@ -1711,20 +1711,21 @@ if st.session_state.data_master:
             SCHEDINE_PARAMS = [
                 # campi: pool, min_q, max_q, target_mult, max_match_q, (inutilizzato),
                 # budget, max_righe, ordina_per, min_prob, max_prob.
-                # Safety fissata a 2 selezioni, scelte con "prob_range" ma SENZA
-                # vincolo di probabilita' congiunta (min/max=None): su richiesta
-                # dell'utente, il filtro a soglia fissa (75-100%) bloccava troppo
-                # spesso la Safety nei giorni con poche partite, e non era comunque
-                # legato al calcolo di probabilita' della matrix in modo diretto.
-                # Resta la ricerca esaustiva fra tutte le combo da 2 gambe valide
-                # (quota 1.12-1.50, edge positivo) per scegliere quella a edge
-                # combinato piu' alto.
+                # Safety: torna alla composizione FLESSIBILE (ordina_per="edge",
+                # come Performance/Azzardo) invece della ricerca a numero fisso
+                # di gambe ("prob_range"). Quest'ultima richiedeva un numero
+                # ESATTO di selezioni (2) nella fascia di quota 1.12-1.50: nei
+                # giorni con poche partite idonee (anche solo 1) non trovava mai
+                # nulla e la Safety spariva del tutto. Con la modalita' flessibile
+                # accumula le migliori selezioni per edge fino a un massimo di 3
+                # gambe, fermandosi al raggiungimento del target di quota — quindi
+                # propone sempre qualcosa quando c'e' almeno una selezione valida.
                 # Include anche i mercati Over/Goal nel pool (in precedenza esclusi):
                 # nei giorni con molte partite di coppa erano quasi le uniche voci
                 # a edge positivo, ed escluderle lasciava la Safety senza abbastanza
                 # selezioni per completare la combo.
                 (pool_s := kp,
-                 1.12, 1.50, 2.0,  2.0,  set(),  bud_s, 2, "prob_range",
+                 1.12, 1.50, 2.0,  2.0,  set(),  bud_s, 3, "edge",
                  None, None),
                 (kp,   1.51, 2.20, 5.0,  2.20, None,  bud_p, 12, "edge", None, None),
                 (kp,   2.21, 4.50, 30.0, 4.50, None,  bud_a, 12, "edge", None, None),
