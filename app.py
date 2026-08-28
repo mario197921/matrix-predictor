@@ -735,7 +735,7 @@ from matrix_modello import (
 )
 from matrix_db import (
     salva_schedina, leggi_storico_schedine, aggiorna_esito_schedina,
-    controlla_e_aggiorna_risultati,
+    controlla_e_aggiorna_risultati, aggiorna_giocata_reale,
 )
 
 # ==========================================
@@ -1436,16 +1436,35 @@ else:
     storico_ordinato = sorted(
         storico, key=lambda r: (r.get("data", ""), r.get("nome", "")), reverse=True)
 
-    vinte  = sum(1 for r in storico if r.get("esito") == "vinta")
-    perse  = sum(1 for r in storico if r.get("esito") == "persa")
-    attesa = sum(1 for r in storico if r.get("esito") == "in_attesa")
-    concluse = vinte + perse
+    def _e_reale(r):
+        """True se è una scommessa effettivamente giocata: bet365 caricate
+        a mano, salvate dal Carrello come giocata personale, oppure una
+        proposta della Matrix che l'utente ha spuntato come 'giocata
+        davvero'. False se è solo una proposta automatica mai giocata."""
+        return (r.get("fonte") == "bet365_manuale"
+                or str(r.get("nome", "")).startswith("PERSONALE_")
+                or bool(r.get("giocata_reale")))
 
-    c1, c2, c3, c4m = st.columns(4)
-    c1.metric("✅ Vinte", vinte)
-    c2.metric("❌ Perse", perse)
-    c3.metric("⏳ In attesa", attesa)
-    c4m.metric("Win rate", f"{(vinte/concluse*100):.1f}%" if concluse else "—")
+    storico_reale  = [r for r in storico_ordinato if _e_reale(r)]
+    storico_matrix = [r for r in storico_ordinato if not _e_reale(r)]
+
+    def _mostra_metriche(lista, titolo):
+        vinte  = sum(1 for r in lista if r.get("esito") == "vinta")
+        perse  = sum(1 for r in lista if r.get("esito") == "persa")
+        attesa = sum(1 for r in lista if r.get("esito") == "in_attesa")
+        concluse = vinte + perse
+        st.markdown(f"**{titolo}**")
+        c1, c2, c3, c4m = st.columns(4)
+        c1.metric("✅ Vinte", vinte)
+        c2.metric("❌ Perse", perse)
+        c3.metric("⏳ In attesa", attesa)
+        c4m.metric("Win rate", f"{(vinte/concluse*100):.1f}%" if concluse else "—")
+
+    mcol1, mcol2 = st.columns(2)
+    with mcol1:
+        _mostra_metriche(storico_matrix, "🤖 Proposte Matrix (se il modello predice bene)")
+    with mcol2:
+        _mostra_metriche(storico_reale, "💶 Scommesse reali (soldi effettivamente giocati)")
 
     st.markdown("---")
 
@@ -1454,38 +1473,68 @@ else:
 
     for r in storico_ordinato:
         esito  = r.get("esito", "in_attesa")
-        colore = COLORE_ESITO.get(esito, "#94a3b8")
         doc_id = r.get("doc_id")
-        legs_txt = " + ".join(
-            f"{s.get('match','?')} → {s.get('tip','?')}" for s in r.get("selezioni", []))
+        selezioni_r = r.get("selezioni", [])
 
-        st.markdown(f"""
-<div style="border-left:3px solid {colore};padding:12px 18px;margin-bottom:8px;
-  background:rgba(255,255,255,0.03);border-radius:8px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;">
-    <b style="font-family:'Syne',sans-serif;">{r.get('data','?')} — {r.get('nome','?')}</b>
-    <span style="font-size:1.1rem;">{EMOJI_ESITO.get(esito,'⏳')}</span>
-  </div>
-  <div style="font-size:0.85rem;color:var(--text2);margin-top:4px;">{legs_txt or '—'}</div>
-  <div style="font-size:0.78rem;color:var(--text2);margin-top:4px;">
-    Quota tot: {r.get('quota_totale',0):.2f} · Prob. dichiarata: {r.get('probabilita_congiunta',0)*100:.1f}% ·
+        righe_gambe = []
+        n_corrette = 0
+        n_valutate = 0
+        for s in selezioni_r:
+            match_s = s.get('match') or s.get('Match') or '?'
+            tip_s   = s.get('tip')   or s.get('Tip')   or '?'
+            eg = s.get('esito_gamba')
+            if eg in ("vinta", "persa"):
+                n_valutate += 1
+                if eg == "vinta":
+                    n_corrette += 1
+                icona_gamba = "✅" if eg == "vinta" else "❌"
+            else:
+                icona_gamba = "⏳"
+            righe_gambe.append(f"{icona_gamba} {match_s} → {tip_s}")
+        legs_txt = "<br>".join(righe_gambe)
+
+        conteggio_txt = f" · {n_corrette}/{n_valutate} corrette" if n_valutate else ""
+
+        tag = "💶 Reale" if _e_reale(r) else "🤖 Matrix"
+        quota_tot = r.get('quota_totale') or 0
+        label = (f"{EMOJI_ESITO.get(esito,'⏳')} {r.get('data','?')} — {r.get('nome','?')} "
+                 f"· {tag} · quota {quota_tot:.2f}{conteggio_txt}")
+
+        is_fonte_reale = (r.get("fonte") == "bet365_manuale"
+                           or str(r.get("nome", "")).startswith("PERSONALE_"))
+
+        with st.expander(label, expanded=False):
+            st.markdown(f"""
+<div style="font-size:0.85rem;color:var(--text2);">{legs_txt or '—'}</div>
+<div style="font-size:0.78rem;color:var(--text2);margin-top:4px;">
+    Quota tot: {quota_tot:.2f} · Prob. dichiarata: {(r.get('probabilita_congiunta') or 0)*100:.1f}% ·
     Budget: {r.get('budget',0):.2f}€
-  </div>
 </div>
 """, unsafe_allow_html=True)
 
-        if esito == "in_attesa" and doc_id:
-            bcol1, bcol2, _ = st.columns([1, 1, 4])
-            if bcol1.button("✅ Vinta", key=f"vinta_{doc_id}"):
-                if aggiorna_esito_schedina(doc_id, "vinta"):
-                    st.rerun()
-                else:
-                    st.error("Errore nel salvataggio — controlla il terminale.")
-            if bcol2.button("❌ Persa", key=f"persa_{doc_id}"):
-                if aggiorna_esito_schedina(doc_id, "persa"):
-                    st.rerun()
-                else:
-                    st.error("Errore nel salvataggio — controlla il terminale.")
+            if not is_fonte_reale and doc_id:
+                giocata_attuale = bool(r.get("giocata_reale"))
+                giocata_nuova = st.checkbox(
+                    "💶 L'ho giocata davvero (conta anche nelle statistiche reali)",
+                    value=giocata_attuale, key=f"giocata_{doc_id}")
+                if giocata_nuova != giocata_attuale:
+                    if aggiorna_giocata_reale(doc_id, giocata_nuova):
+                        st.rerun()
+                    else:
+                        st.error("Errore nel salvataggio — controlla il terminale.")
+
+            if esito == "in_attesa" and doc_id:
+                bcol1, bcol2, _ = st.columns([1, 1, 4])
+                if bcol1.button("✅ Vinta", key=f"vinta_{doc_id}"):
+                    if aggiorna_esito_schedina(doc_id, "vinta"):
+                        st.rerun()
+                    else:
+                        st.error("Errore nel salvataggio — controlla il terminale.")
+                if bcol2.button("❌ Persa", key=f"persa_{doc_id}"):
+                    if aggiorna_esito_schedina(doc_id, "persa"):
+                        st.rerun()
+                    else:
+                        st.error("Errore nel salvataggio — controlla il terminale.")
 
 st.markdown("---")
 
@@ -1900,6 +1949,18 @@ if st.session_state.data_master:
                 escludi_prev = usate
                 vincita_tot = budget * q_tot
 
+                # Diagnostica: quante selezioni erano davvero disponibili in
+                # questa fascia di quota/edge oggi (a prescindere da quante ne
+                # sono poi entrate nella combo) -- utile per capire "perche' solo
+                # una gamba" senza dover chiedere ogni volta.
+                candidati_f = [x for x in pool_f
+                               if min_q <= float(x['Quota']) <= max_q
+                               and float(x['Quota']) <= mq
+                               and float(x.get('Edge', 0)) > 0
+                               and x['Match'] not in escludi]
+                n_candidati = len(candidati_f)
+                n_match_candidati = len({x['Match'] for x in candidati_f})
+
                 # Salva su Firebase la schedina generata (per tracciare nel
                 # tempo probabilita' dichiarate vs esiti reali). Fallisce in
                 # silenzio se Firebase non e' configurato o raggiungibile --
@@ -1912,9 +1973,9 @@ if st.session_state.data_master:
                 # invece di proporne una incompleta con l'etichetta "safety".
                 if idx == 0 and not slip:
                     motivo_skip = (
-                        f"le selezioni idonee disponibili oggi non bastano a comporre una "
-                        f"combinazione da {max_righe_f} eventi (quota fuori fascia 1.12-1.50 "
-                        f"o edge non positivo su abbastanza partite)"
+                        f"{n_candidati} selezioni idonee disponibili oggi (quota 1.12-1.50, "
+                        f"edge positivo) su {n_match_candidati} partite diverse — non bastano "
+                        f"per comporre nemmeno una combinazione minima"
                     )
                     st.markdown(f"""
 <div class="strategy-box {cls}" style="padding:0;overflow:hidden;">
@@ -1947,6 +2008,9 @@ if st.session_state.data_master:
           {emoji} Schedina {nome}
         </div>
         <div style="font-size:0.75rem;color:var(--text2);margin-top:3px;">{nota}</div>
+        <div style="font-size:0.7rem;color:var(--text2);margin-top:2px;opacity:0.7;">
+          ℹ️ {n_candidati} selezioni idonee oggi su {n_match_candidati} partite — usate {len(slip)}
+        </div>
       </div>
       <div style="text-align:right;">
         <div style="font-size:0.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Budget</div>

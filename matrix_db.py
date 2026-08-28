@@ -92,6 +92,24 @@ def leggi_storico_schedine(giorni: int = 60) -> list:
         return []
 
 
+def aggiorna_giocata_reale(doc_id: str, giocata: bool) -> bool:
+    """Segna/toglie il flag 'giocata_reale' su una schedina generata dalla
+    Matrix: usato quando l'utente spunta 'l'ho giocata davvero' nello
+    Storico, cosi' quella schedina entra anche nelle statistiche delle
+    scommesse reali (oltre a quelle delle proposte Matrix). Ritorna
+    True/False, mai eccezioni verso il chiamante (errore reale su stderr)."""
+    db = get_firestore_client()
+    if db is None:
+        return False
+    try:
+        db.collection("schedine").document(doc_id).update({"giocata_reale": bool(giocata)})
+        return True
+    except Exception as e:
+        print(f"[matrix_db] Errore aggiornamento giocata_reale per '{doc_id}': "
+              f"{type(e).__name__}: {e}", file=sys.stderr)
+        return False
+
+
 def aggiorna_esito_schedina(doc_id: str, esito: str) -> bool:
     """Aggiorna manualmente il campo 'esito' di una schedina gia' salvata
     ('vinta' o 'persa'), in attesa che il controllo automatico dei
@@ -178,9 +196,19 @@ def controlla_e_aggiorna_risultati() -> dict:
             continue
 
         esito_finale = "vinta" if all(esiti_gambe) else "persa"
-        if aggiorna_esito_schedina(doc.id, esito_finale):
+        selezioni_aggiornate = [
+            {**sel, "esito_gamba": "vinta" if eg else "persa"}
+            for sel, eg in zip(selezioni, esiti_gambe)
+        ]
+        try:
+            db.collection("schedine").document(doc.id).update({
+                "esito": esito_finale,
+                "selezioni": selezioni_aggiornate,
+            })
             riepilogo[esito_finale == "vinta" and "vinte" or "perse"] += 1
-        else:
+        except Exception as e:
+            print(f"[matrix_db] Errore aggiornamento esito/gambe per '{doc.id}': "
+                  f"{type(e).__name__}: {e}", file=sys.stderr)
             riepilogo["ancora_in_attesa"] += 1
 
     return riepilogo
