@@ -1416,8 +1416,20 @@ with st.expander("📊 Storico Schedine", expanded=False):
                    "errori di connessione).")
         storico_ordinato = []
     else:
+        def _data_ordinabile(r):
+            """La 'data' e' normalmente 'YYYY-MM-DD' (schedine Matrix/personali),
+            ma le bet365 caricate a mano hanno un placeholder 'storico_NN' (date
+            esatte non note dagli screenshot) -- che in ordine alfabetico
+            finirebbe PRIMA delle date vere, mandando le schedine di oggi in
+            fondo. Le riconosciamo e le mandiamo in coda (data fittizia minima)
+            cosi' l'ordine resta sempre dalla piu' recente alla piu' vecchia."""
+            d = r.get("data", "")
+            if len(d) == 10 and d[4] == "-" and d[7] == "-" and d[:4].isdigit():
+                return d
+            return "0000-00-00"
+
         storico_ordinato = sorted(
-            storico, key=lambda r: (r.get("data", ""), r.get("nome", "")), reverse=True)
+            storico, key=lambda r: (_data_ordinabile(r), r.get("nome", "")), reverse=True)
 
         def _e_reale(r):
             """True se è una scommessa effettivamente giocata: bet365 caricate
