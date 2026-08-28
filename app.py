@@ -1596,6 +1596,18 @@ if st.session_state.data_master:
             st.download_button("💾 SCARICA SCHEDINA (TXT)", data=txt,
                                file_name=f"Matrix_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                                mime="text/plain")
+
+            st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
+            stake_personale = st.number_input(
+                "Quanto punti su questa schedina (€):", min_value=0.5, value=10.0,
+                step=0.5, key="stake_personale_input")
+            if st.button("🗂️ Salva questa schedina come giocata personale"):
+                nome_personale = f"PERSONALE_{datetime.now().strftime('%H%M%S')}"
+                if salva_schedina(nome_personale, _oggi.strftime("%Y-%m-%d"),
+                                   carrello, q_tot_b, prob_tot_b, stake_personale):
+                    st.success("✅ Salvata! La trovi nello Storico Schedine in cima alla pagina.")
+                else:
+                    st.error("❌ Errore nel salvataggio — controlla il terminale per il dettaglio.")
         else:
             st.info("👆 Spunta qualche voce dalle classifiche per costruire la schedina.")
         st.markdown("</div>", unsafe_allow_html=True)
