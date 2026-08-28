@@ -7,6 +7,7 @@ isolamento con semplici assert su input/output.
 
 import itertools
 import math
+from datetime import datetime, timezone
 
 from matrix_leghe import MARGINE_BK
 
@@ -300,3 +301,39 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
             prob_tot *= item['Prob'] / 100.0
         if q_tot >= target_mult or len(sel) >= max_righe: break
     return sel, q_tot, prob_tot, viste.union(escludi_match)
+
+
+# ── Tracking calibrazione (Firebase) ────────────────────────────────────────
+
+def costruisci_record_schedina(nome: str, data_str: str, selezioni: list,
+                                q_tot: float, prob_tot: float, budget: float,
+                                creato_il: str = None) -> dict:
+    """Funzione pura: prepara il dizionario da salvare su Firestore per una
+    schedina generata dall'app. Nessuna chiamata di rete qui -- separata da
+    matrix_db.py per essere testabile senza credenziali Firebase.
+
+    'creato_il' e' opzionale (default: timestamp UTC corrente) per permettere
+    ai test di passare un valore fisso e avere risultati deterministici.
+    """
+    if creato_il is None:
+        creato_il = datetime.now(timezone.utc).isoformat()
+    return {
+        "nome": nome,
+        "data": data_str,
+        "creato_il": creato_il,
+        "quota_totale": round(float(q_tot), 4),
+        "probabilita_congiunta": round(float(prob_tot), 4),
+        "budget": round(float(budget), 2),
+        "selezioni": [
+            {
+                "match": s["Match"],
+                "tip": s["Tip"],
+                "prob_dichiarata": round(float(s["Prob"]), 2),
+                "quota": round(float(s["Quota"]), 2),
+                "edge": round(float(s.get("Edge", 0)), 2),
+                "league": s.get("League", ""),
+            }
+            for s in selezioni
+        ],
+        "esito": "in_attesa",   # in_attesa | vinta | persa -- aggiornato dopo le partite
+    }

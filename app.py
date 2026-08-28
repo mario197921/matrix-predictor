@@ -733,6 +733,7 @@ from matrix_modello import (
     calcola_edge_pct, kelly_fraction, semplifica_nome,
     costruisci_schedina_dinamica, applica_blend_mercato_1x2, blend_prior_stagione,
 )
+from matrix_db import salva_schedina
 
 # ==========================================
 # 🕵️ AUTO-DISCOVERY ID LEGA (Risolve Norvegia e altri)
@@ -1743,6 +1744,13 @@ if st.session_state.data_master:
                     min_prob_congiunta=min_prob_f, max_prob_congiunta=max_prob_f)
                 escludi_prev = usate
                 vincita_tot = budget * q_tot
+
+                # Salva su Firebase la schedina generata (per tracciare nel
+                # tempo probabilita' dichiarate vs esiti reali). Fallisce in
+                # silenzio se Firebase non e' configurato o raggiungibile --
+                # non deve mai bloccare la generazione delle schedine.
+                if slip:
+                    salva_schedina(nome, _oggi.strftime("%Y-%m-%d"), slip, q_tot, prob, budget)
 
                 # Guardia specifica per Safety: se non ci sono abbastanza selezioni
                 # idonee per completare la combo da 2 gambe, salta la schedina

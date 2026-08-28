@@ -15,6 +15,7 @@ from matrix_modello import (
     calcola_edge_pct, kelly_fraction, semplifica_nome, get_family,
     costruisci_schedina_dinamica, devig_1x2, blend_prob_mercato,
     applica_blend_mercato_1x2, blend_prior_stagione,
+    costruisci_record_schedina,
 )
 
 
@@ -343,6 +344,49 @@ def test_blend_prior_stagione_a_meta_soglia():
 def test_blend_prior_stagione_nessun_precedente_disponibile():
     v = blend_prior_stagione(valore_corrente=1.2, valore_precedente=None, giocate=0, soglia_partite=10)
     assert v == 1.2   # neopromossa/lega nuova: nessun dato storico, resta il valore corrente
+
+
+
+# ── costruisci_record_schedina ──────────────────────────────────────────────
+
+def _selezioni_esempio():
+    return [
+        {"Match": "A vs B", "Tip": "1", "Prob": 82.0, "Quota": 1.36, "Edge": 11.6, "League": "ES La Liga"},
+        {"Match": "C vs D", "Tip": "O2.5", "Prob": 87.5, "Quota": 1.44, "Edge": 26.0, "League": "EU Europa League"},
+    ]
+
+
+def test_costruisci_record_schedina_campi_base():
+    r = costruisci_record_schedina(
+        "SAFETY", "2026-08-28", _selezioni_esempio(),
+        q_tot=1.9584, prob_tot=0.7175, budget=6.0,
+        creato_il="2026-08-28T20:00:00+00:00")
+    assert r["nome"] == "SAFETY"
+    assert r["data"] == "2026-08-28"
+    assert r["esito"] == "in_attesa"
+    assert r["quota_totale"] == 1.9584
+    assert r["budget"] == 6.0
+    assert len(r["selezioni"]) == 2
+
+
+def test_costruisci_record_schedina_selezioni_correttamente_mappate():
+    r = costruisci_record_schedina(
+        "SAFETY", "2026-08-28", _selezioni_esempio(),
+        q_tot=1.9584, prob_tot=0.7175, budget=6.0,
+        creato_il="2026-08-28T20:00:00+00:00")
+    prima = r["selezioni"][0]
+    assert prima["match"] == "A vs B"
+    assert prima["tip"] == "1"
+    assert prima["prob_dichiarata"] == 82.0
+    assert prima["quota"] == 1.36
+    assert prima["league"] == "ES La Liga"
+
+
+def test_costruisci_record_schedina_lista_vuota():
+    r = costruisci_record_schedina(
+        "SAFETY", "2026-08-28", [], q_tot=1.0, prob_tot=1.0, budget=6.0,
+        creato_il="2026-08-28T20:00:00+00:00")
+    assert r["selezioni"] == []
 
 
 ALL_TESTS = [v for k, v in list(globals().items()) if k.startswith("test_")]
