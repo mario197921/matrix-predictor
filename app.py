@@ -851,59 +851,56 @@ st.sidebar.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-st.sidebar.markdown("**📅 Periodo di analisi**")
-date_range = st.sidebar.date_input("", [])
+date_range = st.sidebar.date_input("📅 Periodo di analisi", [])
 if len(date_range) == 2:   start_date, end_date = date_range[0], date_range[1]
 elif len(date_range) == 1: start_date = end_date = date_range[0]
 else:                       start_date = end_date = datetime.now().date()
 start_str = start_date.strftime('%Y-%m-%d')
 end_str   = end_date.strftime('%Y-%m-%d')
 
-st.sidebar.markdown("---")
 budget_totale = st.sidebar.number_input("💰 Budget (€):", min_value=5.0, value=50.0, step=5.0)
-st.sidebar.markdown("---")
 
-if st.sidebar.button("🗑️ SVUOTA MEMORIA V90 (Hard Reset)"):
+bcol_reset, bcol_scan = st.sidebar.columns(2)
+if bcol_reset.button("🗑️ Reset", help="Svuota memoria V90 (hard reset)"):
     st.cache_data.clear()
     st.session_state.data_master     = {}
     st.session_state.all_tips_global = []
     st.sidebar.success("✅ Cache svuotata!")
-
-with st.sidebar:
-    if st.button("🔍 Trova Campionati Attivi nel Periodo"):
-        with st.spinner("Scansione palinsesto..."):
-            st.session_state['active_leagues'] = get_active_leagues(start_date, end_date)
+if bcol_scan.button("🔍 Scansiona", help="Trova campionati attivi nel periodo"):
+    with st.spinner("Scansione palinsesto..."):
+        st.session_state['active_leagues'] = get_active_leagues(start_date, end_date)
 
 if 'active_leagues' not in st.session_state:
     st.session_state['active_leagues'] = MASTER_LEAGUES
 active_dict = st.session_state['active_leagues']
 if not active_dict: st.sidebar.warning("Nessun campionato supportato attivo.")
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("**🎯 Filtro Affidabilità Dati**")
-filtro_affidabilita = st.sidebar.multiselect(
-    "Includi solo:",
-    ["🟢 ALTA", "🟡 MEDIA", "🔴 BASSA"],
-    default=["🟢 ALTA", "🟡 MEDIA", "🔴 BASSA"],
-    help="ALTA = standings+stats+infortuni+quote reali. MEDIA = dati buoni con qualche lacuna. "
-         "BASSA = fallback pesanti attivi, stime basate su momentum recente."
-)
-livelli_ok = {f.split(" ")[1] for f in filtro_affidabilita}
+with st.sidebar.expander("🎯 Filtri & Campionati", expanded=False):
+    filtro_affidabilita = st.multiselect(
+        "Affidabilità dati:",
+        ["🟢 ALTA", "🟡 MEDIA", "🔴 BASSA"],
+        default=["🟢 ALTA", "🟡 MEDIA", "🔴 BASSA"],
+        help="ALTA = standings+stats+infortuni+quote reali. MEDIA = dati buoni con qualche lacuna. "
+             "BASSA = fallback pesanti attivi, stime basate su momentum recente."
+    )
+    livelli_ok = {f.split(" ")[1] for f in filtro_affidabilita}
 
-leghe_filtrate = {
-    k: v for k, v in active_dict.items()
-    if get_affidabilita(k) in livelli_ok
-}
-if not leghe_filtrate:
-    st.sidebar.warning("Nessun campionato nel livello di affidabilità selezionato.")
+    leghe_filtrate = {
+        k: v for k, v in active_dict.items()
+        if get_affidabilita(k) in livelli_ok
+    }
+    if not leghe_filtrate:
+        st.warning("Nessun campionato nel livello di affidabilità selezionato.")
 
-# Ordina i campionati per affidabilità (Alta prima) poi alfabetico
-leghe_ordinate = sorted(
-    leghe_filtrate.keys(),
-    key=lambda n: (-AFFIDABILITA_ORDINE.get(get_affidabilita(n), 2), n)
-)
+    # Ordina i campionati per affidabilità (Alta prima) poi alfabetico
+    leghe_ordinate = sorted(
+        leghe_filtrate.keys(),
+        key=lambda n: (-AFFIDABILITA_ORDINE.get(get_affidabilita(n), 2), n)
+    )
 
-scelte     = st.sidebar.multiselect("Campionati:", leghe_ordinate, default=leghe_ordinate)
+    scelte = st.multiselect("Campionati:", leghe_ordinate, default=leghe_ordinate)
+
+st.sidebar.caption(f"📋 {len(scelte)} campionati selezionati")
 btn_genera = st.sidebar.button("⚡ ESTRAI MATRIX V90")
 
 # ==========================================
