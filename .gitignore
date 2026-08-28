@@ -6,6 +6,10 @@
 # ── Streamlit secrets (locale) ────────────────────────────────────────────────
 .streamlit/secrets.toml
 
+# ── Credenziali Firebase (mai su GitHub) ──────────────────────────────────────
+*firebase-adminsdk*.json
+firebase-key.json
+
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
