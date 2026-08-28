@@ -1398,63 +1398,59 @@ if btn_genera:
 # ==========================================
 # 🖥️ DISPLAY: 3 TAB
 # ==========================================
-st.markdown("""
-<div style="padding:6px 0 14px;font-family:'Syne',sans-serif;font-size:1.3rem;
-  font-weight:800;color:var(--text);">
-  📊 Storico Schedine
-</div>
-""", unsafe_allow_html=True)
+with st.expander("📊 Storico Schedine", expanded=False):
 
-if st.button("🔄 Controlla risultati partite finite"):
-    with st.spinner("Controllo i risultati reali delle partite..."):
-        esito_controllo = controlla_e_aggiorna_risultati()
-    st.success(
-        f"✅ {esito_controllo['vinte']} vinte, ❌ {esito_controllo['perse']} perse "
-        f"aggiornate automaticamente. ⏳ {esito_controllo['ancora_in_attesa']} ancora "
-        f"in attesa (partite non finite). 🔍 {esito_controllo['non_valutabili']} da "
-        f"verificare a mano (mercato non auto-valutabile o schedina senza fixture ID)."
-    )
-    st.rerun()
+    if st.button("🔄 Controlla risultati partite finite"):
+        with st.spinner("Controllo i risultati reali delle partite..."):
+            esito_controllo = controlla_e_aggiorna_risultati()
+        st.success(
+            f"✅ {esito_controllo['vinte']} vinte, ❌ {esito_controllo['perse']} perse "
+            f"aggiornate automaticamente. ⏳ {esito_controllo['ancora_in_attesa']} ancora "
+            f"in attesa (partite non finite). 🔍 {esito_controllo['non_valutabili']} da "
+            f"verificare a mano (mercato non auto-valutabile o schedina senza fixture ID)."
+        )
+        st.rerun()
 
-storico = leggi_storico_schedine(giorni=60)
+    storico = leggi_storico_schedine(giorni=60)
 
-if not storico:
-    st.warning("Nessuna schedina trovata su Firebase (o la connessione non è "
-               "configurata/raggiungibile — controlla il terminale per eventuali "
-               "errori di connessione).")
-else:
-    storico_ordinato = sorted(
-        storico, key=lambda r: (r.get("data", ""), r.get("nome", "")), reverse=True)
+    if not storico:
+        st.warning("Nessuna schedina trovata su Firebase (o la connessione non è "
+                   "configurata/raggiungibile — controlla il terminale per eventuali "
+                   "errori di connessione).")
+        storico_ordinato = []
+    else:
+        storico_ordinato = sorted(
+            storico, key=lambda r: (r.get("data", ""), r.get("nome", "")), reverse=True)
 
-    def _e_reale(r):
-        """True se è una scommessa effettivamente giocata: bet365 caricate
-        a mano, salvate dal Carrello come giocata personale, oppure una
-        proposta della Matrix che l'utente ha spuntato come 'giocata
-        davvero'. False se è solo una proposta automatica mai giocata."""
-        return (r.get("fonte") == "bet365_manuale"
-                or str(r.get("nome", "")).startswith("PERSONALE_")
-                or bool(r.get("giocata_reale")))
+        def _e_reale(r):
+            """True se è una scommessa effettivamente giocata: bet365 caricate
+            a mano, salvate dal Carrello come giocata personale, oppure una
+            proposta della Matrix che l'utente ha spuntato come 'giocata
+            davvero'. False se è solo una proposta automatica mai giocata."""
+            return (r.get("fonte") == "bet365_manuale"
+                    or str(r.get("nome", "")).startswith("PERSONALE_")
+                    or bool(r.get("giocata_reale")))
 
-    storico_reale  = [r for r in storico_ordinato if _e_reale(r)]
-    storico_matrix = [r for r in storico_ordinato if not _e_reale(r)]
+        storico_reale  = [r for r in storico_ordinato if _e_reale(r)]
+        storico_matrix = [r for r in storico_ordinato if not _e_reale(r)]
 
-    def _mostra_metriche(lista, titolo):
-        vinte  = sum(1 for r in lista if r.get("esito") == "vinta")
-        perse  = sum(1 for r in lista if r.get("esito") == "persa")
-        attesa = sum(1 for r in lista if r.get("esito") == "in_attesa")
-        concluse = vinte + perse
-        st.markdown(f"**{titolo}**")
-        c1, c2, c3, c4m = st.columns(4)
-        c1.metric("✅ Vinte", vinte)
-        c2.metric("❌ Perse", perse)
-        c3.metric("⏳ In attesa", attesa)
-        c4m.metric("Win rate", f"{(vinte/concluse*100):.1f}%" if concluse else "—")
+        def _mostra_metriche(lista, titolo):
+            vinte  = sum(1 for r in lista if r.get("esito") == "vinta")
+            perse  = sum(1 for r in lista if r.get("esito") == "persa")
+            attesa = sum(1 for r in lista if r.get("esito") == "in_attesa")
+            concluse = vinte + perse
+            st.markdown(f"**{titolo}**")
+            c1, c2, c3, c4m = st.columns(4)
+            c1.metric("✅ Vinte", vinte)
+            c2.metric("❌ Perse", perse)
+            c3.metric("⏳ In attesa", attesa)
+            c4m.metric("Win rate", f"{(vinte/concluse*100):.1f}%" if concluse else "—")
 
-    mcol1, mcol2 = st.columns(2)
-    with mcol1:
-        _mostra_metriche(storico_matrix, "🤖 Proposte Matrix (se il modello predice bene)")
-    with mcol2:
-        _mostra_metriche(storico_reale, "💶 Scommesse reali (soldi effettivamente giocati)")
+        mcol1, mcol2 = st.columns(2)
+        with mcol1:
+            _mostra_metriche(storico_matrix, "🤖 Proposte Matrix (se il modello predice bene)")
+        with mcol2:
+            _mostra_metriche(storico_reale, "💶 Scommesse reali (soldi effettivamente giocati)")
 
     st.markdown("---")
 
