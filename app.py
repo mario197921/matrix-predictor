@@ -916,7 +916,13 @@ if btn_genera:
     tz_ita   = pytz.timezone('Europe/Rome')
     mese_att = datetime.now().month
 
-    for name in scelte:
+    tot_leghe = len(scelte)
+    barra_progresso = st.progress(0.0, text="Analisi V90 in corso...")
+
+    for idx_lega, name in enumerate(scelte, start=1):
+        barra_progresso.progress(
+            idx_lega / tot_leghe if tot_leghe else 1.0,
+            text=f"Analisi V90: {name} ({idx_lega}/{tot_leghe})")
         f_id         = active_dict[name]
         is_coppa_eu  = name in COPPE_EUROPEE
         is_coppa_naz = name in COPPE_NAZIONALI
@@ -930,490 +936,474 @@ if btn_genera:
         # risposta malformata) non deve piu' interrompere l'estrazione per
         # tutti gli altri campionati selezionati.
         try:
-            with st.spinner(f"Analisi V90 {name}..."):
-                fix = requests.get(
-                    "https://v3.football.api-sports.io/fixtures",
-                    headers=HEADERS,
-                    params={'league': f_id, 'season': stagione_lega,
-                            'from': start_str, 'to': end_str},
-                    timeout=10
-                ).json()
-                if not fix.get('response'):
-                    continue
+            fix = requests.get(
+                "https://v3.football.api-sports.io/fixtures",
+                headers=HEADERS,
+                params={'league': f_id, 'season': stagione_lega,
+                        'from': start_str, 'to': end_str},
+                timeout=10
+            ).json()
+            if not fix.get('response'):
+                continue
 
-                # ── STANDINGS ──────────────────────────────────────────
-                db_stats: dict = {}
-                punti_champions = punti_salvezza = 0
-                tot_squadre     = 20
-                partite_tot_camp = 38
+            # ── STANDINGS ──────────────────────────────────────────
+            db_stats: dict = {}
+            punti_champions = punti_salvezza = 0
+            tot_squadre     = 20
+            partite_tot_camp = 38
 
-                std = requests.get(
-                    "https://v3.football.api-sports.io/standings",
-                    headers=HEADERS,
-                    params={'league': f_id, 'season': stagione_lega},
-                    timeout=10
-                ).json()
+            std = requests.get(
+                "https://v3.football.api-sports.io/standings",
+                headers=HEADERS,
+                params={'league': f_id, 'season': stagione_lega},
+                timeout=10
+            ).json()
 
-                if (std.get('response') and len(std['response']) > 0
-                        and 'league' in std['response'][0]
-                        and 'standings' in std['response'][0]['league']):
-                    tutti_gironi = std['response'][0]['league']['standings']
-                    for gruppo in tutti_gironi:
-                        tot_squadre      = len(gruppo)
-                        partite_tot_camp = max((tot_squadre - 1) * 2, 38)
-                        if tot_squadre >= 4:
-                            punti_champions = gruppo[3]['points']
-                            punti_salvezza  = gruppo[tot_squadre - 4]['points']
-                        for t in gruppo:
-                            n = semplifica_nome(t['team']['name'])
-                            db_stats[n] = {
-                                'id':      t['team']['id'],
-                                'rank':    t['rank'],
-                                'giocate': t['all']['played'],
-                                'punti':   t['points'],
-                                'ac': (t['home']['goals']['for']     or 0) / max(1, t['home']['played'] or 1),
-                                'dc': (t['home']['goals']['against'] or 0) / max(1, t['home']['played'] or 1),
-                                'at': (t['away']['goals']['for']     or 0) / max(1, t['away']['played'] or 1),
-                                'dt': (t['away']['goals']['against'] or 0) / max(1, t['away']['played'] or 1),
-                            }
-                else:
-                    # PLAYOFF RESCUE / STANDINGS FALLBACK
-                    for f in fix['response']:
-                        for tt in ['home', 'away']:
-                            n    = semplifica_nome(f['teams'][tt]['name'])
-                            t_id = f['teams'][tt]['id']
-                            if n not in db_stats:
-                                db_stats[n] = {'id': t_id, 'rank': 10, 'giocate': 0,
-                                               'punti': 0, 'ac': 0.0, 'dc': 0.0,
-                                               'at': 0.0, 'dt': 0.0}
-
-                # ── PRIOR STAGIONE PRECEDENTE ───────────────────────────
-                # A inizio stagione (poche 'giocate') le medie gol casa/trasferta
-                # sopra sono calcolate su un campione minuscolo (1-2 partite) e
-                # sono quindi rumorose. Le si sfuma con le stesse medie della
-                # stagione precedente (se disponibile per quella squadra/lega),
-                # dando sempre meno peso al dato storico man mano che la
-                # stagione corrente accumula partite reali (vedi
-                # blend_prior_stagione). Nessun effetto su leghe ad anno solare
-                # inter-stagione o su squadre neopromosse (prior assente).
-                stats_prev_stagione = scarica_standings_pregressi(f_id, int(stagione_lega) - 1)
-                if stats_prev_stagione:
-                    for n, st_sq in db_stats.items():
-                        prev = stats_prev_stagione.get(st_sq['id'])
-                        if prev is None:
-                            continue
-                        giocate_sq = st_sq.get('giocate', 0)
-                        for campo in ('ac', 'dc', 'at', 'dt'):
-                            st_sq[campo] = blend_prior_stagione(
-                                st_sq[campo], prev[campo], giocate_sq)
-
-                # ── CACHE QUOTE ────────────────────────────────────────
-                date_giocate = {f['fixture']['date'][:10] for f in fix['response']}
-                odds_cache: dict = {}
-                for d_match in date_giocate:
-                    odds_cache[d_match] = scarica_quote_native(f_id, d_match, stagione_lega)
-
-                matches_list = []
-
+            if (std.get('response') and len(std['response']) > 0
+                    and 'league' in std['response'][0]
+                    and 'standings' in std['response'][0]['league']):
+                tutti_gironi = std['response'][0]['league']['standings']
+                for gruppo in tutti_gironi:
+                    tot_squadre      = len(gruppo)
+                    partite_tot_camp = max((tot_squadre - 1) * 2, 38)
+                    if tot_squadre >= 4:
+                        punti_champions = gruppo[3]['points']
+                        punti_salvezza  = gruppo[tot_squadre - 4]['points']
+                    for t in gruppo:
+                        n = semplifica_nome(t['team']['name'])
+                        db_stats[n] = {
+                            'id':      t['team']['id'],
+                            'rank':    t['rank'],
+                            'giocate': t['all']['played'],
+                            'punti':   t['points'],
+                            'ac': (t['home']['goals']['for']     or 0) / max(1, t['home']['played'] or 1),
+                            'dc': (t['home']['goals']['against'] or 0) / max(1, t['home']['played'] or 1),
+                            'at': (t['away']['goals']['for']     or 0) / max(1, t['away']['played'] or 1),
+                            'dt': (t['away']['goals']['against'] or 0) / max(1, t['away']['played'] or 1),
+                        }
+            else:
+                # PLAYOFF RESCUE / STANDINGS FALLBACK
                 for f in fix['response']:
-                    if f['fixture']['status']['short'] in ['PST', 'CANC', 'ABD', 'AWD', 'WO']:
+                    for tt in ['home', 'away']:
+                        n    = semplifica_nome(f['teams'][tt]['name'])
+                        t_id = f['teams'][tt]['id']
+                        if n not in db_stats:
+                            db_stats[n] = {'id': t_id, 'rank': 10, 'giocate': 0,
+                                           'punti': 0, 'ac': 0.0, 'dc': 0.0,
+                                           'at': 0.0, 'dt': 0.0}
+
+            # ── PRIOR STAGIONE PRECEDENTE ───────────────────────────
+            # A inizio stagione (poche 'giocate') le medie gol casa/trasferta
+            # sopra sono calcolate su un campione minuscolo (1-2 partite) e
+            # sono quindi rumorose. Le si sfuma con le stesse medie della
+            # stagione precedente (se disponibile per quella squadra/lega),
+            # dando sempre meno peso al dato storico man mano che la
+            # stagione corrente accumula partite reali (vedi
+            # blend_prior_stagione). Nessun effetto su leghe ad anno solare
+            # inter-stagione o su squadre neopromosse (prior assente).
+            stats_prev_stagione = scarica_standings_pregressi(f_id, int(stagione_lega) - 1)
+            if stats_prev_stagione:
+                for n, st_sq in db_stats.items():
+                    prev = stats_prev_stagione.get(st_sq['id'])
+                    if prev is None:
                         continue
-                    fix_id         = f['fixture']['id']
-                    match_date_str = f['fixture']['date'][:10]
-                    match_time_utc = datetime.fromisoformat(f['fixture']['date'])
-                    if match_time_utc <= now_utc: continue
-                    match_time_ita = match_time_utc.astimezone(tz_ita)
-                    orario_ita     = match_time_ita.strftime('%d/%m %H:%M')
+                    giocate_sq = st_sq.get('giocate', 0)
+                    for campo in ('ac', 'dc', 'at', 'dt'):
+                        st_sq[campo] = blend_prior_stagione(
+                            st_sq[campo], prev[campo], giocate_sq)
 
-                    c_u = f['teams']['home']['name']
-                    t_u = f['teams']['away']['name']
-                    c_s = semplifica_nome(c_u)
-                    t_s = semplifica_nome(t_u)
+            # ── CACHE QUOTE ────────────────────────────────────────
+            date_giocate = {f['fixture']['date'][:10] for f in fix['response']}
+            odds_cache: dict = {}
+            for d_match in date_giocate:
+                odds_cache[d_match] = scarica_quote_native(f_id, d_match, stagione_lega)
 
-                    quote_reali_match = odds_cache.get(match_date_str, {}).get(fix_id, {})
+            matches_list = []
 
-                    # ── BRANCH CLUB (campionati + playoff) ─────────────
-                    # Playoff rescue: squadre nei playoff non in classifica principale
-                    for sn, tid in [(c_s, f['teams']['home']['id']), (t_s, f['teams']['away']['id'])]:
-                        if sn not in db_stats:
-                            db_stats[sn] = {'id': tid, 'rank': 10, 'giocate': 0, 'punti': 0,
-                                            'ac': 0.0, 'dc': 0.0, 'at': 0.0, 'dt': 0.0}
+            for f in fix['response']:
+                if f['fixture']['status']['short'] in ['PST', 'CANC', 'ABD', 'AWD', 'WO']:
+                    continue
+                fix_id         = f['fixture']['id']
+                match_date_str = f['fixture']['date'][:10]
+                match_time_utc = datetime.fromisoformat(f['fixture']['date'])
+                if match_time_utc <= now_utc: continue
+                match_time_ita = match_time_utc.astimezone(tz_ita)
+                orario_ita     = match_time_ita.strftime('%d/%m %H:%M')
 
-                    m_st_c, is_stanca_c, forma_c, m_f_c, rit_c, punti_5_c, punti_prev_5_c, ok_squadra_c = analizza_squadra_globale(db_stats[c_s]['id'])
-                    m_st_t, is_stanca_t, forma_t, m_f_t, rit_t, punti_5_t, punti_prev_5_t, ok_squadra_t = analizza_squadra_globale(db_stats[t_s]['id'])
-                    cs_c, fts_c, ok_stag_c = analizza_statistiche_stagionali(f_id, db_stats[c_s]['id'], stagione_lega)
-                    cs_t, fts_t, ok_stag_t = analizza_statistiche_stagionali(f_id, db_stats[t_s]['id'], stagione_lega)
-                    # BUGFIX: prima veniva passato il nome-squadra semplificato
-                    # a wttr.in al posto di una citta' reale (es. "Inter" non e'
-                    # una citta'); ora si usa la citta' dello stadio dalla fixture,
-                    # con fallback al vecchio comportamento se assente.
-                    citta_match = (f['fixture'].get('venue') or {}).get('city') or c_s
-                    m_met, d_met = scarica_meteo(citta_match)
-                    (m_h2h_c, m_h2h_t, gol_h2h_c, gol_h2h_t, str_h2h,
-                     b_and_c, b_and_t, andata_msg, det_h2h, ok_h2h) = analizza_h2h_dna_e_andata(
-                        db_stats[c_s]['id'], db_stats[t_s]['id'])
+                c_u = f['teams']['home']['name']
+                t_u = f['teams']['away']['name']
+                c_s = semplifica_nome(c_u)
+                t_s = semplifica_nome(t_u)
 
-                    # Rilevamento spareggio inter-lega e gara di ritorno
-                    # BUGFIX: prima venivano passati due volte f_id (la lega della
-                    # partita), rendendo is_interlega strutturalmente sempre False.
-                    # Ora si risale alla lega "di casa" di ciascuna squadra per
-                    # rilevare i veri spareggi promozione/retrocessione tra
-                    # divisioni diverse.
-                    lega_c_reale = trova_lega_squadra(db_stats[c_s]['id'], stagione_lega, f_id)
-                    lega_t_reale = trova_lega_squadra(db_stats[t_s]['id'], stagione_lega, f_id)
-                    ctx_spar = rileva_contesto_spareggio(
-                        fix_id, db_stats[c_s]['id'], db_stats[t_s]['id'],
-                        lega_c_reale, lega_t_reale, match_date_str)
-                    if ctx_spar['is_ritorno'] or ctx_spar['is_interlega']:
-                        b_and_c *= ctx_spar['boost_c']
-                        b_and_t *= ctx_spar['boost_t']
-                        if ctx_spar['msg']:
-                            andata_msg = ctx_spar['msg']
-                    is_interlega = ctx_spar['is_interlega']
-                    peso_mom_override = ctx_spar['peso_momentum'] if ctx_spar['is_interlega'] else None
-                    (poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c,
-                     par_c, stile_c, sq_cert_c, gf_10_c, gs_10_c,
-                     rig_c, gf_home_c, gs_home_c, gf_away_c, gs_away_c, ok_avz_c) = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
-                    (poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t,
-                     par_t, stile_t, sq_cert_t, gf_10_t, gs_10_t,
-                     rig_t, gf_home_t, gs_home_t, gf_away_t, gs_away_t, ok_avz_t) = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
+                quote_reali_match = odds_cache.get(match_date_str, {}).get(fix_id, {})
 
-                    # ── AFFIDABILITÀ DINAMICA (punto 5) ─────────────────────
-                    # Il badge statico per lega non diceva se, in QUESTA run,
-                    # una o piu' fonti dati erano cadute in fallback silenzioso
-                    # (timeout/errore API). Qui contiamo i fallback reali
-                    # avvenuti per questa specifica partita e degradiamo il
-                    # livello di affidabilita' mostrato di conseguenza.
-                    n_degradati = sum(0 if ok else 1 for ok in [
-                        ok_squadra_c, ok_squadra_t, ok_stag_c, ok_stag_t,
-                        ok_h2h, ok_avz_c, ok_avz_t,
-                    ])
-                    _aff_base = get_affidabilita(name)
-                    if n_degradati >= 4:
-                        aff_match = "BASSA"
-                    elif n_degradati >= 1:
-                        _rank = max(1, AFFIDABILITA_ORDINE[_aff_base] - 1)
-                        aff_match = {3: "ALTA", 2: "MEDIA", 1: "BASSA"}[_rank]
+                # ── BRANCH CLUB (campionati + playoff) ─────────────
+                # Playoff rescue: squadre nei playoff non in classifica principale
+                for sn, tid in [(c_s, f['teams']['home']['id']), (t_s, f['teams']['away']['id'])]:
+                    if sn not in db_stats:
+                        db_stats[sn] = {'id': tid, 'rank': 10, 'giocate': 0, 'punti': 0,
+                                        'ac': 0.0, 'dc': 0.0, 'at': 0.0, 'dt': 0.0}
+
+                m_st_c, is_stanca_c, forma_c, m_f_c, rit_c, punti_5_c, punti_prev_5_c, ok_squadra_c = analizza_squadra_globale(db_stats[c_s]['id'])
+                m_st_t, is_stanca_t, forma_t, m_f_t, rit_t, punti_5_t, punti_prev_5_t, ok_squadra_t = analizza_squadra_globale(db_stats[t_s]['id'])
+                cs_c, fts_c, ok_stag_c = analizza_statistiche_stagionali(f_id, db_stats[c_s]['id'], stagione_lega)
+                cs_t, fts_t, ok_stag_t = analizza_statistiche_stagionali(f_id, db_stats[t_s]['id'], stagione_lega)
+                # BUGFIX: prima veniva passato il nome-squadra semplificato
+                # a wttr.in al posto di una citta' reale (es. "Inter" non e'
+                # una citta'); ora si usa la citta' dello stadio dalla fixture,
+                # con fallback al vecchio comportamento se assente.
+                citta_match = (f['fixture'].get('venue') or {}).get('city') or c_s
+                m_met, d_met = scarica_meteo(citta_match)
+                (m_h2h_c, m_h2h_t, gol_h2h_c, gol_h2h_t, str_h2h,
+                 b_and_c, b_and_t, andata_msg, det_h2h, ok_h2h) = analizza_h2h_dna_e_andata(
+                    db_stats[c_s]['id'], db_stats[t_s]['id'])
+
+                # Rilevamento spareggio inter-lega e gara di ritorno
+                # BUGFIX: prima venivano passati due volte f_id (la lega della
+                # partita), rendendo is_interlega strutturalmente sempre False.
+                # Ora si risale alla lega "di casa" di ciascuna squadra per
+                # rilevare i veri spareggi promozione/retrocessione tra
+                # divisioni diverse.
+                lega_c_reale = trova_lega_squadra(db_stats[c_s]['id'], stagione_lega, f_id)
+                lega_t_reale = trova_lega_squadra(db_stats[t_s]['id'], stagione_lega, f_id)
+                ctx_spar = rileva_contesto_spareggio(
+                    fix_id, db_stats[c_s]['id'], db_stats[t_s]['id'],
+                    lega_c_reale, lega_t_reale, match_date_str)
+                if ctx_spar['is_ritorno'] or ctx_spar['is_interlega']:
+                    b_and_c *= ctx_spar['boost_c']
+                    b_and_t *= ctx_spar['boost_t']
+                    if ctx_spar['msg']:
+                        andata_msg = ctx_spar['msg']
+                is_interlega = ctx_spar['is_interlega']
+                peso_mom_override = ctx_spar['peso_momentum'] if ctx_spar['is_interlega'] else None
+                (poss_c, tiri_c, box_c, conv_c, corn_c, cart_c, falli_c,
+                 par_c, stile_c, sq_cert_c, gf_10_c, gs_10_c,
+                 rig_c, gf_home_c, gs_home_c, gf_away_c, gs_away_c, ok_avz_c) = analizza_statistiche_avanzate_pro(db_stats[c_s]['id'])
+                (poss_t, tiri_t, box_t, conv_t, corn_t, cart_t, falli_t,
+                 par_t, stile_t, sq_cert_t, gf_10_t, gs_10_t,
+                 rig_t, gf_home_t, gs_home_t, gf_away_t, gs_away_t, ok_avz_t) = analizza_statistiche_avanzate_pro(db_stats[t_s]['id'])
+
+                # ── AFFIDABILITÀ DINAMICA (punto 5) ─────────────────────
+                # Il badge statico per lega non diceva se, in QUESTA run,
+                # una o piu' fonti dati erano cadute in fallback silenzioso
+                # (timeout/errore API). Qui contiamo i fallback reali
+                # avvenuti per questa specifica partita e degradiamo il
+                # livello di affidabilita' mostrato di conseguenza.
+                n_degradati = sum(0 if ok else 1 for ok in [
+                    ok_squadra_c, ok_squadra_t, ok_stag_c, ok_stag_t,
+                    ok_h2h, ok_avz_c, ok_avz_t,
+                ])
+                _aff_base = get_affidabilita(name)
+                if n_degradati >= 4:
+                    aff_match = "BASSA"
+                elif n_degradati >= 1:
+                    _rank = max(1, AFFIDABILITA_ORDINE[_aff_base] - 1)
+                    aff_match = {3: "ALTA", 2: "MEDIA", 1: "BASSA"}[_rank]
+                else:
+                    aff_match = _aff_base
+
+                c_id = db_stats[c_s]['id']; t_id = db_stats[t_s]['id']
+                msg_radar = ("⚠️ Radar Infortuni Offline (Lega Minore)" if is_lega_cieca else "")
+
+                if is_lega_cieca:
+                    malus_att_c = boost_opp_c = malus_att_t = boost_opp_t = 0.0
+                    t1_c=t2_c=t3_c=count_c=sq_c=def_out_c = 0; gk_out_c = False
+                    t1_t=t2_t=t3_t=count_t=sq_t=def_out_t = 0; gk_out_t = False
+                    if sq_cert_c > 0: sq_c += sq_cert_c; count_c += sq_cert_c; malus_att_c += 0.05*sq_cert_c
+                    if sq_cert_t > 0: sq_t += sq_cert_t; count_t += sq_cert_t; malus_att_t += 0.05*sq_cert_t
+                else:
+                    inj = requests.get("https://v3.football.api-sports.io/injuries",
+                                       headers=HEADERS, params={'fixture': fix_id}, timeout=8).json()
+                    inf_all = inj.get('response', [])
+                    if not isinstance(inf_all, list): inf_all = []
+                    if len(inf_all) == 0:
+                        ic = requests.get("https://v3.football.api-sports.io/injuries",
+                                          headers=HEADERS, params={'team': c_id, 'date': match_date_str}, timeout=8).json()
+                        it = requests.get("https://v3.football.api-sports.io/injuries",
+                                          headers=HEADERS, params={'team': t_id, 'date': match_date_str}, timeout=8).json()
+                        if isinstance(ic.get('response'), list): inf_all.extend(ic['response'])
+                        if isinstance(it.get('response'), list): inf_all.extend(it['response'])
+                    inf_c = [i for i in inf_all if str(i['team']['id']) == str(c_id)]
+                    inf_t = [i for i in inf_all if str(i['team']['id']) == str(t_id)]
+                    (malus_att_c, boost_opp_c, t1_c, t2_c, t3_c,
+                     count_c, sq_c, gk_out_c, def_out_c) = analizza_infortuni_pesati_v90(inf_c, stagione_lega)
+                    (malus_att_t, boost_opp_t, t1_t, t2_t, t3_t,
+                     count_t, sq_t, gk_out_t, def_out_t) = analizza_infortuni_pesati_v90(inf_t, stagione_lega)
+                    if sq_cert_c > 0 and sq_c == 0: sq_c+=sq_cert_c; count_c+=sq_cert_c; malus_att_c+=0.05*sq_cert_c
+                    if sq_cert_t > 0 and sq_t == 0: sq_t+=sq_cert_t; count_t+=sq_cert_t; malus_att_t+=0.05*sq_cert_t
+
+                # Squad Depth Buffer
+                if not is_coppa:
+                    gap_c = db_stats[c_s].get('punti', 0) - db_stats[t_s].get('punti', 0)
+                    gap_t = -gap_c
+                    if gap_c >= 15:
+                        a = max(0.20, 1.0 - gap_c/45.0); malus_att_c *= a; boost_opp_t *= a
+                    elif gap_t >= 15:
+                        a = max(0.20, 1.0 - gap_t/45.0); malus_att_t *= a; boost_opp_c *= a
+
+                streak_break_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
+                streak_break_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
+
+                # ── MOTIVAZIONE + PRESSIONE (effetto choking) ─────────────
+                m_mot_c = m_mot_t = 1.0
+                pressione_c = pressione_t = 0.0
+                msg_mot = ""; msg_pressione = ""
+                tension_idx = 1.0
+
+                if is_coppa_naz:
+                    m_mot_c = m_mot_t = 1.20; tension_idx += 0.25; msg_mot = "🏆 COPPA NAZIONALE"
+                elif is_coppa_eu and mese_att in [3, 4, 5]:
+                    m_mot_c = m_mot_t = 1.25; tension_idx += 0.3; msg_mot = "🔥 DENTRO O FUORI"
+                elif is_coppa_eu:
+                    m_mot_c = m_mot_t = 1.15; tension_idx += 0.2; msg_mot = "🇪🇺 Coppa Europea"
+                elif is_playoff:
+                    m_mot_c = m_mot_t = 1.30; tension_idx += 0.4; msg_mot = "⚡ PLAYOFF"
+                elif not is_coppa:
+                    punti_c  = db_stats[c_s].get('punti', 0);  punti_t = db_stats[t_s].get('punti', 0)
+                    rank_c   = db_stats[c_s].get('rank', 10);  rank_t  = db_stats[t_s].get('rank', 10)
+                    gioc_c   = db_stats[c_s].get('giocate', 0); gioc_t = db_stats[t_s].get('giocate', 0)
+                    gap_ch_c = punti_champions - punti_c
+                    gap_ch_t = punti_champions - punti_t
+                    part_rim_c = max(1, partite_tot_camp - gioc_c)
+                    part_rim_t = max(1, partite_tot_camp - gioc_t)
+                    max_rag_c  = punti_c + part_rim_c * 3
+                    max_rag_t  = punti_t + part_rim_t * 3
+
+                    # ── OBIETTIVO CASA ──────────────────────────────
+                    if max_rag_c < punti_salvezza:
+                        m_mot_c = 0.75; msg_mot += "💀 C.Retrocessa "
+                    elif punti_c > punti_salvezza + part_rim_c * 2:
+                        m_mot_c = 0.85; msg_mot += "🏖️ C.Salva "
+                    elif punti_c >= punti_champions:
+                        m_mot_c = 1.20; msg_mot += "🏆 C.InChampions "
+                    elif 0 < gap_ch_c <= part_rim_c * 2:
+                        urgenza = 1.0 - (gap_ch_c / (part_rim_c * 3))
+                        m_mot_c = 1.10 + urgenza * 0.20; msg_mot += "🔥 C.CorsaChamp "
+                    elif rank_c >= tot_squadre - 3:
+                        m_mot_c = 1.25; msg_mot += "🆘 C.Disperata "
+                    elif rank_c >= tot_squadre - 6:
+                        m_mot_c = 1.15; msg_mot += "😰 C.ARischio "
                     else:
-                        aff_match = _aff_base
+                        m_mot_c = 1.05
 
-                    c_id = db_stats[c_s]['id']; t_id = db_stats[t_s]['id']
-                    msg_radar = ("⚠️ Radar Infortuni Offline (Lega Minore)" if is_lega_cieca else "")
-
-                    if is_lega_cieca:
-                        malus_att_c = boost_opp_c = malus_att_t = boost_opp_t = 0.0
-                        t1_c=t2_c=t3_c=count_c=sq_c=def_out_c = 0; gk_out_c = False
-                        t1_t=t2_t=t3_t=count_t=sq_t=def_out_t = 0; gk_out_t = False
-                        if sq_cert_c > 0: sq_c += sq_cert_c; count_c += sq_cert_c; malus_att_c += 0.05*sq_cert_c
-                        if sq_cert_t > 0: sq_t += sq_cert_t; count_t += sq_cert_t; malus_att_t += 0.05*sq_cert_t
+                    # ── OBIETTIVO TRASFERTA ─────────────────────────
+                    if max_rag_t < punti_salvezza:
+                        m_mot_t = 0.75; msg_mot += "💀 O.Retrocessa"
+                    elif punti_t > punti_salvezza + part_rim_t * 2:
+                        m_mot_t = 0.85; msg_mot += "🏖️ O.Salva"
+                    elif punti_t >= punti_champions:
+                        m_mot_t = 1.20; msg_mot += "🏆 O.InChampions"
+                    elif 0 < gap_ch_t <= part_rim_t * 2:
+                        urgenza = 1.0 - (gap_ch_t / (part_rim_t * 3))
+                        m_mot_t = 1.10 + urgenza * 0.20; msg_mot += "🔥 O.CorsaChamp"
+                    elif rank_t >= tot_squadre - 3:
+                        m_mot_t = 1.25; msg_mot += "🆘 O.Disperata"
+                    elif rank_t >= tot_squadre - 6:
+                        m_mot_t = 1.15; msg_mot += "😰 O.ARischio"
                     else:
-                        inj = requests.get("https://v3.football.api-sports.io/injuries",
-                                           headers=HEADERS, params={'fixture': fix_id}, timeout=8).json()
-                        inf_all = inj.get('response', [])
-                        if not isinstance(inf_all, list): inf_all = []
-                        if len(inf_all) == 0:
-                            ic = requests.get("https://v3.football.api-sports.io/injuries",
-                                              headers=HEADERS, params={'team': c_id, 'date': match_date_str}, timeout=8).json()
-                            it = requests.get("https://v3.football.api-sports.io/injuries",
-                                              headers=HEADERS, params={'team': t_id, 'date': match_date_str}, timeout=8).json()
-                            if isinstance(ic.get('response'), list): inf_all.extend(ic['response'])
-                            if isinstance(it.get('response'), list): inf_all.extend(it['response'])
-                        inf_c = [i for i in inf_all if str(i['team']['id']) == str(c_id)]
-                        inf_t = [i for i in inf_all if str(i['team']['id']) == str(t_id)]
-                        (malus_att_c, boost_opp_c, t1_c, t2_c, t3_c,
-                         count_c, sq_c, gk_out_c, def_out_c) = analizza_infortuni_pesati_v90(inf_c, stagione_lega)
-                        (malus_att_t, boost_opp_t, t1_t, t2_t, t3_t,
-                         count_t, sq_t, gk_out_t, def_out_t) = analizza_infortuni_pesati_v90(inf_t, stagione_lega)
-                        if sq_cert_c > 0 and sq_c == 0: sq_c+=sq_cert_c; count_c+=sq_cert_c; malus_att_c+=0.05*sq_cert_c
-                        if sq_cert_t > 0 and sq_t == 0: sq_t+=sq_cert_t; count_t+=sq_cert_t; malus_att_t+=0.05*sq_cert_t
+                        m_mot_t = 1.05
 
-                    # Squad Depth Buffer
-                    if not is_coppa:
-                        gap_c = db_stats[c_s].get('punti', 0) - db_stats[t_s].get('punti', 0)
-                        gap_t = -gap_c
-                        if gap_c >= 15:
-                            a = max(0.20, 1.0 - gap_c/45.0); malus_att_c *= a; boost_opp_t *= a
-                        elif gap_t >= 15:
-                            a = max(0.20, 1.0 - gap_t/45.0); malus_att_t *= a; boost_opp_c *= a
+                    # ── SCONTRO DIRETTO ─────────────────────────────
+                    if abs(rank_c - rank_t) <= 2:
+                        tension_idx += 0.25; msg_mot += " ⚔️ScontroDiretto"
 
-                    streak_break_c = (gol_h2h_c == 0) and (count_t > 0 or is_stanca_t)
-                    streak_break_t = (gol_h2h_t == 0) and (count_c > 0 or is_stanca_c)
+                    # ── PRESSIONE CASA (effetto Milan) ──────────────
+                    sconf_c = forma_c.count("L")
+                    trend_c = punti_5_c - punti_prev_5_c
+                    if m_mot_c >= 1.15:  # obiettivo vitale
+                        pressione_c += 0.10
+                    if sconf_c >= 4:     pressione_c += 0.20
+                    elif sconf_c >= 3:   pressione_c += 0.12
+                    elif sconf_c >= 2:   pressione_c += 0.06
+                    if trend_c <= -6:    pressione_c += 0.10
+                    elif trend_c <= -3:  pressione_c += 0.05
+                    pressione_c = min(0.35, pressione_c)
 
-                    # ── MOTIVAZIONE + PRESSIONE (effetto choking) ─────────────
-                    m_mot_c = m_mot_t = 1.0
-                    pressione_c = pressione_t = 0.0
-                    msg_mot = ""; msg_pressione = ""
-                    tension_idx = 1.0
+                    # ── PRESSIONE TRASFERTA ─────────────────────────
+                    sconf_t = forma_t.count("L")
+                    trend_t = punti_5_t - punti_prev_5_t
+                    if m_mot_t >= 1.15:  pressione_t += 0.10
+                    if sconf_t >= 4:     pressione_t += 0.20
+                    elif sconf_t >= 3:   pressione_t += 0.12
+                    elif sconf_t >= 2:   pressione_t += 0.06
+                    if trend_t <= -6:    pressione_t += 0.10
+                    elif trend_t <= -3:  pressione_t += 0.05
+                    pressione_t = min(0.35, pressione_t)
 
-                    if is_coppa_naz:
-                        m_mot_c = m_mot_t = 1.20; tension_idx += 0.25; msg_mot = "🏆 COPPA NAZIONALE"
-                    elif is_coppa_eu and mese_att in [3, 4, 5]:
-                        m_mot_c = m_mot_t = 1.25; tension_idx += 0.3; msg_mot = "🔥 DENTRO O FUORI"
-                    elif is_coppa_eu:
-                        m_mot_c = m_mot_t = 1.15; tension_idx += 0.2; msg_mot = "🇪🇺 Coppa Europea"
-                    elif is_playoff:
-                        m_mot_c = m_mot_t = 1.30; tension_idx += 0.4; msg_mot = "⚡ PLAYOFF"
-                    elif not is_coppa:
-                        punti_c  = db_stats[c_s].get('punti', 0);  punti_t = db_stats[t_s].get('punti', 0)
-                        rank_c   = db_stats[c_s].get('rank', 10);  rank_t  = db_stats[t_s].get('rank', 10)
-                        gioc_c   = db_stats[c_s].get('giocate', 0); gioc_t = db_stats[t_s].get('giocate', 0)
-                        gap_ch_c = punti_champions - punti_c
-                        gap_ch_t = punti_champions - punti_t
-                        part_rim_c = max(1, partite_tot_camp - gioc_c)
-                        part_rim_t = max(1, partite_tot_camp - gioc_t)
-                        max_rag_c  = punti_c + part_rim_c * 3
-                        max_rag_t  = punti_t + part_rim_t * 3
+                    # ── BONUS LIBERTÀ (effetto Cagliari) ───────────
+                    if m_mot_c <= 0.90:  # sgombra/retrocessa
+                        vitt_c = forma_c.count("W")
+                        if vitt_c >= 3: m_mot_c *= 1.12
+                        else:           m_mot_c *= 1.05
+                    if m_mot_t <= 0.90:
+                        vitt_t = forma_t.count("W")
+                        if vitt_t >= 3: m_mot_t *= 1.12
+                        else:           m_mot_t *= 1.05
 
-                        # ── OBIETTIVO CASA ──────────────────────────────
-                        if max_rag_c < punti_salvezza:
-                            m_mot_c = 0.75; msg_mot += "💀 C.Retrocessa "
-                        elif punti_c > punti_salvezza + part_rim_c * 2:
-                            m_mot_c = 0.85; msg_mot += "🏖️ C.Salva "
-                        elif punti_c >= punti_champions:
-                            m_mot_c = 1.20; msg_mot += "🏆 C.InChampions "
-                        elif 0 < gap_ch_c <= part_rim_c * 2:
-                            urgenza = 1.0 - (gap_ch_c / (part_rim_c * 3))
-                            m_mot_c = 1.10 + urgenza * 0.20; msg_mot += "🔥 C.CorsaChamp "
-                        elif rank_c >= tot_squadre - 3:
-                            m_mot_c = 1.25; msg_mot += "🆘 C.Disperata "
-                        elif rank_c >= tot_squadre - 6:
-                            m_mot_c = 1.15; msg_mot += "😰 C.ARischio "
-                        else:
-                            m_mot_c = 1.05
+                    if pressione_c > 0.15:
+                        msg_pressione += f" 😬Pressione Casa:{pressione_c*100:.0f}%"
+                    if pressione_t > 0.15:
+                        msg_pressione += f" 😬Pressione Osp:{pressione_t*100:.0f}%"
 
-                        # ── OBIETTIVO TRASFERTA ─────────────────────────
-                        if max_rag_t < punti_salvezza:
-                            m_mot_t = 0.75; msg_mot += "💀 O.Retrocessa"
-                        elif punti_t > punti_salvezza + part_rim_t * 2:
-                            m_mot_t = 0.85; msg_mot += "🏖️ O.Salva"
-                        elif punti_t >= punti_champions:
-                            m_mot_t = 1.20; msg_mot += "🏆 O.InChampions"
-                        elif 0 < gap_ch_t <= part_rim_t * 2:
-                            urgenza = 1.0 - (gap_ch_t / (part_rim_t * 3))
-                            m_mot_t = 1.10 + urgenza * 0.20; msg_mot += "🔥 O.CorsaChamp"
-                        elif rank_t >= tot_squadre - 3:
-                            m_mot_t = 1.25; msg_mot += "🆘 O.Disperata"
-                        elif rank_t >= tot_squadre - 6:
-                            m_mot_t = 1.15; msg_mot += "😰 O.ARischio"
-                        else:
-                            m_mot_t = 1.05
+                # Applica pressione ai moltiplicatori
+                m_mot_c = m_mot_c * (1 - pressione_c)
+                m_mot_t = m_mot_t * (1 - pressione_t)
 
-                        # ── SCONTRO DIRETTO ─────────────────────────────
-                        if abs(rank_c - rank_t) <= 2:
-                            tension_idx += 0.25; msg_mot += " ⚔️ScontroDiretto"
+                # Hybrid xG
+                xg_st_c = math.sqrt(max(0.01, db_stats[c_s].get('ac', 0.0)) * max(0.01, db_stats[t_s].get('dt', 0.0)))
+                xg_st_t = math.sqrt(max(0.01, db_stats[t_s].get('at', 0.0)) * max(0.01, db_stats[c_s].get('dc', 0.0)))
+                # MIGLIORIA 2: xG momentum usa casa/trasferta separati
+                # Casa gioca in casa → usiamo i suoi gol_fatti_in_casa vs gol_subiti_in_casa dell'avversario
+                xg_mo_c = math.sqrt(max(0.01, gf_home_c) * max(0.01, gs_home_t))
+                xg_mo_t = math.sqrt(max(0.01, gf_away_t) * max(0.01, gs_away_c))
+                # Peso momentum: inter-lega=100%, coppe/playoff=80%, normale=30%
+                if peso_mom_override is not None:
+                    peso_mom = peso_mom_override
+                elif is_coppa or is_playoff or db_stats[c_s].get('giocate', 0) <= 5:
+                    peso_mom = 0.80
+                else:
+                    peso_mom = 0.30
+                peso_std  = 1.0 - peso_mom
+                # Stima instabile = il modello sta usando un blend a forte momentum
+                # (coppa, playoff, inter-lega o inizio stagione con <=5 partite giocate):
+                # su questi casi l'edge dichiarato può gonfiarsi in modo non affidabile
+                # (poche partite = xG di momentum molto rumoroso). Usato più sotto per
+                # non proporre come "value bet" edge sospetti finché i dati non maturano.
+                stima_instabile = peso_mom > 0.30
+                xg_base_c = ((xg_st_c * peso_std) + (xg_mo_c * peso_mom)) * m_f_c * m_st_c
+                xg_base_t = ((xg_st_t * peso_std) + (xg_mo_t * peso_mom)) * m_f_t * m_st_t
 
-                        # ── PRESSIONE CASA (effetto Milan) ──────────────
-                        sconf_c = forma_c.count("L")
-                        trend_c = punti_5_c - punti_prev_5_c
-                        if m_mot_c >= 1.15:  # obiettivo vitale
-                            pressione_c += 0.10
-                        if sconf_c >= 4:     pressione_c += 0.20
-                        elif sconf_c >= 3:   pressione_c += 0.12
-                        elif sconf_c >= 2:   pressione_c += 0.06
-                        if trend_c <= -6:    pressione_c += 0.10
-                        elif trend_c <= -3:  pressione_c += 0.05
-                        pressione_c = min(0.35, pressione_c)
+                mal_lega = 0.85 if name in ["🇬🇷 Super League", "🇫🇷 Ligue 1", "🇮🇹 Serie B"] else 1.0
+                xg_base_c *= mal_lega; xg_base_t *= mal_lega
 
-                        # ── PRESSIONE TRASFERTA ─────────────────────────
-                        sconf_t = forma_t.count("L")
-                        trend_t = punti_5_t - punti_prev_5_t
-                        if m_mot_t >= 1.15:  pressione_t += 0.10
-                        if sconf_t >= 4:     pressione_t += 0.20
-                        elif sconf_t >= 3:   pressione_t += 0.12
-                        elif sconf_t >= 2:   pressione_t += 0.06
-                        if trend_t <= -6:    pressione_t += 0.10
-                        elif trend_t <= -3:  pressione_t += 0.05
-                        pressione_t = min(0.35, pressione_t)
+                if conv_c < 3.0:   xg_base_c *= 1.15
+                elif conv_c > 7.0: xg_base_c *= 0.85
+                if conv_t < 3.0:   xg_base_t *= 1.15
+                elif conv_t > 7.0: xg_base_t *= 0.85
 
-                        # ── BONUS LIBERTÀ (effetto Cagliari) ───────────
-                        if m_mot_c <= 0.90:  # sgombra/retrocessa
-                            vitt_c = forma_c.count("W")
-                            if vitt_c >= 3: m_mot_c *= 1.12
-                            else:           m_mot_c *= 1.05
-                        if m_mot_t <= 0.90:
-                            vitt_t = forma_t.count("W")
-                            if vitt_t >= 3: m_mot_t *= 1.12
-                            else:           m_mot_t *= 1.05
+                xg_base_c *= min(1.20, 1.0 + (box_c/15.0)*0.15)
+                xg_base_t *= min(1.20, 1.0 + (box_t/15.0)*0.15)
+                xg_base_c *= (1 - min(0.25, (par_c/6.0)*0.20))
+                xg_base_t *= (1 - min(0.25, (par_t/6.0)*0.20))
 
-                        if pressione_c > 0.15:
-                            msg_pressione += f" 😬Pressione Casa:{pressione_c*100:.0f}%"
-                        if pressione_t > 0.15:
-                            msg_pressione += f" 😬Pressione Osp:{pressione_t*100:.0f}%"
+                tot_falli = falli_c + falli_t
+                if tot_falli > 28: xg_base_c *= 0.90; xg_base_t *= 0.90
+                if fts_c > 35: xg_base_c *= 0.85
+                if cs_t  > 35: xg_base_c *= 0.85
+                if fts_t > 35: xg_base_t *= 0.85
+                if cs_c  > 35: xg_base_t *= 0.85
 
-                    # Applica pressione ai moltiplicatori
-                    m_mot_c = m_mot_c * (1 - pressione_c)
-                    m_mot_t = m_mot_t * (1 - pressione_t)
+                # BUGFIX: i tag generati sopra sono "C.Salva"/"O.Salva", non "Sgombra"
+                # (refuso di rename mai propagato) — il boost 1.10x non scattava mai.
+                sg_c = "C.Salva" in msg_mot; sg_t = "O.Salva" in msg_mot
+                xg_c = (xg_base_c * (1-malus_att_c) * (1+boost_opp_t) * m_h2h_c * b_and_c * m_mot_c * (1.10 if sg_t else 1.0))
+                xg_t = (xg_base_t * (1-malus_att_t) * (1+boost_opp_c) * m_h2h_t * b_and_t * m_mot_t * (1.10 if sg_c else 1.0))
 
-                    # Hybrid xG
-                    xg_st_c = math.sqrt(max(0.01, db_stats[c_s].get('ac', 0.0)) * max(0.01, db_stats[t_s].get('dt', 0.0)))
-                    xg_st_t = math.sqrt(max(0.01, db_stats[t_s].get('at', 0.0)) * max(0.01, db_stats[c_s].get('dc', 0.0)))
-                    # MIGLIORIA 2: xG momentum usa casa/trasferta separati
-                    # Casa gioca in casa → usiamo i suoi gol_fatti_in_casa vs gol_subiti_in_casa dell'avversario
-                    xg_mo_c = math.sqrt(max(0.01, gf_home_c) * max(0.01, gs_home_t))
-                    xg_mo_t = math.sqrt(max(0.01, gf_away_t) * max(0.01, gs_away_c))
-                    # Peso momentum: inter-lega=100%, coppe/playoff=80%, normale=30%
-                    if peso_mom_override is not None:
-                        peso_mom = peso_mom_override
-                    elif is_coppa or is_playoff or db_stats[c_s].get('giocate', 0) <= 5:
-                        peso_mom = 0.80
-                    else:
-                        peso_mom = 0.30
-                    peso_std  = 1.0 - peso_mom
-                    # Stima instabile = il modello sta usando un blend a forte momentum
-                    # (coppa, playoff, inter-lega o inizio stagione con <=5 partite giocate):
-                    # su questi casi l'edge dichiarato può gonfiarsi in modo non affidabile
-                    # (poche partite = xG di momentum molto rumoroso). Usato più sotto per
-                    # non proporre come "value bet" edge sospetti finché i dati non maturano.
-                    stima_instabile = peso_mom > 0.30
-                    xg_base_c = ((xg_st_c * peso_std) + (xg_mo_c * peso_mom)) * m_f_c * m_st_c
-                    xg_base_t = ((xg_st_t * peso_std) + (xg_mo_t * peso_mom)) * m_f_t * m_st_t
+                msg_streak = ""
+                if streak_break_c: xg_c *= 1.45; msg_streak += "🔥 STREAK CASA "
+                if streak_break_t: xg_t *= 1.45; msg_streak += "🔥 STREAK OSPITE"
+                xg_c *= m_met; xg_t *= m_met
 
-                    mal_lega = 0.85 if name in ["🇬🇷 Super League", "🇫🇷 Ligue 1", "🇮🇹 Serie B"] else 1.0
-                    xg_base_c *= mal_lega; xg_base_t *= mal_lega
+                arb    = f['fixture']['referee'] or "N/D"
+                is_sev = any(s in str(arb) for s in ["Orsato","Maresca","Taylor","Oliver","Lahoz","Hernandez"])
+                if is_sev: xg_c *= 1.05; xg_t *= 1.05
 
-                    if conv_c < 3.0:   xg_base_c *= 1.15
-                    elif conv_c > 7.0: xg_base_c *= 0.85
-                    if conv_t < 3.0:   xg_base_t *= 1.15
-                    elif conv_t > 7.0: xg_base_t *= 0.85
+                # FIX: CAP xG prima di Poisson
+                xg_c = min(XG_MAX, max(XG_MIN, xg_c))
+                xg_t = min(XG_MAX, max(XG_MIN, xg_t))
 
-                    xg_base_c *= min(1.20, 1.0 + (box_c/15.0)*0.15)
-                    xg_base_t *= min(1.20, 1.0 + (box_t/15.0)*0.15)
-                    xg_base_c *= (1 - min(0.25, (par_c/6.0)*0.20))
-                    xg_base_t *= (1 - min(0.25, (par_t/6.0)*0.20))
+                avg_corn = corn_c + corn_t; avg_cart = cart_c + cart_t
+                full_tips = calcola_tutti_i_mercati(xg_c, xg_t, avg_corn, avg_cart, is_sev, tot_falli)
 
-                    tot_falli = falli_c + falli_t
-                    if tot_falli > 28: xg_base_c *= 0.90; xg_base_t *= 0.90
-                    if fts_c > 35: xg_base_c *= 0.85
-                    if cs_t  > 35: xg_base_c *= 0.85
-                    if fts_t > 35: xg_base_t *= 0.85
-                    if cs_c  > 35: xg_base_t *= 0.85
+                # Blend modello+mercato sul mercato 1X2 (e su tutto cio' che ne
+                # deriva: doppie chance, combo con O/U, HT/FT). Nei contesti
+                # "instabili" (coppe/playoff/inter-lega/inizio stagione) il
+                # modello ha pochi dati e puo' discostarsi molto dal mercato
+                # senza una vera ragione (es. un grande favorito valutato ~50%
+                # solo per 1-2 partite giocate) — si da' quindi piu' peso al
+                # mercato reale (devigato) proprio quando i dati del modello
+                # sono meno affidabili. Nessun effetto se le quote reali 1X2
+                # non sono disponibili per questa partita.
+                peso_mercato_1x2 = 0.55 if stima_instabile else 0.15
+                full_tips = applica_blend_mercato_1x2(full_tips, quote_reali_match, peso_mercato_1x2)
 
-                    # BUGFIX: i tag generati sopra sono "C.Salva"/"O.Salva", non "Sgombra"
-                    # (refuso di rename mai propagato) — il boost 1.10x non scattava mai.
-                    sg_c = "C.Salva" in msg_mot; sg_t = "O.Salva" in msg_mot
-                    xg_c = (xg_base_c * (1-malus_att_c) * (1+boost_opp_t) * m_h2h_c * b_and_c * m_mot_c * (1.10 if sg_t else 1.0))
-                    xg_t = (xg_base_t * (1-malus_att_t) * (1+boost_opp_c) * m_h2h_t * b_and_t * m_mot_t * (1.10 if sg_c else 1.0))
+                best_key = max(["1","X","2"], key=lambda k: full_tips[k])
+                if full_tips[best_key] < 45.0:
+                    best_key = "No Segno Fisso"; best_prob = 0.0; best_q = "-"; best_real = False
+                else:
+                    best_prob = full_tips[best_key]
+                    best_q, best_real = get_quota_finale(best_key, best_prob, quote_reali_match)
 
-                    msg_streak = ""
-                    if streak_break_c: xg_c *= 1.45; msg_streak += "🔥 STREAK CASA "
-                    if streak_break_t: xg_t *= 1.45; msg_streak += "🔥 STREAK OSPITE"
-                    xg_c *= m_met; xg_t *= m_met
-
-                    arb    = f['fixture']['referee'] or "N/D"
-                    is_sev = any(s in str(arb) for s in ["Orsato","Maresca","Taylor","Oliver","Lahoz","Hernandez"])
-                    if is_sev: xg_c *= 1.05; xg_t *= 1.05
-
-                    # FIX: CAP xG prima di Poisson
-                    xg_c = min(XG_MAX, max(XG_MIN, xg_c))
-                    xg_t = min(XG_MAX, max(XG_MIN, xg_t))
-
-                    avg_corn = corn_c + corn_t; avg_cart = cart_c + cart_t
-                    full_tips = calcola_tutti_i_mercati(xg_c, xg_t, avg_corn, avg_cart, is_sev, tot_falli)
-
-                    # Blend modello+mercato sul mercato 1X2 (e su tutto cio' che ne
-                    # deriva: doppie chance, combo con O/U, HT/FT). Nei contesti
-                    # "instabili" (coppe/playoff/inter-lega/inizio stagione) il
-                    # modello ha pochi dati e puo' discostarsi molto dal mercato
-                    # senza una vera ragione (es. un grande favorito valutato ~50%
-                    # solo per 1-2 partite giocate) — si da' quindi piu' peso al
-                    # mercato reale (devigato) proprio quando i dati del modello
-                    # sono meno affidabili. Nessun effetto se le quote reali 1X2
-                    # non sono disponibili per questa partita.
-                    peso_mercato_1x2 = 0.55 if stima_instabile else 0.15
-                    full_tips = applica_blend_mercato_1x2(full_tips, quote_reali_match, peso_mercato_1x2)
-
-                    best_key = max(["1","X","2"], key=lambda k: full_tips[k])
-                    if full_tips[best_key] < 45.0:
-                        best_key = "No Segno Fisso"; best_prob = 0.0; best_q = "-"; best_real = False
-                    else:
-                        best_prob = full_tips[best_key]
-                        best_q, best_real = get_quota_finale(best_key, best_prob, quote_reali_match)
-
-                    SOGLIA_EDGE_SOSPETTO = 60.0  # oltre questa soglia, un edge su dati
-                                                 # instabili è quasi certamente rumore, non valore reale
-                    for k, v in full_tips.items():
-                        q_fin, is_real = get_quota_finale(k, v, quote_reali_match)
-                        edge_v = calcola_edge_pct(v, q_fin)
-                        # Nasconde dalle tabelle Value Bet/schedine solo i pick con edge
-                        # sospetto su dati ancora instabili (inizio stagione, coppe, playoff).
-                        # Non è un taglio permanente: appena la squadra accumula partite
-                        # (o non è più in un contesto a momentum forzato) il pick ricompare
-                        # regolarmente. La partita resta comunque visibile in "Esplora Partite".
-                        if stima_instabile and edge_v > SOGLIA_EDGE_SOSPETTO:
-                            continue
-                        st.session_state.all_tips_global.append({
-                            "Match":  f"{c_u} vs {t_u}", "League": name, "Tip": k,
-                            "Prob":   v, "Quota": q_fin, "Real": is_real, "Time": orario_ita,
-                            "Edge":   edge_v,
-                            "Kelly":  kelly_fraction(v, q_fin),
-                            "Aff":    aff_match,
-                            "Instabile": stima_instabile,
-                            "FixtureID": fix_id,
-                        })
-                    matches_list.append({
-                        "orario": orario_ita, "c_u": c_u, "t_u": t_u, "c_s": c_s, "t_s": t_s,
-                        "fixture_id": fix_id,
-                        "rank_c": db_stats[c_s].get('rank', 10), "rank_t": db_stats[t_s].get('rank', 10),
-                        "cs_c": cs_c, "fts_c": fts_c, "cs_t": cs_t, "fts_t": fts_t,
-                        "all_tips": full_tips,
-                        "best_1x2": (best_key, best_prob, best_q, best_real),
-                        "quote_reali": quote_reali_match,
-                        "xg_c": xg_c, "xg_t": xg_t, "arb": arb, "is_sev": is_sev,
-                        "count_c": count_c, "sq_c": sq_c, "t1_c": t1_c, "t2_c": t2_c,
-                        "t3_c": t3_c, "gk_out_c": gk_out_c, "def_out_c": def_out_c,
-                        "count_t": count_t, "sq_t": sq_t, "t1_t": t1_t, "t2_t": t2_t,
-                        "t3_t": t3_t, "gk_out_t": gk_out_t, "def_out_t": def_out_t,
-                        "meteo": d_met, "msg_radar": msg_radar,
-                        "dna_h2h": str_h2h, "dettagli_h2h": det_h2h,
-                        "streak_msg": msg_streak.strip(), "andata_msg": andata_msg,
-                        "msg_mot": msg_mot.strip(),
-                        "stan_c": "⚠️ Fatigue" if is_stanca_c else "✅ Riposo",
-                        "stan_t": "⚠️ Fatigue" if is_stanca_t else "✅ Riposo",
-                        "forma_c": forma_c, "forma_t": forma_t, "rit_c": rit_c, "rit_t": rit_t,
-                        "pressione_c": pressione_c, "pressione_t": pressione_t,
-                        "msg_pressione": msg_pressione,
-                        "poss_c": poss_c, "tiri_c": tiri_c, "conv_c": conv_c, "stile_c": stile_c,
-                        "box_c": box_c, "falli_c": falli_c, "parate_c": par_c, "rig_c": rig_c,
-                        "gf_home_c": gf_home_c, "gs_home_c": gs_home_c,
-                        "poss_t": poss_t, "tiri_t": tiri_t, "conv_t": conv_t, "stile_t": stile_t,
-                        "box_t": box_t, "falli_t": falli_t, "parate_t": par_t, "rig_t": rig_t,
-                        "gf_away_t": gf_away_t, "gs_away_t": gs_away_t,
-                        "corn_tot": avg_corn, "cart_tot": avg_cart, "falli_tot": tot_falli,
-                        "aff_dinamica": aff_match, "n_degradati": n_degradati,
+                SOGLIA_EDGE_SOSPETTO = 60.0  # oltre questa soglia, un edge su dati
+                                             # instabili è quasi certamente rumore, non valore reale
+                for k, v in full_tips.items():
+                    q_fin, is_real = get_quota_finale(k, v, quote_reali_match)
+                    edge_v = calcola_edge_pct(v, q_fin)
+                    # Nasconde dalle tabelle Value Bet/schedine solo i pick con edge
+                    # sospetto su dati ancora instabili (inizio stagione, coppe, playoff).
+                    # Non è un taglio permanente: appena la squadra accumula partite
+                    # (o non è più in un contesto a momentum forzato) il pick ricompare
+                    # regolarmente. La partita resta comunque visibile in "Esplora Partite".
+                    if stima_instabile and edge_v > SOGLIA_EDGE_SOSPETTO:
+                        continue
+                    st.session_state.all_tips_global.append({
+                        "Match":  f"{c_u} vs {t_u}", "League": name, "Tip": k,
+                        "Prob":   v, "Quota": q_fin, "Real": is_real, "Time": orario_ita,
+                        "Edge":   edge_v,
+                        "Kelly":  kelly_fraction(v, q_fin),
+                        "Aff":    aff_match,
+                        "Instabile": stima_instabile,
+                        "FixtureID": fix_id,
                     })
+                matches_list.append({
+                    "orario": orario_ita, "c_u": c_u, "t_u": t_u, "c_s": c_s, "t_s": t_s,
+                    "fixture_id": fix_id,
+                    "rank_c": db_stats[c_s].get('rank', 10), "rank_t": db_stats[t_s].get('rank', 10),
+                    "cs_c": cs_c, "fts_c": fts_c, "cs_t": cs_t, "fts_t": fts_t,
+                    "all_tips": full_tips,
+                    "best_1x2": (best_key, best_prob, best_q, best_real),
+                    "quote_reali": quote_reali_match,
+                    "xg_c": xg_c, "xg_t": xg_t, "arb": arb, "is_sev": is_sev,
+                    "count_c": count_c, "sq_c": sq_c, "t1_c": t1_c, "t2_c": t2_c,
+                    "t3_c": t3_c, "gk_out_c": gk_out_c, "def_out_c": def_out_c,
+                    "count_t": count_t, "sq_t": sq_t, "t1_t": t1_t, "t2_t": t2_t,
+                    "t3_t": t3_t, "gk_out_t": gk_out_t, "def_out_t": def_out_t,
+                    "meteo": d_met, "msg_radar": msg_radar,
+                    "dna_h2h": str_h2h, "dettagli_h2h": det_h2h,
+                    "streak_msg": msg_streak.strip(), "andata_msg": andata_msg,
+                    "msg_mot": msg_mot.strip(),
+                    "stan_c": "⚠️ Fatigue" if is_stanca_c else "✅ Riposo",
+                    "stan_t": "⚠️ Fatigue" if is_stanca_t else "✅ Riposo",
+                    "forma_c": forma_c, "forma_t": forma_t, "rit_c": rit_c, "rit_t": rit_t,
+                    "pressione_c": pressione_c, "pressione_t": pressione_t,
+                    "msg_pressione": msg_pressione,
+                    "poss_c": poss_c, "tiri_c": tiri_c, "conv_c": conv_c, "stile_c": stile_c,
+                    "box_c": box_c, "falli_c": falli_c, "parate_c": par_c, "rig_c": rig_c,
+                    "gf_home_c": gf_home_c, "gs_home_c": gs_home_c,
+                    "poss_t": poss_t, "tiri_t": tiri_t, "conv_t": conv_t, "stile_t": stile_t,
+                    "box_t": box_t, "falli_t": falli_t, "parate_t": par_t, "rig_t": rig_t,
+                    "gf_away_t": gf_away_t, "gs_away_t": gs_away_t,
+                    "corn_tot": avg_corn, "cart_tot": avg_cart, "falli_tot": tot_falli,
+                    "aff_dinamica": aff_match, "n_degradati": n_degradati,
+                })
 
-                if matches_list:
-                    st.session_state.data_master[name] = matches_list
+            if matches_list:
+                st.session_state.data_master[name] = matches_list
         except Exception as e:
             st.warning(f"⚠️ Errore durante l'analisi di **{name}**: {e} — salto questo campionato e continuo con gli altri.")
             continue
 
+    barra_progresso.empty()
+
 # ==========================================
 # 🖥️ DISPLAY: 3 TAB
 # ==========================================
-# ── MAIN HEADER ──────────────────────────────────────────────────────────────
 st.markdown("""
-<div style="padding: 28px 0 20px;">
-  <div style="font-family:'Syne',sans-serif;font-size:2.4rem;font-weight:800;
-    background:linear-gradient(135deg,#4f8ef7,#7c5cfc);
-    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-    line-height:1;margin-bottom:6px;">
-    🎯 MATRIX BET V90
-  </div>
-  <div style="font-size:0.85rem;color:#8b95b0;letter-spacing:0.05em;">
-    Predictive Football Analytics — Powered by API-Sports & Poisson Model
-  </div>
+<div style="padding:6px 0 14px;font-family:'Syne',sans-serif;font-size:1.3rem;
+  font-weight:800;color:var(--text);">
+  📊 Storico Schedine
 </div>
 """, unsafe_allow_html=True)
-
-st.markdown("---")
-st.header("📊 STORICO SCHEDINE")
-st.info("💡 Ogni schedina generata (Safety/Performance/Azzardo) viene salvata "
-        "automaticamente qui sotto quando Firebase è collegato. Usa il pulsante "
-        "qui sotto per controllare i risultati reali delle partite ed aggiornare "
-        "automaticamente vinta/persa — oppure segna manualmente con i pulsanti "
-        "sulle singole schedine (utile se il mercato non è valutabile in automatico, "
-        "es. Angoli/Cartellini, o per le schedine generate prima di questa funzione).")
 
 if st.button("🔄 Controlla risultati partite finite"):
     with st.spinner("Controllo i risultati reali delle partite..."):
@@ -1544,10 +1534,7 @@ if st.session_state.data_master:
     # ─── TAB 1 ──────────────────────────────────────────────────────────────────
     with t1:
         st.header("🛒 BET BUILDER & CLASSIFICHE OMNI-MARKET")
-        st.info("💡 **Edge%** = valore della scommessa — mostrate solo scommesse con Edge positivo. "
-                "**Kelly%** = puntata suggerita sul budget totale. "
-                "⚠️ Su quote basse (< 1.50) il Kelly può essere 0% per via del margine sottile: "
-                "in quel caso usa il 1-2% del budget come puntata minima.")
+        st.caption("💡 Edge% = valore atteso · Kelly% = puntata suggerita (su quote basse può dare 0%).")
 
         def mostra_tabella(titolo, tip_filter, min_q=1.01, max_q=99.0, max_rows=10, sort_by="Edge", solo_kelly_positivo=True):
             st.subheader(titolo)
@@ -1888,9 +1875,7 @@ if st.session_state.data_master:
     # ─── TAB 3 ──────────────────────────────────────────────────────────────────
     with t3:
         st.header("🏆 Generatore Automatico Ottimizzato V90")
-        st.info("Budget allocato con **Kelly Criterion** (8% frazionato, ridotto da 25% per "
-                "prudenza — il backtest storico ha mostrato un edge dichiarato spesso poco "
-                "affidabile) — ogni fascia riceve un budget proporzionale al proprio edge medio reale.")
+        st.caption("💡 Budget per fascia allocato con Kelly Criterion (8% frazionato).")
 
         if len(st.session_state.all_tips_global) >= 4:
             testo_export = f"=== MATRIX V90: SCHEDINE ===\nPeriodo: {start_str}/{end_str}\n\n"
