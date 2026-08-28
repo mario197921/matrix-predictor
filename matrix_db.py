@@ -20,7 +20,7 @@ from matrix_modello import costruisci_record_schedina, valuta_esito_tip
 from matrix_api import scarica_risultato_partita
 
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def get_firestore_client():
     """Inizializza (una sola volta per sessione, grazie alla cache di
     Streamlit) la connessione a Firestore usando le credenziali del service

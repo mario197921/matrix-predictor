@@ -38,7 +38,7 @@ def _load_api_key() -> str:
 API_KEY_FOOTBALL = _load_api_key()
 HEADERS          = {'x-apisports-key': API_KEY_FOOTBALL}
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=86400, show_spinner=False)
 def trova_vero_id_lega(nazione: str, nome: str, fallback_id: int) -> int:
     """
     Interroga /leagues per trovare l'ID corretto di una lega per nome+nazione.
@@ -57,7 +57,7 @@ def trova_vero_id_lega(nazione: str, nome: str, fallback_id: int) -> int:
         pass
     return fallback_id
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=86400, show_spinner=False)
 def trova_id_multipli(nazione: str, fallback_map: dict) -> dict:
     """
     Per campionati nordici: recupera tutti i campionati di una nazione
@@ -88,7 +88,7 @@ def _risolvi_id_per_nome(nazione: str, chiave_nome: str, fallback_id: int) -> in
             return lid
     return fallback_id
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=86400, show_spinner=False)
 def trova_id_coppa(nazione: str, nome_coppa: str, fallback_id: int) -> int:
     """Trova l'ID di una coppa nazionale cercando per nome e nazione."""
     try:
@@ -104,7 +104,7 @@ def trova_id_coppa(nazione: str, nome_coppa: str, fallback_id: int) -> int:
         pass
     return fallback_id
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def get_active_leagues(start_date, end_date):
     active_ids = set()
     days = min((end_date - start_date).days + 1, 7)
@@ -121,7 +121,7 @@ def get_active_leagues(start_date, end_date):
     except Exception:
         return MASTER_LEAGUES
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=86400, show_spinner=False)
 def get_player_advanced_stats(player_id: int, season: str):
     """
     MIGLIORIA star player: usa rating + % da titolare + storico multi-stagione.
@@ -218,7 +218,7 @@ def analizza_infortuni_pesati_v90(inf_list: list, season_lega: str):
             t1_star, t2_rot, t3_ris, len(visti), squalificati,
             portiere_titolare_out, difensori_out)
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def scarica_quote_native(league_id: int, date_str: str, season_lega):
     try:
         resp = requests.get(
@@ -256,7 +256,7 @@ def scarica_quote_native(league_id: int, date_str: str, season_lega):
     except Exception:
         return {}
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=86400, show_spinner=False)
 def analizza_statistiche_stagionali(league_id: int, team_id: int, season_lega):
     try:
         resp = requests.get(
@@ -282,7 +282,7 @@ def analizza_statistiche_stagionali(league_id: int, team_id: int, season_lega):
         # a differenza dei return sopra dove i dati sono semplicemente assenti.
         return 0.0, 0.0, False
 
-@st.cache_data(ttl=604800)   # 7 giorni: una stagione passata non cambia mai
+@st.cache_data(ttl=604800, show_spinner=False)   # 7 giorni: una stagione passata non cambia mai
 def scarica_standings_pregressi(league_id: int, season: int):
     """Statistiche gol casa/trasferta della classifica finale di una stagione
     passata, usate come "prior" quando la stagione corrente ha ancora poche
@@ -310,7 +310,7 @@ def scarica_standings_pregressi(league_id: int, season: int):
     except Exception:
         return {}
 
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=1800, show_spinner=False)
 def analizza_statistiche_avanzate_pro(team_id: int):
     """
     Cached 30min.
@@ -417,7 +417,7 @@ def analizza_statistiche_avanzate_pro(team_id: int):
         return (50.0, 4.0, 5.0, 5.0, 4.5, 2.0, 10.0, 2.5,
                 "Bilanciato", 0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, False)
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def analizza_squadra_globale(team_id: int):
     """
     MIGLIORIA ritardi: conta partite consecutive senza evento
@@ -497,7 +497,7 @@ def analizza_squadra_globale(team_id: int):
         # ok=False: fallback su errore/timeout API.
         return 1.0, False, "N/D", 1.0, [], 0, 0, False
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def analizza_h2h_dna_e_andata(id_casa: int, id_trasf: int):
     try:
         resp = requests.get(
@@ -547,7 +547,7 @@ def analizza_h2h_dna_e_andata(id_casa: int, id_trasf: int):
         # ok=False: fallback su errore/timeout API.
         return 1.0, 1.0, 0, 0, "Dati N/D", 1.0, 1.0, "", "Nessun dato.", False
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=86400, show_spinner=False)
 def trova_lega_squadra(team_id: int, season, fallback_id: int) -> int:
     """
     Trova l'ID della lega principale (type=League) in cui gioca una squadra
@@ -570,7 +570,7 @@ def trova_lega_squadra(team_id: int, season, fallback_id: int) -> int:
         pass
     return fallback_id
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def rileva_contesto_spareggio(fix_id: int, c_id: int, t_id: int,
                                league_id_c: int, league_id_t: int,
                                match_date_str: str) -> dict:
@@ -635,7 +635,7 @@ def rileva_contesto_spareggio(fix_id: int, c_id: int, t_id: int,
 
     return result
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def scarica_meteo(citta: str):
     try:
         resp = requests.get(f"https://wttr.in/{citta}?format=j1", timeout=3).json()
