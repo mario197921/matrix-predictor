@@ -1352,6 +1352,7 @@ if btn_genera:
                         })
                     matches_list.append({
                         "orario": orario_ita, "c_u": c_u, "t_u": t_u, "c_s": c_s, "t_s": t_s,
+                        "fixture_id": fix_id,
                         "rank_c": db_stats[c_s].get('rank', 10), "rank_t": db_stats[t_s].get('rank', 10),
                         "cs_c": cs_c, "fts_c": fts_c, "cs_t": cs_t, "fts_t": fts_t,
                         "all_tips": full_tips,
@@ -1557,7 +1558,8 @@ if st.session_state.data_master:
                                 lambda t: True,
                                 min_q=2.50, max_q=5.00, sort_by="Edge", solo_kelly_positivo=False)
 
-        tutte = sel_1 + sel_2 + sel_3 + sel_4 + sel_mg + sel_co + sel_6
+        tutte = (sel_1 + sel_2 + sel_3 + sel_4 + sel_mg + sel_co + sel_6
+                 + list(st.session_state.get("carrello_extra", {}).values()))
         viste: set = set(); carrello = []
         for item in tutte:
             k = f"{item['Match']}_{item['Tip']}"
@@ -1686,6 +1688,7 @@ if st.session_state.data_master:
                             top3 = sorted({k:v for k,v in m['all_tips'].items() if k not in excl}.items(),
                                           key=lambda x: x[1], reverse=True)[:3]
                             rows = ""
+                            top3_dettagli = []
                             for idx, (tk, tv) in enumerate(top3):
                                 qf, qreal = get_quota_finale(tk, tv, m['quote_reali'])
                                 ef    = calcola_edge_pct(tv, qf)
@@ -1697,11 +1700,64 @@ if st.session_state.data_master:
                                          f"<span class='top3-prob' style='margin-left:6px;'>{tv:.0f}%</span></span>"
                                          f"<span><span class='{ec_c}'>{ef:+.0f}%</span> "
                                          f"<span class='{qc}' style='margin-left:4px;'>Q{qf}</span></span></div>")
+                                top3_dettagli.append({"tip": tk, "prob": tv, "quota": qf,
+                                                       "real": qreal, "edge": ef, "medal": medal})
                             st.markdown(
                                 f"<div class='top3-card'>"
                                 f"<div class='section-header' style='margin-bottom:12px;'>"
                                 f"<span style='font-family:Syne,sans-serif;font-weight:700;font-size:0.9rem;'>🔝 TOP 3 OMNI-MARKET</span></div>"
                                 f"{rows}</div>", unsafe_allow_html=True)
+
+                        # ── Aggiungi al carrello direttamente da qui ────────────
+                        # Le selezioni finiscono nello stesso "carrello_extra"
+                        # condiviso col Tab 1 (Top 10 & Builder) -- compaiono
+                        # sempre nella sezione "IL TUO CARRELLO" li', da dove si
+                        # possono salvare come giocata personale.
+                        st.session_state.setdefault("carrello_extra", {})
+                        match_str = f"{m['c_u']} vs {m['t_u']}"
+                        candidati_carrello = []
+                        if m['best_1x2'][0] != "No Segno Fisso":
+                            candidati_carrello.append({
+                                "label": f"👑 {m['best_1x2'][0]} (Q {m['best_1x2'][2]})",
+                                "Match": match_str, "Tip": m['best_1x2'][0],
+                                "Prob": m['best_1x2'][1], "Quota": m['best_1x2'][2],
+                                "Real": m['best_1x2'][3],
+                                "Edge": calcola_edge_pct(m['best_1x2'][1], float(m['best_1x2'][2])),
+                                "Kelly": kelly_fraction(m['best_1x2'][1], float(m['best_1x2'][2])),
+                            })
+                        for d in top3_dettagli:
+                            candidati_carrello.append({
+                                "label": f"{d['medal']} {d['tip']} (Q {d['quota']})",
+                                "Match": match_str, "Tip": d["tip"],
+                                "Prob": d["prob"], "Quota": d["quota"], "Real": d["real"],
+                                "Edge": d["edge"], "Kelly": kelly_fraction(d["prob"], float(d["quota"])),
+                            })
+
+                        if candidati_carrello:
+                            st.markdown("**➕ Aggiungi alle mie schedine:**")
+                            cols_add = st.columns(len(candidati_carrello))
+                            carrello_extra_cambiato = False
+                            for col_add, cand in zip(cols_add, candidati_carrello):
+                                k_carrello = f"{match_str}_{cand['Tip']}"
+                                gia_presente = k_carrello in st.session_state.carrello_extra
+                                checked = col_add.checkbox(
+                                    cand["label"], value=gia_presente,
+                                    key=f"chk_t2_{m['fixture_id']}_{cand['Tip']}")
+                                if checked and not gia_presente:
+                                    st.session_state.carrello_extra[k_carrello] = {
+                                        **cand, "League": camp, "Time": m['orario'],
+                                        "FixtureID": m['fixture_id'],
+                                    }
+                                    carrello_extra_cambiato = True
+                                elif not checked and gia_presente:
+                                    st.session_state.carrello_extra.pop(k_carrello, None)
+                                    carrello_extra_cambiato = True
+                            if carrello_extra_cambiato:
+                                # Il Tab 1 (dove vive il Carrello) è già stato eseguito
+                                # prima di questo punto nello stesso giro dello script:
+                                # serve un rerun immediato perché la nuova selezione
+                                # compaia subito nel Carrello invece che al giro dopo.
+                                st.rerun()
 
                         st.markdown("---")
                         st.markdown("### 📊 CONFRONTO FORZE IN CAMPO")
