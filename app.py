@@ -1657,6 +1657,7 @@ if st.session_state.data_master:
                 if salva_schedina(nome_personale, _oggi.strftime("%Y-%m-%d"),
                                    carrello, q_tot_b, prob_tot_b, stake_personale):
                     st.success("✅ Salvata! La trovi nello Storico Schedine in cima alla pagina.")
+                    st.rerun()
                 else:
                     st.error("❌ Errore nel salvataggio — controlla il terminale per il dettaglio.")
         else:
