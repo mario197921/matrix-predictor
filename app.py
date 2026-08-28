@@ -733,7 +733,10 @@ from matrix_modello import (
     calcola_edge_pct, kelly_fraction, semplifica_nome,
     costruisci_schedina_dinamica, applica_blend_mercato_1x2, blend_prior_stagione,
 )
-from matrix_db import salva_schedina, leggi_storico_schedine, aggiorna_esito_schedina
+from matrix_db import (
+    salva_schedina, leggi_storico_schedine, aggiorna_esito_schedina,
+    controlla_e_aggiorna_risultati,
+)
 
 # ==========================================
 # 🕵️ AUTO-DISCOVERY ID LEGA (Risolve Norvegia e altri)
@@ -1345,6 +1348,7 @@ if btn_genera:
                             "Kelly":  kelly_fraction(v, q_fin),
                             "Aff":    aff_match,
                             "Instabile": stima_instabile,
+                            "FixtureID": fix_id,
                         })
                     matches_list.append({
                         "orario": orario_ita, "c_u": c_u, "t_u": t_u, "c_s": c_s, "t_s": t_s,
@@ -1861,10 +1865,22 @@ if st.session_state.data_master:
     with t4:
         st.header("📊 STORICO SCHEDINE")
         st.info("💡 Ogni schedina generata (Safety/Performance/Azzardo) viene salvata "
-                "automaticamente qui sotto quando Firebase è collegato. Il controllo "
-                "automatico dei risultati non è ancora attivo: per ora segna manualmente "
-                "vinta/persa con i pulsanti — servirà a capire se le probabilità dichiarate "
-                "corrispondono a quello che succede davvero.")
+                "automaticamente qui sotto quando Firebase è collegato. Usa il pulsante "
+                "qui sotto per controllare i risultati reali delle partite ed aggiornare "
+                "automaticamente vinta/persa — oppure segna manualmente con i pulsanti "
+                "sulle singole schedine (utile se il mercato non è valutabile in automatico, "
+                "es. Angoli/Cartellini, o per le schedine generate prima di questa funzione).")
+
+        if st.button("🔄 Controlla risultati partite finite"):
+            with st.spinner("Controllo i risultati reali delle partite..."):
+                esito_controllo = controlla_e_aggiorna_risultati()
+            st.success(
+                f"✅ {esito_controllo['vinte']} vinte, ❌ {esito_controllo['perse']} perse "
+                f"aggiornate automaticamente. ⏳ {esito_controllo['ancora_in_attesa']} ancora "
+                f"in attesa (partite non finite). 🔍 {esito_controllo['non_valutabili']} da "
+                f"verificare a mano (mercato non auto-valutabile o schedina senza fixture ID)."
+            )
+            st.rerun()
 
         storico = leggi_storico_schedine(giorni=60)
 

@@ -332,8 +332,84 @@ def costruisci_record_schedina(nome: str, data_str: str, selezioni: list,
                 "quota": round(float(s["Quota"]), 2),
                 "edge": round(float(s.get("Edge", 0)), 2),
                 "league": s.get("League", ""),
+                "fixture_id": s.get("FixtureID"),
             }
             for s in selezioni
         ],
         "esito": "in_attesa",   # in_attesa | vinta | persa -- aggiornato dopo le partite
     }
+
+
+# ── Valutazione esiti reali (per il controllo automatico dei risultati) ────
+
+def _segno_1x2(gol_c: int, gol_t: int) -> str:
+    if gol_c > gol_t: return "1"
+    if gol_c == gol_t: return "X"
+    return "2"
+
+
+def _mappa_parte_combo(parte: str) -> str:
+    """Converte il pezzo di un mercato combo (es. 'Over 1.5') nel formato
+    Tip standard (es. 'O1.5') usato altrove nel modello."""
+    if parte.startswith("Over "):
+        return "O" + parte[len("Over "):]
+    if parte.startswith("Under "):
+        return "U" + parte[len("Under "):]
+    return parte   # "1X", "X2", "1", "2", "Goal", ... gia' nel formato giusto
+
+
+def valuta_esito_tip(tip: str, gol_c_ft: int, gol_t_ft: int,
+                      gol_c_ht: int = None, gol_t_ht: int = None):
+    """Valuta se una selezione ('Tip') ha vinto dato il risultato reale
+    della partita. Ritorna True (vinta), False (persa), oppure None se il
+    mercato non e' automaticamente valutabile con i dati disponibili (es.
+    Angoli/Cartellini, che servono statistiche extra non presenti nel
+    risultato base; oppure HT/FT senza il punteggio del primo tempo).
+
+    Funzione pura: nessuna chiamata di rete, solo logica sui punteggi.
+    """
+    tot_ft = gol_c_ft + gol_t_ft
+
+    if tip == "1": return gol_c_ft > gol_t_ft
+    if tip == "X": return gol_c_ft == gol_t_ft
+    if tip == "2": return gol_c_ft < gol_t_ft
+    if tip == "1X": return gol_c_ft >= gol_t_ft
+    if tip == "X2": return gol_c_ft <= gol_t_ft
+    if tip == "12": return gol_c_ft != gol_t_ft
+
+    if tip == "Goal":   return gol_c_ft > 0 and gol_t_ft > 0
+    if tip == "NoGoal": return not (gol_c_ft > 0 and gol_t_ft > 0)
+
+    if tip == "Pari":    return tot_ft % 2 == 0
+    if tip == "Dispari": return tot_ft % 2 != 0
+
+    if tip == "Casa O0.5":   return gol_c_ft > 0
+    if tip == "Ospite O0.5": return gol_t_ft > 0
+
+    if len(tip) > 1 and tip[0] in ("O", "U") and tip[1:].replace(".", "", 1).isdigit():
+        linea = float(tip[1:])
+        return tot_ft > linea if tip[0] == "O" else tot_ft < linea
+
+    if tip.startswith("MG "):
+        lo_s, hi_s = tip[len("MG "):].split("-")
+        return int(lo_s) <= tot_ft <= int(hi_s)
+
+    if tip.startswith("Risultato "):
+        gc_s, gt_s = tip[len("Risultato "):].split("-")
+        return gol_c_ft == int(gc_s) and gol_t_ft == int(gt_s)
+
+    if tip.startswith("HT/FT "):
+        if gol_c_ht is None or gol_t_ht is None:
+            return None   # punteggio primo tempo non disponibile
+        ht_s, ft_s = tip[len("HT/FT "):].split("/")
+        return (_segno_1x2(gol_c_ht, gol_t_ht) == ht_s
+                and _segno_1x2(gol_c_ft, gol_t_ft) == ft_s)
+
+    if " + " in tip:
+        parti = [_mappa_parte_combo(p) for p in tip.split(" + ")]
+        esiti = [valuta_esito_tip(p, gol_c_ft, gol_t_ft, gol_c_ht, gol_t_ht) for p in parti]
+        if any(e is None for e in esiti):
+            return None
+        return all(esiti)
+
+    return None   # mercato non riconosciuto/non valutabile automaticamente

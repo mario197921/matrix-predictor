@@ -644,3 +644,38 @@ def scarica_meteo(citta: str):
         return (0.90, f"🌧️ {cond}") if pioggia else (1.0, f"☀️ {cond}")
     except Exception:
         return 1.0, "🌥️ Dato N/D"
+
+
+def scarica_risultato_partita(fixture_id: int):
+    """Recupera il risultato reale (FT e, se disponibile, HT) di una singola
+    partita via API-Sports, dato il suo fixture id salvato al momento della
+    generazione della schedina. Nessuna cache (lo stato di una partita
+    cambia da 'non iniziata' a 'finita' nel tempo, non va tenuto in cache
+    a lungo). Ritorna None se la partita non e' trovata o in caso di errore
+    di rete/parsing.
+
+    Il campo 'finita' e' True solo per stati terminali regolari (FT, AET,
+    PEN) -- una partita rinviata, sospesa o ancora in corso torna
+    'finita': False, cosi' il chiamante sa di dover riprovare piu' avanti
+    invece di valutare un risultato parziale come definitivo."""
+    STATI_FINALI = {"FT", "AET", "PEN"}
+    try:
+        resp = requests.get(
+            "https://v3.football.api-sports.io/fixtures",
+            headers=HEADERS, params={'id': fixture_id}, timeout=10
+        ).json()
+        if not resp.get('response'):
+            return None
+        f = resp['response'][0]
+        stato = f['fixture']['status']['short']
+        ft = f['score']['fulltime']
+        ht = f['score']['halftime']
+        if ft.get('home') is None or ft.get('away') is None:
+            return {'finita': False, 'gc_ft': None, 'gt_ft': None, 'gc_ht': None, 'gt_ht': None}
+        return {
+            'finita': stato in STATI_FINALI,
+            'gc_ft': ft['home'], 'gt_ft': ft['away'],
+            'gc_ht': ht.get('home'), 'gt_ht': ht.get('away'),
+        }
+    except Exception:
+        return None

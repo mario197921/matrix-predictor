@@ -16,7 +16,8 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-from matrix_modello import costruisci_record_schedina
+from matrix_modello import costruisci_record_schedina, valuta_esito_tip
+from matrix_api import scarica_risultato_partita
 
 
 @st.cache_resource
@@ -108,3 +109,78 @@ def aggiorna_esito_schedina(doc_id: str, esito: str) -> bool:
         print(f"[matrix_db] Errore aggiornamento esito per '{doc_id}': "
               f"{type(e).__name__}: {e}", file=sys.stderr)
         return False
+
+
+def controlla_e_aggiorna_risultati() -> dict:
+    """Controlla tutte le schedine ancora 'in_attesa' su Firestore: per
+    ognuna, recupera il risultato reale di ogni partita coinvolta (via
+    fixture_id salvato al momento della generazione) e valuta se ogni
+    selezione ha vinto o perso. Aggiorna l'esito solo quando TUTTE le
+    partite della schedina sono finite e TUTTE le selezioni sono
+    automaticamente valutabili -- altrimenti la lascia 'in_attesa' (potra'
+    sempre essere marcata a mano dallo Storico).
+
+    Ritorna un riepilogo: {'vinte': int, 'perse': int, 'ancora_in_attesa':
+    int, 'non_valutabili': int} -- utile per mostrare un feedback nell'app.
+    Non solleva mai eccezioni verso il chiamante (errori su stderr)."""
+    riepilogo = {"vinte": 0, "perse": 0, "ancora_in_attesa": 0, "non_valutabili": 0}
+    db = get_firestore_client()
+    if db is None:
+        return riepilogo
+    try:
+        docs = list(db.collection("schedine").where("esito", "==", "in_attesa").stream())
+    except Exception as e:
+        print(f"[matrix_db] Errore lettura schedine in attesa: {type(e).__name__}: {e}",
+              file=sys.stderr)
+        return riepilogo
+
+    cache_risultati = {}   # fixture_id -> risultato, per non richiamare l'API piu' volte
+                            # per la stessa partita se compare in piu' schedine/gambe
+
+    for doc in docs:
+        record = doc.to_dict()
+        selezioni = record.get("selezioni", [])
+        if not selezioni:
+            riepilogo["non_valutabili"] += 1
+            continue
+
+        esiti_gambe = []
+        tutte_finite = True
+        tutte_valutabili = True
+
+        for sel in selezioni:
+            fixture_id = sel.get("fixture_id")
+            if fixture_id is None:
+                tutte_valutabili = False
+                break
+
+            if fixture_id not in cache_risultati:
+                cache_risultati[fixture_id] = scarica_risultato_partita(fixture_id)
+            risultato = cache_risultati[fixture_id]
+
+            if risultato is None or not risultato.get("finita"):
+                tutte_finite = False
+                break
+
+            esito_gamba = valuta_esito_tip(
+                sel["tip"], risultato["gc_ft"], risultato["gt_ft"],
+                risultato.get("gc_ht"), risultato.get("gt_ht"))
+            if esito_gamba is None:
+                tutte_valutabili = False
+                break
+            esiti_gambe.append(esito_gamba)
+
+        if not tutte_valutabili:
+            riepilogo["non_valutabili"] += 1
+            continue
+        if not tutte_finite:
+            riepilogo["ancora_in_attesa"] += 1
+            continue
+
+        esito_finale = "vinta" if all(esiti_gambe) else "persa"
+        if aggiorna_esito_schedina(doc.id, esito_finale):
+            riepilogo[esito_finale == "vinta" and "vinte" or "perse"] += 1
+        else:
+            riepilogo["ancora_in_attesa"] += 1
+
+    return riepilogo

@@ -15,7 +15,7 @@ from matrix_modello import (
     calcola_edge_pct, kelly_fraction, semplifica_nome, get_family,
     costruisci_schedina_dinamica, devig_1x2, blend_prob_mercato,
     applica_blend_mercato_1x2, blend_prior_stagione,
-    costruisci_record_schedina,
+    costruisci_record_schedina, valuta_esito_tip,
 )
 
 
@@ -387,6 +387,91 @@ def test_costruisci_record_schedina_lista_vuota():
         "SAFETY", "2026-08-28", [], q_tot=1.0, prob_tot=1.0, budget=6.0,
         creato_il="2026-08-28T20:00:00+00:00")
     assert r["selezioni"] == []
+
+
+
+# ── valuta_esito_tip ─────────────────────────────────────────────────────────
+# Risultato di riferimento per questi test: 2-1 (casa vince), HT 1-0.
+
+def test_valuta_1x2_base():
+    assert valuta_esito_tip("1", 2, 1) is True
+    assert valuta_esito_tip("X", 2, 1) is False
+    assert valuta_esito_tip("2", 2, 1) is False
+    assert valuta_esito_tip("1", 1, 1) is False
+    assert valuta_esito_tip("X", 1, 1) is True
+
+
+def test_valuta_doppia_chance():
+    assert valuta_esito_tip("1X", 2, 1) is True
+    assert valuta_esito_tip("X2", 2, 1) is False
+    assert valuta_esito_tip("12", 2, 1) is True
+    assert valuta_esito_tip("12", 1, 1) is False
+
+
+def test_valuta_goal_nogoal():
+    assert valuta_esito_tip("Goal", 2, 1) is True
+    assert valuta_esito_tip("NoGoal", 2, 1) is False
+    assert valuta_esito_tip("Goal", 2, 0) is False
+    assert valuta_esito_tip("NoGoal", 2, 0) is True
+
+
+def test_valuta_pari_dispari():
+    assert valuta_esito_tip("Pari", 2, 1) is False   # totale 3, dispari
+    assert valuta_esito_tip("Dispari", 2, 1) is True
+    assert valuta_esito_tip("Pari", 2, 2) is True     # totale 4
+
+
+def test_valuta_over_under():
+    assert valuta_esito_tip("O2.5", 2, 1) is True     # totale 3 > 2.5
+    assert valuta_esito_tip("U2.5", 2, 1) is False
+    assert valuta_esito_tip("O3.5", 2, 1) is False     # totale 3, non > 3.5
+    assert valuta_esito_tip("U3.5", 2, 1) is True
+
+
+def test_valuta_casa_ospite_over05():
+    assert valuta_esito_tip("Casa O0.5", 2, 1) is True
+    assert valuta_esito_tip("Ospite O0.5", 2, 1) is True
+    assert valuta_esito_tip("Casa O0.5", 2, 0) is True
+    assert valuta_esito_tip("Ospite O0.5", 2, 0) is False
+
+
+def test_valuta_multigol():
+    assert valuta_esito_tip("MG 1-3", 2, 1) is True    # totale 3, nel range 1-3
+    assert valuta_esito_tip("MG 2-3", 2, 1) is True
+    assert valuta_esito_tip("MG 2-4", 1, 0) is False    # totale 1, fuori range
+
+
+def test_valuta_risultato_esatto():
+    assert valuta_esito_tip("Risultato 2-1", 2, 1) is True
+    assert valuta_esito_tip("Risultato 1-2", 2, 1) is False
+    assert valuta_esito_tip("Risultato 0-0", 0, 0) is True
+
+
+def test_valuta_ht_ft_con_dati_completi():
+    # HT 1-0 (segno "1"), FT 2-1 (segno "1")
+    assert valuta_esito_tip("HT/FT 1/1", 2, 1, gol_c_ht=1, gol_t_ht=0) is True
+    assert valuta_esito_tip("HT/FT X/1", 2, 1, gol_c_ht=1, gol_t_ht=0) is False
+
+
+def test_valuta_ht_ft_senza_dati_primo_tempo():
+    # Senza il punteggio HT non si puo' valutare: deve tornare None, non False
+    assert valuta_esito_tip("HT/FT 1/1", 2, 1) is None
+
+
+def test_valuta_combo_entrambe_vere():
+    # "1X + Over 1.5": 1X vero (casa vince) e Over 1.5 vero (totale 3 > 1.5)
+    assert valuta_esito_tip("1X + Over 1.5", 2, 1) is True
+
+
+def test_valuta_combo_una_falsa():
+    # "X2 + Under 3.5": X2 falso (casa vince, non X ne' 2)
+    assert valuta_esito_tip("X2 + Under 3.5", 2, 1) is False
+
+
+def test_valuta_mercato_non_riconosciuto_ritorna_none():
+    # Angoli/Cartellini non sono valutabili con solo il punteggio
+    assert valuta_esito_tip("Over 8.5 Angoli", 2, 1) is None
+    assert valuta_esito_tip("Over 4.5 Cartellini", 2, 1) is None
 
 
 ALL_TESTS = [v for k, v in list(globals().items()) if k.startswith("test_")]
