@@ -733,7 +733,7 @@ from matrix_modello import (
     calcola_edge_pct, kelly_fraction, semplifica_nome,
     costruisci_schedina_dinamica, applica_blend_mercato_1x2, blend_prior_stagione,
 )
-from matrix_db import salva_schedina
+from matrix_db import salva_schedina, leggi_storico_schedine, aggiorna_esito_schedina
 
 # ==========================================
 # 🕵️ AUTO-DISCOVERY ID LEGA (Risolve Norvegia e altri)
@@ -1402,7 +1402,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if st.session_state.data_master:
-    t1, t2, t3 = st.tabs(["🛒 TOP 10 & BUILDER", "🔬 ESPLORATORE PARTITE", "🏆 SCHEDINE AUTOMATICHE"])
+    t1, t2, t3, t4 = st.tabs(["🛒 TOP 10 & BUILDER", "🔬 ESPLORATORE PARTITE", "🏆 SCHEDINE AUTOMATICHE", "📊 STORICO"])
 
     # ─── TAB 1 ──────────────────────────────────────────────────────────────────
     with t1:
@@ -1857,3 +1857,72 @@ if st.session_state.data_master:
                                data=testo_export,
                                file_name=f"Matrix_V90_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                                mime="text/plain")
+    # ─── TAB 4 ──────────────────────────────────────────────────────────────────
+    with t4:
+        st.header("📊 STORICO SCHEDINE")
+        st.info("💡 Ogni schedina generata (Safety/Performance/Azzardo) viene salvata "
+                "automaticamente qui sotto quando Firebase è collegato. Il controllo "
+                "automatico dei risultati non è ancora attivo: per ora segna manualmente "
+                "vinta/persa con i pulsanti — servirà a capire se le probabilità dichiarate "
+                "corrispondono a quello che succede davvero.")
+
+        storico = leggi_storico_schedine(giorni=60)
+
+        if not storico:
+            st.warning("Nessuna schedina trovata su Firebase (o la connessione non è "
+                       "configurata/raggiungibile — controlla il terminale per eventuali "
+                       "errori di connessione).")
+        else:
+            storico_ordinato = sorted(
+                storico, key=lambda r: (r.get("data", ""), r.get("nome", "")), reverse=True)
+
+            vinte  = sum(1 for r in storico if r.get("esito") == "vinta")
+            perse  = sum(1 for r in storico if r.get("esito") == "persa")
+            attesa = sum(1 for r in storico if r.get("esito") == "in_attesa")
+            concluse = vinte + perse
+
+            c1, c2, c3, c4m = st.columns(4)
+            c1.metric("✅ Vinte", vinte)
+            c2.metric("❌ Perse", perse)
+            c3.metric("⏳ In attesa", attesa)
+            c4m.metric("Win rate", f"{(vinte/concluse*100):.1f}%" if concluse else "—")
+
+            st.markdown("---")
+
+            COLORE_ESITO = {"vinta": "#22c55e", "persa": "#ef4444", "in_attesa": "#94a3b8"}
+            EMOJI_ESITO  = {"vinta": "✅", "persa": "❌", "in_attesa": "⏳"}
+
+            for r in storico_ordinato:
+                esito  = r.get("esito", "in_attesa")
+                colore = COLORE_ESITO.get(esito, "#94a3b8")
+                doc_id = r.get("doc_id")
+                legs_txt = " + ".join(
+                    f"{s.get('match','?')} → {s.get('tip','?')}" for s in r.get("selezioni", []))
+
+                st.markdown(f"""
+<div style="border-left:3px solid {colore};padding:12px 18px;margin-bottom:8px;
+  background:rgba(255,255,255,0.03);border-radius:8px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <b style="font-family:'Syne',sans-serif;">{r.get('data','?')} — {r.get('nome','?')}</b>
+    <span style="font-size:1.1rem;">{EMOJI_ESITO.get(esito,'⏳')}</span>
+  </div>
+  <div style="font-size:0.85rem;color:var(--text2);margin-top:4px;">{legs_txt or '—'}</div>
+  <div style="font-size:0.78rem;color:var(--text2);margin-top:4px;">
+    Quota tot: {r.get('quota_totale',0):.2f} · Prob. dichiarata: {r.get('probabilita_congiunta',0)*100:.1f}% ·
+    Budget: {r.get('budget',0):.2f}€
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+                if esito == "in_attesa" and doc_id:
+                    bcol1, bcol2, _ = st.columns([1, 1, 4])
+                    if bcol1.button("✅ Vinta", key=f"vinta_{doc_id}"):
+                        if aggiorna_esito_schedina(doc_id, "vinta"):
+                            st.rerun()
+                        else:
+                            st.error("Errore nel salvataggio — controlla il terminale.")
+                    if bcol2.button("❌ Persa", key=f"persa_{doc_id}"):
+                        if aggiorna_esito_schedina(doc_id, "persa"):
+                            st.rerun()
+                        else:
+                            st.error("Errore nel salvataggio — controlla il terminale.")
