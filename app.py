@@ -964,15 +964,15 @@ if btn_genera:
                     tot_squadre      = len(gruppo)
                     partite_tot_camp = max((tot_squadre - 1) * 2, 38)
                     if tot_squadre >= 4:
-                        punti_champions = gruppo[3]['points']
-                        punti_salvezza  = gruppo[tot_squadre - 4]['points']
+                        punti_champions = gruppo[3]['points'] or 0
+                        punti_salvezza  = gruppo[tot_squadre - 4]['points'] or 0
                     for t in gruppo:
                         n = semplifica_nome(t['team']['name'])
                         db_stats[n] = {
                             'id':      t['team']['id'],
-                            'rank':    t['rank'],
-                            'giocate': t['all']['played'],
-                            'punti':   t['points'],
+                            'rank':    t['rank'] or 10,
+                            'giocate': t['all']['played'] or 0,
+                            'punti':   t['points'] or 0,
                             'ac': (t['home']['goals']['for']     or 0) / max(1, t['home']['played'] or 1),
                             'dc': (t['home']['goals']['against'] or 0) / max(1, t['home']['played'] or 1),
                             'at': (t['away']['goals']['for']     or 0) / max(1, t['away']['played'] or 1),
