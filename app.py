@@ -736,7 +736,7 @@ from matrix_modello import (
 from matrix_db import (
     salva_schedina, leggi_storico_schedine, aggiorna_esito_schedina,
     controlla_e_aggiorna_risultati, aggiorna_giocata_reale,
-    aggiorna_puntata_reale,
+    aggiorna_puntata_reale, aggiorna_vincita_reale,
 )
 
 # ==========================================
@@ -1479,7 +1479,14 @@ with st.expander("📊 Storico Schedine", expanded=False):
                     if p is None:
                         continue
                     if r.get("esito") == "vinta":
-                        saldo += p * (r.get("quota_totale") or 0) - p
+                        # Se l'utente ha inserito quanto ha incassato
+                        # davvero (bonus bet365 inclusi) usiamo quello;
+                        # altrimenti la quota teorica della Matrix.
+                        vincita_reg = r.get("vincita_reale")
+                        if vincita_reg is not None:
+                            saldo += vincita_reg - p
+                        else:
+                            saldo += p * (r.get("quota_totale") or 0) - p
                     elif r.get("esito") == "persa":
                         saldo -= p
                 colore = "#22c55e" if saldo >= 0 else "#ef4444"
@@ -1571,6 +1578,28 @@ with st.expander("📊 Storico Schedine", expanded=False):
                             st.rerun()
                         else:
                             st.error("Errore nel salvataggio — controlla il terminale.")
+
+                if esito == "vinta":
+                    # La quota della Matrix è quella "pulita" delle
+                    # selezioni moltiplicate tra loro: non include eventuali
+                    # bonus/maggiorazioni bet365 sulla schedina reale, quindi
+                    # l'incasso vero può essere più alto di quello teorico.
+                    puntata_calc = puntata_nuova if puntata_nuova else (puntata_attuale or 0)
+                    vincita_teorica = round(puntata_calc * quota_tot, 2)
+                    vincita_attuale = r.get("vincita_reale")
+                    vincita_nuova = st.number_input(
+                        "🏆 Vincita reale incassata (€) — bonus bet365 inclusi",
+                        min_value=0.0, step=0.5,
+                        value=float(vincita_attuale) if vincita_attuale is not None else vincita_teorica,
+                        help=f"Quota teorica Matrix: {quota_tot:.2f} → {vincita_teorica:.2f}€. "
+                             "Modifica se bet365 ha applicato un bonus o una maggiorazione.",
+                        key=f"vincita_{doc_id}")
+                    if vincita_attuale is None or abs(vincita_nuova - vincita_attuale) > 1e-9:
+                        if st.button("💾 Salva vincita", key=f"salva_vincita_{doc_id}"):
+                            if aggiorna_vincita_reale(doc_id, vincita_nuova):
+                                st.rerun()
+                            else:
+                                st.error("Errore nel salvataggio — controlla il terminale.")
 
             if esito == "in_attesa" and doc_id:
                 bcol1, bcol2, _ = st.columns([1, 1, 4])

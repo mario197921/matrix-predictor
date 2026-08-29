@@ -127,6 +127,28 @@ def aggiorna_puntata_reale(doc_id: str, puntata: float) -> bool:
         return False
 
 
+def aggiorna_vincita_reale(doc_id: str, vincita: float) -> bool:
+    """Salva l'importo REALMENTE incassato (campo 'vincita_reale', in euro,
+    puntata inclusa) su una schedina vinta. Serve perche' la quota calcolata
+    dalla Matrix e' quella "pulita" delle singole selezioni moltiplicate tra
+    loro: non include eventuali bonus/maggiorazioni che il bookmaker (es.
+    bet365) applica alla schedina reale, quindi l'incasso vero puo' essere
+    piu' alto di quello teorico (puntata * quota_totale). Se questo campo e'
+    presente lo Storico lo usa al posto del calcolo teorico per il saldo.
+    Ritorna True/False, mai eccezioni verso il chiamante (errore reale su
+    stderr)."""
+    db = get_firestore_client()
+    if db is None:
+        return False
+    try:
+        db.collection("schedine").document(doc_id).update({"vincita_reale": float(vincita)})
+        return True
+    except Exception as e:
+        print(f"[matrix_db] Errore aggiornamento vincita_reale per '{doc_id}': "
+              f"{type(e).__name__}: {e}", file=sys.stderr)
+        return False
+
+
 def aggiorna_esito_schedina(doc_id: str, esito: str) -> bool:
     """Aggiorna manualmente il campo 'esito' di una schedina gia' salvata
     ('vinta' o 'persa'), in attesa che il controllo automatico dei
