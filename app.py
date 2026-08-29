@@ -1440,8 +1440,19 @@ with st.expander("📊 Storico Schedine", expanded=False):
                     or str(r.get("nome", "")).startswith("PERSONALE_")
                     or bool(r.get("giocata_reale")))
 
+        def _e_proposta_matrix(r):
+            """True se il record è una proposta generata dalla Matrix (non
+            una bet365 caricata a mano né una schedina personale del
+            Carrello). Le statistiche 'Proposte Matrix' misurano quanto bene
+            predice il modello, quindi contano SEMPRE queste schedine —
+            anche quelle che l'utente ha spuntato come 'giocata davvero',
+            che così finiscono in ENTRAMBE le statistiche invece di sparire
+            da quella Matrix."""
+            return not (r.get("fonte") == "bet365_manuale"
+                        or str(r.get("nome", "")).startswith("PERSONALE_"))
+
         storico_reale  = [r for r in storico_ordinato if _e_reale(r)]
-        storico_matrix = [r for r in storico_ordinato if not _e_reale(r)]
+        storico_matrix = [r for r in storico_ordinato if _e_proposta_matrix(r)]
 
         def _mostra_metriche(lista, titolo):
             vinte  = sum(1 for r in lista if r.get("esito") == "vinta")
