@@ -1778,6 +1778,17 @@ if st.session_state.data_master:
                                 "Edge": d["edge"], "Kelly": kelly_fraction(d["prob"], float(d["quota"])),
                             })
 
+                        # Il segno 1X2 migliore puo' comparire anche nella Top 3 (stesso
+                        # tip, es. "1"): senza dedup due checkbox con la stessa chiave
+                        # (stesso Match+Tip) mandano l'app in crash (DuplicateElementKey).
+                        visti_tip = set()
+                        candidati_dedup = []
+                        for cand in candidati_carrello:
+                            if cand["Tip"] not in visti_tip:
+                                visti_tip.add(cand["Tip"])
+                                candidati_dedup.append(cand)
+                        candidati_carrello = candidati_dedup
+
                         if candidati_carrello:
                             st.markdown("**➕ Aggiungi alle mie schedine:**")
                             cols_add = st.columns(len(candidati_carrello))
