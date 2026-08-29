@@ -58,13 +58,6 @@ def calcola_tutti_i_mercati(xg_c: float, xg_t: float,
     p["X2"] = p["X"] + p["2"]
     p["12"] = p["1"] + p["2"]
 
-    if xg_c > 1.2 and xg_t > 1.2:
-        p["Goal"]   = min(90.0, p["Goal"] * 1.18)
-        p["NoGoal"] = max(10.0, 100.0 - p["Goal"])
-    elif xg_c < 0.9 and xg_t < 0.9:
-        p["NoGoal"] = min(90.0, p["NoGoal"] * 1.15)
-        p["Goal"]   = max(10.0, 100.0 - p["NoGoal"])
-
     # FIX: probabilità congiunta corretta per combo
     combos = {
         "1X + Over 1.5":   (p["1X"]   / 100) * (p["O1.5"] / 100) * 100 * 0.92,
