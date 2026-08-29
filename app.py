@@ -1552,7 +1552,7 @@ if st.session_state.data_master:
                 st.info("Nessun dato per questa categoria.")
                 return []
             df = pd.DataFrame(pool).sort_values(sort_by, ascending=False).head(max_rows).copy()
-            cols = ['Match','Tip','Prob','Quota','Edge','Kelly','Time','League','Aff']
+            cols = ['Match','Tip','Prob','Quota','Edge','Kelly','Time','League','Aff','FixtureID']
             df = df[cols].copy()   # .copy() evita che la modifica di Kelly corrompa all_tips_global
             df['Kelly'] = (df['Kelly'] * 100).round(1)
             # Colonna Affidabilità: badge visivo, calcolato per-partita in QUESTA
@@ -1568,8 +1568,11 @@ if st.session_state.data_master:
                     "Kelly": st.column_config.NumberColumn("Kelly (%)",        format="%.1f%%"),
                     "Aff":   st.column_config.TextColumn("Dati", help="🟢 Alta 🟡 Media 🔴 Bassa affidabilità"),
                 },
+                # FixtureID resta nei dati ma non si vede in tabella: serve solo
+                # per il controllo automatico dei risultati (Storico Schedine).
+                column_order=['🛒','Match','Tip','Prob','Quota','Edge','Kelly','Time','League','Aff'],
                 hide_index=True, use_container_width=True,
-                disabled=['Match','Tip','Prob','Quota','Edge','Kelly','Time','League','Aff'],
+                disabled=['Match','Tip','Prob','Quota','Edge','Kelly','Time','League','Aff','FixtureID'],
                 key=f"ed_{titolo}")
             return ed[ed["🛒"] == True].to_dict('records')
 
