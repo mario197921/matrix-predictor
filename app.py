@@ -1434,34 +1434,59 @@ def _e_proposta_matrix(r):
                 or str(r.get("nome", "")).startswith("PERSONALE_"))
 
 EMOJI_ESITO_BOX = {"vinta": "✅", "persa": "❌", "in_attesa": "⏳"}
+CSS_BOX_ESITO = {"vinta": "safety-bg", "persa": "risk-bg", "in_attesa": "performance-bg"}
 
 # ─── BOX "GIOCATE DI OGGI" ────────────────────────────────────────────
-# Colpo d'occhio in sola lettura sulle schedine REALI di oggi, senza dover
-# aprire lo Storico qui sotto -- per modificare puntata/vincita/esito si usa
-# comunque il menù a discesa, questo box serve solo per controllare.
+# Colpo d'occhio in sola lettura sulle schedine REALI di oggi, con le
+# partite e la giocata fatta per ognuna (come le schedine vere e proprie),
+# senza dover aprire lo Storico qui sotto -- per modificare puntata/vincita/
+# esito si usa comunque il menù a discesa, questo box serve solo per
+# controllare a colpo d'occhio.
 _oggi_str = _oggi.strftime("%Y-%m-%d")
 _giocate_oggi = [r for r in storico_ordinato if r.get("data") == _oggi_str and _e_reale(r)]
 if _giocate_oggi:
     st.markdown("#### 🎯 Giocate di oggi")
-    for r in _giocate_oggi:
-        esito_g = r.get("esito", "in_attesa")
+    _colonne_oggi = st.columns(min(3, len(_giocate_oggi)))
+    for i, r in enumerate(_giocate_oggi):
+        esito_g   = r.get("esito", "in_attesa")
         puntata_g = r.get("puntata_reale")
-        quota_g = r.get("quota_totale") or 0
+        quota_g   = r.get("quota_totale") or 0
         vincita_g = r.get("vincita_reale")
+        selezioni_g = r.get("selezioni", [])
+
+        righe_g = []
+        for s in selezioni_g:
+            match_s = s.get('match') or s.get('Match') or '?'
+            tip_s   = s.get('tip')   or s.get('Tip')   or '?'
+            eg = s.get('esito_gamba')
+            icona_g = "✅" if eg == "vinta" else ("❌" if eg == "persa" else "⏳")
+            righe_g.append(
+                f"<div class='schedina-match' style='margin-bottom:4px;'>"
+                f"{icona_g} {match_s} → <b>{tip_s}</b></div>")
+        legs_html = "".join(righe_g) or "<div class='schedina-match'>—</div>"
+
         info_soldi = ""
         if puntata_g is not None:
             if esito_g == "vinta":
                 incasso = vincita_g if vincita_g is not None else round(puntata_g * quota_g, 2)
-                info_soldi = f" · puntati {puntata_g:.2f}€ → incassati {incasso:.2f}€"
+                info_soldi = f"Puntati {puntata_g:.2f}€ → incassati {incasso:.2f}€"
             elif esito_g == "persa":
-                info_soldi = f" · puntati {puntata_g:.2f}€ → persi"
+                info_soldi = f"Puntati {puntata_g:.2f}€ → persi"
             else:
-                info_soldi = f" · puntati {puntata_g:.2f}€ (in attesa)"
-        st.markdown(
-            f"<div style='padding:6px 0;font-size:0.9rem;'>"
-            f"{EMOJI_ESITO_BOX.get(esito_g, '⏳')} <b>{r.get('nome', '?')}</b> "
-            f"· quota {quota_g:.2f}{info_soldi}</div>",
-            unsafe_allow_html=True)
+                info_soldi = f"Puntati {puntata_g:.2f}€ (in attesa)"
+
+        with _colonne_oggi[i % len(_colonne_oggi)]:
+            st.markdown(f"""
+<div class="strategy-box {CSS_BOX_ESITO.get(esito_g, 'performance-bg')}" style="padding:14px 16px;margin-bottom:12px;">
+  <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;margin-bottom:8px;">
+    {EMOJI_ESITO_BOX.get(esito_g, '⏳')} {r.get('nome', '?')}
+  </div>
+  {legs_html}
+  <div style="font-size:0.78rem;color:var(--text2);margin-top:8px;">
+    Quota tot: {quota_g:.2f} · {info_soldi}
+  </div>
+</div>
+""", unsafe_allow_html=True)
     st.markdown("---")
 
 with st.expander("📊 Storico Schedine", expanded=False):
