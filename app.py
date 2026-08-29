@@ -1396,6 +1396,74 @@ if btn_genera:
 # ==========================================
 # 🖥️ DISPLAY: 3 TAB
 # ==========================================
+storico = leggi_storico_schedine(giorni=60)
+
+def _data_ordinabile(r):
+    """La 'data' e' normalmente 'YYYY-MM-DD' (schedine Matrix/personali),
+    ma le bet365 caricate a mano hanno un placeholder 'storico_NN' (date
+    esatte non note dagli screenshot) -- che in ordine alfabetico
+    finirebbe PRIMA delle date vere, mandando le schedine di oggi in
+    fondo. Le riconosciamo e le mandiamo in coda (data fittizia minima)
+    cosi' l'ordine resta sempre dalla piu' recente alla piu' vecchia."""
+    d = r.get("data", "")
+    if len(d) == 10 and d[4] == "-" and d[7] == "-" and d[:4].isdigit():
+        return d
+    return "0000-00-00"
+
+storico_ordinato = sorted(
+    storico, key=lambda r: (_data_ordinabile(r), r.get("nome", "")), reverse=True) if storico else []
+
+def _e_reale(r):
+    """True se è una scommessa effettivamente giocata: bet365 caricate
+    a mano, salvate dal Carrello come giocata personale, oppure una
+    proposta della Matrix che l'utente ha spuntato come 'giocata
+    davvero'. False se è solo una proposta automatica mai giocata."""
+    return (r.get("fonte") == "bet365_manuale"
+            or str(r.get("nome", "")).startswith("PERSONALE_")
+            or bool(r.get("giocata_reale")))
+
+def _e_proposta_matrix(r):
+    """True se il record è una proposta generata dalla Matrix (non
+    una bet365 caricata a mano né una schedina personale del
+    Carrello). Le statistiche 'Proposte Matrix' misurano quanto bene
+    predice il modello, quindi contano SEMPRE queste schedine —
+    anche quelle che l'utente ha spuntato come 'giocata davvero',
+    che così finiscono in ENTRAMBE le statistiche invece di sparire
+    da quella Matrix."""
+    return not (r.get("fonte") == "bet365_manuale"
+                or str(r.get("nome", "")).startswith("PERSONALE_"))
+
+EMOJI_ESITO_BOX = {"vinta": "✅", "persa": "❌", "in_attesa": "⏳"}
+
+# ─── BOX "GIOCATE DI OGGI" ────────────────────────────────────────────
+# Colpo d'occhio in sola lettura sulle schedine REALI di oggi, senza dover
+# aprire lo Storico qui sotto -- per modificare puntata/vincita/esito si usa
+# comunque il menù a discesa, questo box serve solo per controllare.
+_oggi_str = _oggi.strftime("%Y-%m-%d")
+_giocate_oggi = [r for r in storico_ordinato if r.get("data") == _oggi_str and _e_reale(r)]
+if _giocate_oggi:
+    st.markdown("#### 🎯 Giocate di oggi")
+    for r in _giocate_oggi:
+        esito_g = r.get("esito", "in_attesa")
+        puntata_g = r.get("puntata_reale")
+        quota_g = r.get("quota_totale") or 0
+        vincita_g = r.get("vincita_reale")
+        info_soldi = ""
+        if puntata_g is not None:
+            if esito_g == "vinta":
+                incasso = vincita_g if vincita_g is not None else round(puntata_g * quota_g, 2)
+                info_soldi = f" · puntati {puntata_g:.2f}€ → incassati {incasso:.2f}€"
+            elif esito_g == "persa":
+                info_soldi = f" · puntati {puntata_g:.2f}€ → persi"
+            else:
+                info_soldi = f" · puntati {puntata_g:.2f}€ (in attesa)"
+        st.markdown(
+            f"<div style='padding:6px 0;font-size:0.9rem;'>"
+            f"{EMOJI_ESITO_BOX.get(esito_g, '⏳')} <b>{r.get('nome', '?')}</b> "
+            f"· quota {quota_g:.2f}{info_soldi}</div>",
+            unsafe_allow_html=True)
+    st.markdown("---")
+
 with st.expander("📊 Storico Schedine", expanded=False):
 
     if st.button("🔄 Controlla risultati partite finite"):
@@ -1409,49 +1477,11 @@ with st.expander("📊 Storico Schedine", expanded=False):
         )
         st.rerun()
 
-    storico = leggi_storico_schedine(giorni=60)
-
     if not storico:
         st.warning("Nessuna schedina trovata su Firebase (o la connessione non è "
                    "configurata/raggiungibile — controlla il terminale per eventuali "
                    "errori di connessione).")
-        storico_ordinato = []
     else:
-        def _data_ordinabile(r):
-            """La 'data' e' normalmente 'YYYY-MM-DD' (schedine Matrix/personali),
-            ma le bet365 caricate a mano hanno un placeholder 'storico_NN' (date
-            esatte non note dagli screenshot) -- che in ordine alfabetico
-            finirebbe PRIMA delle date vere, mandando le schedine di oggi in
-            fondo. Le riconosciamo e le mandiamo in coda (data fittizia minima)
-            cosi' l'ordine resta sempre dalla piu' recente alla piu' vecchia."""
-            d = r.get("data", "")
-            if len(d) == 10 and d[4] == "-" and d[7] == "-" and d[:4].isdigit():
-                return d
-            return "0000-00-00"
-
-        storico_ordinato = sorted(
-            storico, key=lambda r: (_data_ordinabile(r), r.get("nome", "")), reverse=True)
-
-        def _e_reale(r):
-            """True se è una scommessa effettivamente giocata: bet365 caricate
-            a mano, salvate dal Carrello come giocata personale, oppure una
-            proposta della Matrix che l'utente ha spuntato come 'giocata
-            davvero'. False se è solo una proposta automatica mai giocata."""
-            return (r.get("fonte") == "bet365_manuale"
-                    or str(r.get("nome", "")).startswith("PERSONALE_")
-                    or bool(r.get("giocata_reale")))
-
-        def _e_proposta_matrix(r):
-            """True se il record è una proposta generata dalla Matrix (non
-            una bet365 caricata a mano né una schedina personale del
-            Carrello). Le statistiche 'Proposte Matrix' misurano quanto bene
-            predice il modello, quindi contano SEMPRE queste schedine —
-            anche quelle che l'utente ha spuntato come 'giocata davvero',
-            che così finiscono in ENTRAMBE le statistiche invece di sparire
-            da quella Matrix."""
-            return not (r.get("fonte") == "bet365_manuale"
-                        or str(r.get("nome", "")).startswith("PERSONALE_"))
-
         storico_reale  = [r for r in storico_ordinato if _e_reale(r)]
         storico_matrix = [r for r in storico_ordinato if _e_proposta_matrix(r)]
 
