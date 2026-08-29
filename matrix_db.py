@@ -110,6 +110,23 @@ def aggiorna_giocata_reale(doc_id: str, giocata: bool) -> bool:
         return False
 
 
+def aggiorna_puntata_reale(doc_id: str, puntata: float) -> bool:
+    """Salva quanti euro sono stati REALMENTE puntati su una schedina
+    (campo 'puntata_reale'), cosi' lo Storico puo' calcolare vincite/perdite
+    in euro invece che solo il conteggio vinte/perse. Ritorna True/False,
+    mai eccezioni verso il chiamante (errore reale su stderr)."""
+    db = get_firestore_client()
+    if db is None:
+        return False
+    try:
+        db.collection("schedine").document(doc_id).update({"puntata_reale": float(puntata)})
+        return True
+    except Exception as e:
+        print(f"[matrix_db] Errore aggiornamento puntata_reale per '{doc_id}': "
+              f"{type(e).__name__}: {e}", file=sys.stderr)
+        return False
+
+
 def aggiorna_esito_schedina(doc_id: str, esito: str) -> bool:
     """Aggiorna manualmente il campo 'esito' di una schedina gia' salvata
     ('vinta' o 'persa'), in attesa che il controllo automatico dei

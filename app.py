@@ -736,6 +736,7 @@ from matrix_modello import (
 from matrix_db import (
     salva_schedina, leggi_storico_schedine, aggiorna_esito_schedina,
     controlla_e_aggiorna_risultati, aggiorna_giocata_reale,
+    aggiorna_puntata_reale,
 )
 
 # ==========================================
@@ -1454,7 +1455,7 @@ with st.expander("📊 Storico Schedine", expanded=False):
         storico_reale  = [r for r in storico_ordinato if _e_reale(r)]
         storico_matrix = [r for r in storico_ordinato if _e_proposta_matrix(r)]
 
-        def _mostra_metriche(lista, titolo):
+        def _mostra_metriche(lista, titolo, mostra_pnl=False):
             vinte  = sum(1 for r in lista if r.get("esito") == "vinta")
             perse  = sum(1 for r in lista if r.get("esito") == "persa")
             attesa = sum(1 for r in lista if r.get("esito") == "in_attesa")
@@ -1465,12 +1466,36 @@ with st.expander("📊 Storico Schedine", expanded=False):
             c2.metric("❌ Perse", perse)
             c3.metric("⏳ In attesa", attesa)
             c4m.metric("Win rate", f"{(vinte/concluse*100):.1f}%" if concluse else "—")
+            if mostra_pnl:
+                # P&L in euro: serve la puntata reale salvata per ogni
+                # schedina (campo 'puntata_reale', es. 1€ fisso da oggi in
+                # poi) -- le schedine senza puntata registrata non
+                # contribuiscono (non sappiamo quanto ci abbiamo messo).
+                puntato = sum(r.get("puntata_reale") or 0 for r in lista
+                              if r.get("puntata_reale") is not None)
+                saldo = 0.0
+                for r in lista:
+                    p = r.get("puntata_reale")
+                    if p is None:
+                        continue
+                    if r.get("esito") == "vinta":
+                        saldo += p * (r.get("quota_totale") or 0) - p
+                    elif r.get("esito") == "persa":
+                        saldo -= p
+                colore = "#22c55e" if saldo >= 0 else "#ef4444"
+                segno = "+" if saldo >= 0 else ""
+                st.markdown(
+                    f'<div style="font-size:0.85rem;margin-top:2px;">'
+                    f'💰 Puntato: <b>{puntato:.2f}€</b> &nbsp;·&nbsp; '
+                    f'Saldo: <b style="color:{colore};">{segno}{saldo:.2f}€</b></div>',
+                    unsafe_allow_html=True)
 
         mcol1, mcol2 = st.columns(2)
         with mcol1:
             _mostra_metriche(storico_matrix, "🤖 Proposte Matrix (se il modello predice bene)")
         with mcol2:
-            _mostra_metriche(storico_reale, "💶 Scommesse reali (soldi effettivamente giocati)")
+            _mostra_metriche(storico_reale, "💶 Scommesse reali (soldi effettivamente giocati)",
+                              mostra_pnl=True)
 
     st.markdown("---")
 
@@ -1518,8 +1543,8 @@ with st.expander("📊 Storico Schedine", expanded=False):
 </div>
 """, unsafe_allow_html=True)
 
+            giocata_attuale = bool(r.get("giocata_reale"))
             if not is_fonte_reale and doc_id:
-                giocata_attuale = bool(r.get("giocata_reale"))
                 giocata_nuova = st.checkbox(
                     "💶 L'ho giocata davvero (conta anche nelle statistiche reali)",
                     value=giocata_attuale, key=f"giocata_{doc_id}")
@@ -1528,6 +1553,24 @@ with st.expander("📊 Storico Schedine", expanded=False):
                         st.rerun()
                     else:
                         st.error("Errore nel salvataggio — controlla il terminale.")
+                giocata_attuale = giocata_nuova
+
+            if doc_id and (is_fonte_reale or giocata_attuale):
+                # Quanto ci hai puntato davvero (di solito 1€, la puntata
+                # minima) -- serve per calcolare vincite/perdite in euro,
+                # non solo il conteggio vinte/perse.
+                puntata_attuale = r.get("puntata_reale")
+                puntata_nuova = st.number_input(
+                    "💰 Puntata reale (€)",
+                    min_value=0.0, step=0.5,
+                    value=float(puntata_attuale) if puntata_attuale is not None else 1.0,
+                    key=f"puntata_{doc_id}")
+                if puntata_attuale is None or abs(puntata_nuova - puntata_attuale) > 1e-9:
+                    if st.button("💾 Salva puntata", key=f"salva_puntata_{doc_id}"):
+                        if aggiorna_puntata_reale(doc_id, puntata_nuova):
+                            st.rerun()
+                        else:
+                            st.error("Errore nel salvataggio — controlla il terminale.")
 
             if esito == "in_attesa" and doc_id:
                 bcol1, bcol2, _ = st.columns([1, 1, 4])
