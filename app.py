@@ -759,10 +759,25 @@ MASTER_LEAGUES["🇳🇴 1. divisjon (Playoff NO)"] = _no_leagues.get("Norwegian
 # volta che una delle due aveva partite nel periodo selezionato.
 # Risolti a runtime cercando per nome all'interno del paese, come già
 # fatto sopra per la Norvegia.
+#
+# BUGFIX 30/08: il fix sopra usava ancora lo stesso ID in collisione come
+# fallback_id ("se la ricerca fallisce, torna a 281/239/253") -- quindi
+# bastava un intoppo di rete o un nome non corrispondente nella ricerca
+# per ripiombare ESATTAMENTE nella collisione che il fix voleva evitare
+# (successo il 30/08: una partita del Perù è comparsa etichettata come
+# "Scottish Prem."). Ora il fallback è None: se la ricerca per nome fallisce
+# la lega viene semplicemente esclusa da MASTER_LEAGUES per quella sessione
+# (non compare tra i campionati disponibili) invece di rubare silenziosamente
+# le partite di un'altra lega reale.
 
-MASTER_LEAGUES["🇵🇪 Liga 1 Perù"]             = _risolvi_id_per_nome("Peru", "Liga 1", 281)
-MASTER_LEAGUES["🇵🇾 División Profesional PY"] = _risolvi_id_per_nome("Paraguay", "Division Profesional", 239)
-MASTER_LEAGUES["🇺🇸 MLS"]                     = _risolvi_id_per_nome("USA", "Major League Soccer", 253)
+MASTER_LEAGUES["🇵🇪 Liga 1 Perù"]             = _risolvi_id_per_nome("Peru", "Liga 1", None)
+MASTER_LEAGUES["🇵🇾 División Profesional PY"] = _risolvi_id_per_nome("Paraguay", "Division Profesional", None)
+MASTER_LEAGUES["🇺🇸 MLS"]                     = _risolvi_id_per_nome("USA", "Major League Soccer", None)
+
+# Rimuove le leghe la cui risoluzione ID è fallita (fallback None qui sopra):
+# meglio non mostrarle per un giorno che rischiare di duplicare/etichettare
+# male le partite di un'altra lega con lo stesso ID.
+MASTER_LEAGUES = {k: v for k, v in MASTER_LEAGUES.items() if v is not None}
 
 # ==========================================
 # 🏆 AUTO-DISCOVERY COPPE NAZIONALI
