@@ -149,6 +149,37 @@ def aggiorna_vincita_reale(doc_id: str, vincita: float) -> bool:
         return False
 
 
+def aggiorna_esito_reale(doc_id: str, esito) -> bool:
+    """Salva un esito REALE che sovrascrive, ai fini del saldo in euro e
+    delle statistiche 'Scommesse reali', quello calcolato automaticamente
+    dal sistema (campo 'esito'). Serve per i casi in cui la giocata
+    effettivamente piazzata differisce da quella proposta dalla Matrix (es.
+    errore di battitura sulla selezione, cash-out, void) e quindi l'esito
+    vero della schedina reale e' diverso da quello che il controllo
+    automatico calcola sul tip della Matrix.
+
+    Il campo 'esito' (e i vari 'esito_gamba' per selezione) NON vengono
+    toccati: restano il segnale di calibrazione "il modello ha
+    indovinato?", usato dalle statistiche 'Proposte Matrix'.
+
+    esito puo' essere 'vinta', 'persa', oppure None per rimuovere
+    l'override e tornare a usare il calcolo automatico. Ritorna True/False,
+    mai eccezioni verso il chiamante (errore reale su stderr)."""
+    if esito not in ("vinta", "persa", None):
+        return False
+    db = get_firestore_client()
+    if db is None:
+        return False
+    try:
+        valore = esito if esito is not None else firestore.DELETE_FIELD
+        db.collection("schedine").document(doc_id).update({"esito_reale": valore})
+        return True
+    except Exception as e:
+        print(f"[matrix_db] Errore aggiornamento esito_reale per '{doc_id}': "
+              f"{type(e).__name__}: {e}", file=sys.stderr)
+        return False
+
+
 def aggiorna_esito_schedina(doc_id: str, esito: str) -> bool:
     """Aggiorna manualmente il campo 'esito' di una schedina gia' salvata
     ('vinta' o 'persa'), in attesa che il controllo automatico dei

@@ -736,7 +736,7 @@ from matrix_modello import (
 from matrix_db import (
     salva_schedina, leggi_storico_schedine, aggiorna_esito_schedina,
     controlla_e_aggiorna_risultati, aggiorna_giocata_reale,
-    aggiorna_puntata_reale, aggiorna_vincita_reale,
+    aggiorna_puntata_reale, aggiorna_vincita_reale, aggiorna_esito_reale,
 )
 
 # ==========================================
@@ -1433,6 +1433,14 @@ def _e_proposta_matrix(r):
     return not (r.get("fonte") == "bet365_manuale"
                 or str(r.get("nome", "")).startswith("PERSONALE_"))
 
+def _esito_reale_effettivo(r):
+    """L'esito 'vero' ai fini dei soldi: se l'utente ha registrato un
+    esito_reale (perché ha giocato manualmente una selezione diversa da
+    quella della Matrix, o per qualunque altro motivo il risultato reale
+    differisce da quello calcolato) lo usa, altrimenti ricade sul campo
+    'esito' calcolato automaticamente sul tip della Matrix."""
+    return r.get("esito_reale") or r.get("esito")
+
 EMOJI_ESITO_BOX = {"vinta": "✅", "persa": "❌", "in_attesa": "⏳"}
 CSS_BOX_ESITO = {"vinta": "safety-bg", "persa": "risk-bg", "in_attesa": "performance-bg"}
 
@@ -1448,7 +1456,7 @@ if _giocate_oggi:
     st.markdown("#### 🎯 Giocate di oggi")
     _colonne_oggi = st.columns(min(3, len(_giocate_oggi)))
     for i, r in enumerate(_giocate_oggi):
-        esito_g   = r.get("esito", "in_attesa")
+        esito_g   = _esito_reale_effettivo(r) or "in_attesa"
         puntata_g = r.get("puntata_reale")
         quota_g   = r.get("quota_totale") or 0
         vincita_g = r.get("vincita_reale")
@@ -1511,9 +1519,14 @@ with st.expander("📊 Storico Schedine", expanded=False):
         storico_matrix = [r for r in storico_ordinato if _e_proposta_matrix(r)]
 
         def _mostra_metriche(lista, titolo, mostra_pnl=False):
-            vinte  = sum(1 for r in lista if r.get("esito") == "vinta")
-            perse  = sum(1 for r in lista if r.get("esito") == "persa")
-            attesa = sum(1 for r in lista if r.get("esito") == "in_attesa")
+            # Le statistiche 'Proposte Matrix' misurano il modello: usano
+            # sempre l'esito calcolato sul tip della Matrix. Quelle
+            # 'Scommesse reali' misurano i soldi: usano l'esito reale
+            # quando è stato registrato un override.
+            _esito_di = _esito_reale_effettivo if mostra_pnl else (lambda r: r.get("esito"))
+            vinte  = sum(1 for r in lista if _esito_di(r) == "vinta")
+            perse  = sum(1 for r in lista if _esito_di(r) == "persa")
+            attesa = sum(1 for r in lista if _esito_di(r) in (None, "in_attesa"))
             concluse = vinte + perse
             st.markdown(f"**{titolo}**")
             c1, c2, c3, c4m = st.columns(4)
@@ -1533,7 +1546,7 @@ with st.expander("📊 Storico Schedine", expanded=False):
                     p = r.get("puntata_reale")
                     if p is None:
                         continue
-                    if r.get("esito") == "vinta":
+                    if _esito_reale_effettivo(r) == "vinta":
                         # Se l'utente ha inserito quanto ha incassato
                         # davvero (bonus bet365 inclusi) usiamo quello;
                         # altrimenti la quota teorica della Matrix.
@@ -1542,7 +1555,7 @@ with st.expander("📊 Storico Schedine", expanded=False):
                             saldo += vincita_reg - p
                         else:
                             saldo += p * (r.get("quota_totale") or 0) - p
-                    elif r.get("esito") == "persa":
+                    elif _esito_reale_effettivo(r) == "persa":
                         saldo -= p
                 colore = "#22c55e" if saldo >= 0 else "#ef4444"
                 segno = "+" if saldo >= 0 else ""
@@ -1566,6 +1579,11 @@ with st.expander("📊 Storico Schedine", expanded=False):
 
     for r in storico_ordinato:
         esito  = r.get("esito", "in_attesa")
+        # Se e' registrato un esito_reale (giocata manuale diversa da
+        # quella della Matrix, cash-out, void...) e' quello che conta
+        # davvero per i soldi -- 'esito' resta il segnale di calibrazione
+        # sul tip della Matrix e non viene mai toccato da qui in poi.
+        esito_effettivo = r.get("esito_reale") or esito
         doc_id = r.get("doc_id")
         selezioni_r = r.get("selezioni", [])
 
@@ -1590,8 +1608,9 @@ with st.expander("📊 Storico Schedine", expanded=False):
 
         tag = "💶 Reale" if _e_reale(r) else "🤖 Matrix"
         quota_tot = r.get('quota_totale') or 0
-        label = (f"{EMOJI_ESITO.get(esito,'⏳')} {r.get('data','?')} — {r.get('nome','?')} "
-                 f"· {tag} · quota {quota_tot:.2f}{conteggio_txt}")
+        nota_override = " · 🎯 esito reale diverso dal calcolato" if r.get("esito_reale") else ""
+        label = (f"{EMOJI_ESITO.get(esito_effettivo,'⏳')} {r.get('data','?')} — {r.get('nome','?')} "
+                 f"· {tag} · quota {quota_tot:.2f}{conteggio_txt}{nota_override}")
 
         is_fonte_reale = (r.get("fonte") == "bet365_manuale"
                            or str(r.get("nome", "")).startswith("PERSONALE_"))
@@ -1634,7 +1653,37 @@ with st.expander("📊 Storico Schedine", expanded=False):
                         else:
                             st.error("Errore nel salvataggio — controlla il terminale.")
 
-                if esito == "vinta":
+                # Override manuale: usalo solo se hai giocato davvero una
+                # selezione diversa da quella proposta dalla Matrix (es. per
+                # errore, come Over invece di Under) e quindi l'esito reale
+                # della TUA schedina è diverso da quello calcolato sul tip
+                # della Matrix qui sopra.
+                opzioni_esito_reale = {
+                    "Uguale al calcolo automatico": None,
+                    "✅ Vinta": "vinta",
+                    "❌ Persa": "persa",
+                }
+                esito_reale_attuale = r.get("esito_reale")
+                label_corrente = next(
+                    (k for k, v in opzioni_esito_reale.items() if v == esito_reale_attuale),
+                    "Uguale al calcolo automatico")
+                scelta_esito_reale = st.selectbox(
+                    "🎯 Esito reale (solo se diverso da quello calcolato sul tip Matrix)",
+                    list(opzioni_esito_reale.keys()),
+                    index=list(opzioni_esito_reale.keys()).index(label_corrente),
+                    help="Il calcolo sopra segue il tip proposto dalla Matrix. Se hai "
+                         "giocato manualmente una selezione diversa (per errore o scelta "
+                         "tua) e l'esito reale della schedina è diverso, correggilo qui.",
+                    key=f"esito_reale_{doc_id}")
+                scelta_esito_reale_val = opzioni_esito_reale[scelta_esito_reale]
+                if scelta_esito_reale_val != esito_reale_attuale:
+                    if st.button("💾 Salva esito reale", key=f"salva_esito_reale_{doc_id}"):
+                        if aggiorna_esito_reale(doc_id, scelta_esito_reale_val):
+                            st.rerun()
+                        else:
+                            st.error("Errore nel salvataggio — controlla il terminale.")
+
+                if esito_effettivo == "vinta":
                     # La quota della Matrix è quella "pulita" delle
                     # selezioni moltiplicate tra loro: non include eventuali
                     # bonus/maggiorazioni bet365 sulla schedina reale, quindi
