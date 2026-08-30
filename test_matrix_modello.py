@@ -276,6 +276,51 @@ def test_schedina_prob_range_nessuna_combo_in_fascia():
     assert sel == []
 
 
+def _pool_azzardo_sforamento():
+    # Tip di famiglie diverse (1X2/UO/MG/GGNG) cosi' il limite max_same_family
+    # (default 2) non impedisce di accumulare le gambe. M0/M1 hanno l'edge
+    # piu' alto (32.0, quota 4.4) e vengono scelte per prime; dopo quelle
+    # due (quota gia' a 19.36) la prossima migliore per edge sarebbe M2
+    # (28.0, quota 4.0) ma la farebbe schizzare a 77.44 -- ben oltre un
+    # tetto di 50 -- mentre M3, con edge piu' basso (20.0) ma quota piu'
+    # bassa (2.0), la porterebbe solo a 38.72, restando sotto il tetto.
+    return [
+        {"Match": "M0", "Tip": "1",      "Prob": 30.0, "Quota": 4.4, "Edge": 32.0},
+        {"Match": "M1", "Tip": "O2.5",   "Prob": 30.0, "Quota": 4.4, "Edge": 32.0},
+        {"Match": "M2", "Tip": "MG 1-3", "Prob": 32.0, "Quota": 4.0, "Edge": 28.0},
+        {"Match": "M3", "Tip": "Goal",   "Prob": 60.0, "Quota": 2.0, "Edge": 20.0},
+    ]
+
+
+def test_schedina_max_quota_finale_evita_sforamento():
+    # Caso reale del 29/08: 4 gambe a quota ~2.2-4.5 con target_mult=30 hanno
+    # prodotto una quota totale di 101.20 -- ben oltre il target, perche' il
+    # ciclo si ferma SOLO DOPO aver superato la soglia, e l'ultima gamba
+    # (moltiplicativa) puo' farla sballare parecchio. Con max_quota_finale
+    # impostato, una gamba che sfonderebbe il tetto (qui M2) va scartata a
+    # favore della prossima candidata che ci sta sotto (M3), invece di
+    # essere comunque aggiunta.
+    sel, q_tot, prob_tot, usati = costruisci_schedina_dinamica(
+        _pool_azzardo_sforamento(), min_q=1.01, max_q=4.50, target_mult=30.0,
+        max_righe=12, max_quota_finale=50.0)
+    assert q_tot <= 50.0, q_tot
+    scelti = sorted(x["Match"] for x in sel)
+    assert scelti == ["M0", "M1", "M3"], scelti   # M2 scartata, farebbe sforare
+
+
+def test_schedina_senza_max_quota_finale_puo_sforare_target():
+    # Comportamento invariato quando max_quota_finale non e' impostato
+    # (default None): resta la soglia "minima" pre-esistente -- qui M2
+    # viene comunque aggiunta e la quota finale supera abbondantemente
+    # sia il target (30) che i 50 usati nel test sopra.
+    sel, q_tot, prob_tot, usati = costruisci_schedina_dinamica(
+        _pool_azzardo_sforamento(), min_q=1.01, max_q=4.50, target_mult=30.0,
+        max_righe=12)
+    scelti = sorted(x["Match"] for x in sel)
+    assert scelti == ["M0", "M1", "M2"], scelti
+    assert q_tot > 50.0, q_tot
+
+
 # ── devig_1x2 / blend_prob_mercato / applica_blend_mercato_1x2 ─────────────
 
 def test_devig_1x2_somma_100():

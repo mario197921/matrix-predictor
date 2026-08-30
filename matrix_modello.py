@@ -206,7 +206,8 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
                                   max_same_family: int = 2, max_instabili: int = 1,
                                   ordina_per: str = "edge",
                                   min_prob_congiunta: float = None,
-                                  max_prob_congiunta: float = None):
+                                  max_prob_congiunta: float = None,
+                                  max_quota_finale: float = None):
     """max_instabili: numero massimo di selezioni "instabili" (coppe/playoff/
     inter-lega/squadre con poche partite giocate — vedi flag 'Instabile' in
     app.py) che possono finire nella STESSA schedina combo. In una multipla
@@ -223,7 +224,16 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
     QUELLE la cui probabilità congiunta rientra in
     [min_prob_congiunta, max_prob_congiunta] — un compromesso fra le due:
     resta dentro una fascia di sicurezza scelta, ma dentro quella fascia
-    massimizza comunque il valore, invece di ignorarlo del tutto."""
+    massimizza comunque il valore, invece di ignorarlo del tutto.
+
+    max_quota_finale: tetto massimo (opzionale) alla quota totale combinata.
+    Senza questo tetto, il ciclo aggiunge gambe finché q_tot >= target_mult
+    e SOLO A QUEL PUNTO si ferma: essendo un prodotto, l'ultima gamba
+    aggiunta può far sballare il totale ben oltre target_mult (es. da 25 a
+    101 con una sola gamba a quota 4). Se impostato, una gamba candidata
+    che farebbe superare questo tetto viene scartata (si prova la prossima
+    in ordine di edge/prob) invece di essere comunque aggiunta -- cosi' la
+    quota totale finale resta sotto controllo invece di poter esplodere."""
     if escludi_match is None: escludi_match = set()
 
     if ordina_per == "prob_range":
@@ -287,6 +297,12 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
         if (nome not in viste and nome not in escludi_match
                 and fam_cnt.get(fam, 0) < max_same_family
                 and (not instabile or instabili_cnt < max_instabili)):
+            # Se aggiungere questa gamba sfonda il tetto massimo e abbiamo
+            # gia' almeno una selezione, la scartiamo e proviamo la
+            # prossima candidata invece di accettare lo sforamento.
+            if (max_quota_finale is not None and sel
+                    and q_tot * float(item['Quota']) > max_quota_finale):
+                continue
             sel.append(item); viste.add(nome)
             fam_cnt[fam] = fam_cnt.get(fam, 0) + 1
             if instabile: instabili_cnt += 1

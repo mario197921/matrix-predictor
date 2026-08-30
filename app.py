@@ -2106,7 +2106,7 @@ if st.session_state.data_master:
                  "Quote alte — max 10% del capitale."),
             ]
             SCHEDINE_PARAMS = [
-                # campi: pool, min_q, max_q, target_mult, max_match_q, (inutilizzato),
+                # campi: pool, min_q, max_q, target_mult, max_match_q, max_quota_hard,
                 # budget, max_righe, ordina_per, min_prob, max_prob.
                 # Safety: torna alla composizione FLESSIBILE (ordina_per="edge",
                 # come Performance/Azzardo) invece della ricerca a numero fisso
@@ -2121,23 +2121,32 @@ if st.session_state.data_master:
                 # nei giorni con molte partite di coppa erano quasi le uniche voci
                 # a edge positivo, ed escluderle lasciava la Safety senza abbastanza
                 # selezioni per completare la combo.
+                #
+                # max_quota_hard (Azzardo=50): senza un tetto, il target_mult=30
+                # e' solo una soglia MINIMA di arresto -- essendo un prodotto,
+                # l'ultima gamba aggiunta puo' far sballare il totale ben oltre
+                # (es. e' successo il 29/08: 4 gambe -> quota 101.20, molto piu'
+                # "azzardo" del previsto). Con max_quota_hard=50 una gamba che
+                # farebbe sforare i 50 viene scartata a favore della prossima a
+                # miglior edge, tenendo la quota finale sotto controllo.
                 (pool_s := kp,
-                 1.12, 1.50, 2.0,  2.0,  set(),  bud_s, 3, "edge",
+                 1.12, 1.50, 2.0,  2.0,  None,  bud_s, 3, "edge",
                  None, None),
                 (kp,   1.51, 2.20, 5.0,  2.20, None,  bud_p, 12, "edge", None, None),
-                (kp,   2.21, 4.50, 30.0, 4.50, None,  bud_a, 12, "edge", None, None),
+                (kp,   2.21, 4.50, 30.0, 4.50, 50.0,  bud_a, 12, "edge", None, None),
             ]
 
             escludi_prev = set()
             for idx, (nome, emoji, cls, bg_col, acc_col, nota) in enumerate(SCHEDINE_CFG):
-                (pool_f, min_q, max_q, target, mq, _, budget, max_righe_f,
+                (pool_f, min_q, max_q, target, mq, max_quota_hard, budget, max_righe_f,
                  ordina_per_f, min_prob_f, max_prob_f) = SCHEDINE_PARAMS[idx]
                 escludi = escludi_prev
 
                 slip, q_tot, prob, usate = costruisci_schedina_dinamica(
                     pool_f, min_q, max_q, target, escludi_match=escludi, max_match_q=mq,
                     max_righe=max_righe_f, ordina_per=ordina_per_f,
-                    min_prob_congiunta=min_prob_f, max_prob_congiunta=max_prob_f)
+                    min_prob_congiunta=min_prob_f, max_prob_congiunta=max_prob_f,
+                    max_quota_finale=max_quota_hard)
                 escludi_prev = usate
                 vincita_tot = budget * q_tot
 
