@@ -732,6 +732,7 @@ from matrix_modello import (
     calcola_tutti_i_mercati, get_quota_finale,
     calcola_edge_pct, kelly_fraction, semplifica_nome,
     costruisci_schedina_dinamica, applica_blend_mercato_1x2, blend_prior_stagione,
+    get_family,
 )
 from matrix_db import (
     salva_schedina, leggi_storico_schedine, aggiorna_esito_schedina,
@@ -1586,6 +1587,56 @@ with st.expander("📊 Storico Schedine", expanded=False):
         with mcol2:
             _mostra_metriche(storico_reale, "💶 Scommesse reali (soldi effettivamente giocati)",
                               mostra_pnl=True)
+
+        # ─── PERFORMANCE PER TIPO DI MERCATO ───────────────────────────
+        # Traccia, gamba per gamba (su TUTTE le proposte Matrix, non solo
+        # quelle giocate reali -- serve il campione più ampio possibile per
+        # capire se il modello è affidabile su un mercato), il win rate per
+        # famiglia di mercato (1X2, Under/Over, Multigol, Goal/NoGoal...).
+        # Nato da un'osservazione dell'utente il 30/08: le gambe 1X2 dirette
+        # erano andate molto peggio delle Under/Over quel giorno -- coerente
+        # col backtest storico (mercato 1X2 meno redditizio anche a edge
+        # positivo). Un solo giorno non basta a dimostrare nulla: questa
+        # tabella accumula dati nel tempo per vedere se il pattern regge.
+        NOMI_FAMIGLIA = {
+            "1X2": "1X2 (1/X/2/1X/X2/12)", "UO": "Under/Over", "MG": "Multigol",
+            "GGNG": "Goal/NoGoal", "COMBO": "Combo (1+Over, ecc.)",
+            "RE": "Risultato Esatto", "HTFT": "HT/FT", "PD": "Pari/Dispari",
+            "SPECIAL": "Angoli/Cartellini", "ALTRO": "Altro",
+        }
+        famiglia_stats = {}
+        for r in storico_ordinato:
+            for s in r.get("selezioni", []):
+                tip_s = s.get("tip") or s.get("Tip") or ""
+                if not tip_s:
+                    continue
+                fam = get_family(tip_s)
+                eg = s.get("esito_gamba")
+                st_fam = famiglia_stats.setdefault(fam, {"vinte": 0, "perse": 0, "attesa": 0})
+                if eg == "vinta": st_fam["vinte"] += 1
+                elif eg == "persa": st_fam["perse"] += 1
+                else: st_fam["attesa"] += 1
+
+        righe_famiglia = []
+        for fam, st_fam in famiglia_stats.items():
+            concluse = st_fam["vinte"] + st_fam["perse"]
+            righe_famiglia.append({
+                "Mercato": NOMI_FAMIGLIA.get(fam, fam),
+                "Vinte": st_fam["vinte"],
+                "Perse": st_fam["perse"],
+                "In attesa": st_fam["attesa"],
+                "Win rate": f"{(st_fam['vinte']/concluse*100):.1f}%" if concluse else "—",
+                "_concluse": concluse,
+            })
+        if righe_famiglia:
+            st.markdown("**📈 Performance per tipo di mercato** (tutte le proposte Matrix, gamba per gamba)")
+            df_famiglia = (pd.DataFrame(righe_famiglia)
+                           .sort_values("_concluse", ascending=False)
+                           .drop(columns="_concluse"))
+            st.dataframe(df_famiglia, hide_index=True, use_container_width=True)
+            st.caption("Campioni piccoli (poche decine di gambe concluse) vanno letti con cautela — "
+                       "serve accumulare più giorni prima di trarre conclusioni sull'affidabilità "
+                       "di un mercato specifico.")
 
     st.markdown("---")
 
