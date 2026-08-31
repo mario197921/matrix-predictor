@@ -775,17 +775,6 @@ MASTER_LEAGUES["🇵🇪 Liga 1 Perù"]             = _risolvi_id_per_nome("Peru
 MASTER_LEAGUES["🇵🇾 División Profesional PY"] = _risolvi_id_per_nome("Paraguay", "Division Profesional", None)
 MASTER_LEAGUES["🇺🇸 MLS"]                     = _risolvi_id_per_nome("USA", "Major League Soccer", None)
 
-# Rimuove le leghe la cui risoluzione ID è fallita (fallback None qui sopra):
-# meglio non mostrarle per un giorno che rischiare di duplicare/etichettare
-# male le partite di un'altra lega con lo stesso ID.
-# NB: modifica il dict IN PLACE (non un semplice riassegnamento) perché
-# MASTER_LEAGUES è importato per riferimento anche da matrix_api.py
-# (get_active_leagues) -- un `MASTER_LEAGUES = {...}` qui creerebbe un
-# dict NUOVO visibile solo dentro app.py, lasciando matrix_api.py con la
-# vecchia versione non filtrata.
-for _lega_non_risolta in [k for k, v in MASTER_LEAGUES.items() if v is None]:
-    del MASTER_LEAGUES[_lega_non_risolta]
-
 # ==========================================
 # 🏆 AUTO-DISCOVERY COPPE NAZIONALI
 # ==========================================
@@ -816,6 +805,32 @@ MASTER_LEAGUES["🇹🇷 Türkiye Kupası"]         = trova_id_coppa("Turkey",  
 MASTER_LEAGUES["🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scottish Cup"]          = trova_id_coppa("Scotland", "Scottish Cup", 283)
 MASTER_LEAGUES["🇨🇭 Schweizer Cup"]          = trova_id_coppa("Switzerland", "Schweizer Cup", 208)
 MASTER_LEAGUES["🇦🇹 ÖFB Cup"]               = trova_id_coppa("Austria",  "ÖFB Cup", 219)
+
+# ==========================================
+# 🧹 PULIZIA FINALE: leghe non risolte o in collisione
+# ==========================================
+# Il 30/08 (e di nuovo il 31/08, dopo il primo fix) una partita del Perù è
+# comparsa etichettata "Scottish Prem.": la ricerca automatica per Liga 1
+# Perù/División Profesional PY/MLS può fallire E CADERE COMUNQUE su un ID
+# che coincide con un'altra lega (fosse anche solo per una coincidenza
+# dell'API), e lo stesso rischio esiste per QUALSIASI altro fallback
+# hardcoded in questo file mai verificato uno per uno (es. Svenska Cupen
+# fallback=144 = stesso ID della Pro League belga). Il fix mirato sul solo
+# Perù non basta: risolve il caso specifico ma non il rischio strutturale.
+#
+# Invece di continuare a rincorrere le collisioni una per una, ora un
+# controllo generico a fine configurazione: DOPO aver risolto tutte le
+# leghe (statiche + auto-discovery), se due nomi diversi finiscono con lo
+# stesso ID (per qualunque motivo, non solo i 3 casi già noti), ENTRAMBI
+# vengono esclusi dalla lista di quel giorno. Non sappiamo quale dei due
+# sia quello "giusto" senza verificarlo a mano sull'API -- meglio non
+# mostrare nessuno dei due che rischiare di mischiarne le partite.
+_conteggio_id = {}
+for _v in MASTER_LEAGUES.values():
+    _conteggio_id[_v] = _conteggio_id.get(_v, 0) + 1
+for _nome_lega in [k for k, v in MASTER_LEAGUES.items()
+                    if v is None or _conteggio_id.get(v, 0) > 1]:
+    del MASTER_LEAGUES[_nome_lega]
 
 # Le coppe nordiche usano anno solare come stagione
 LEGHE_ANNO_SOLARE.update({
