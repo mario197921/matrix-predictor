@@ -202,11 +202,28 @@ def aggiorna_esito_schedina(doc_id: str, esito: str) -> bool:
 def controlla_e_aggiorna_risultati() -> dict:
     """Controlla tutte le schedine ancora 'in_attesa' su Firestore: per
     ognuna, recupera il risultato reale di ogni partita coinvolta (via
-    fixture_id salvato al momento della generazione) e valuta se ogni
-    selezione ha vinto o perso. Aggiorna l'esito solo quando TUTTE le
-    partite della schedina sono finite e TUTTE le selezioni sono
-    automaticamente valutabili -- altrimenti la lascia 'in_attesa' (potra'
-    sempre essere marcata a mano dallo Storico).
+    fixture_id salvato al momento della generazione) e valuta OGNI
+    selezione indipendentemente dalle altre.
+
+    A differenza della versione precedente (tutto-o-niente: aspettava che
+    OGNI gamba fosse finita e valutabile prima di scrivere qualsiasi cosa),
+    questa:
+    1. Appena una gamba risulta PERSA, l'intera schedina è persa per
+       definizione di multipla -- non serve aspettare le gambe più lente
+       (partite non ancora iniziate, giorni dopo) per saperlo.
+    2. Salva l'esito_gamba di ogni selezione non appena diventa noto, anche
+       se la schedina nel complesso resta 'in_attesa' -- così le statistiche
+       per tipo di mercato ("Performance per tipo di mercato" nello
+       Storico) si popolano gamba per gamba via via che le partite
+       finiscono, invece di aspettare che l'ULTIMA gamba di uno schedone
+       da 12 selezioni finisca prima di contare le altre 11 già decise.
+
+    Una gamba senza fixture_id, o il cui mercato non è auto-valutabile
+    (es. Angoli/Cartellini) anche a partita finita, resta permanentemente
+    irrisolvibile in automatico: la schedina resta 'in_attesa' (potrà
+    sempre essere marcata a mano dallo Storico) mentre la conta come
+    'non_valutabili' invece che 'ancora_in_attesa', per distinguere "serve
+    ancora tempo" da "serve una tua occhiata".
 
     Ritorna un riepilogo: {'vinte': int, 'perse': int, 'ancora_in_attesa':
     int, 'non_valutabili': int} -- utile per mostrare un feedback nell'app.
@@ -232,50 +249,76 @@ def controlla_e_aggiorna_risultati() -> dict:
             riepilogo["non_valutabili"] += 1
             continue
 
-        esiti_gambe = []
-        tutte_finite = True
-        tutte_valutabili = True
+        selezioni_aggiornate = []
+        qualche_persa = False
+        qualche_bloccata = False    # permanentemente non valutabile (no fixture_id, o mercato non gradabile a partita finita)
+        qualche_in_sospeso = False  # ancora valutabile, solo non ancora finita
+        cambiato_qualcosa = False
 
         for sel in selezioni:
-            fixture_id = sel.get("fixture_id")
-            if fixture_id is None:
-                tutte_valutabili = False
-                break
+            eg_precedente = sel.get("esito_gamba")
+            eg_nuovo = eg_precedente if eg_precedente in ("vinta", "persa") else None
 
-            if fixture_id not in cache_risultati:
-                cache_risultati[fixture_id] = scarica_risultato_partita(fixture_id)
-            risultato = cache_risultati[fixture_id]
+            if eg_nuovo is None:
+                fixture_id = sel.get("fixture_id")
+                if fixture_id is None:
+                    qualche_bloccata = True
+                else:
+                    if fixture_id not in cache_risultati:
+                        cache_risultati[fixture_id] = scarica_risultato_partita(fixture_id)
+                    risultato = cache_risultati[fixture_id]
+                    if risultato is None or not risultato.get("finita"):
+                        qualche_in_sospeso = True
+                    else:
+                        esito_bool = valuta_esito_tip(
+                            sel["tip"], risultato["gc_ft"], risultato["gt_ft"],
+                            risultato.get("gc_ht"), risultato.get("gt_ht"))
+                        if esito_bool is None:
+                            qualche_bloccata = True   # partita finita ma mercato non gradabile
+                        else:
+                            eg_nuovo = "vinta" if esito_bool else "persa"
 
-            if risultato is None or not risultato.get("finita"):
-                tutte_finite = False
-                break
+            if eg_nuovo != eg_precedente:
+                cambiato_qualcosa = True
 
-            esito_gamba = valuta_esito_tip(
-                sel["tip"], risultato["gc_ft"], risultato["gt_ft"],
-                risultato.get("gc_ht"), risultato.get("gt_ht"))
-            if esito_gamba is None:
-                tutte_valutabili = False
-                break
-            esiti_gambe.append(esito_gamba)
+            sel_agg = dict(sel)
+            if eg_nuovo is not None:
+                sel_agg["esito_gamba"] = eg_nuovo
+            selezioni_aggiornate.append(sel_agg)
 
-        if not tutte_valutabili:
-            riepilogo["non_valutabili"] += 1
+            if eg_nuovo == "persa":
+                qualche_persa = True
+
+        if qualche_persa:
+            esito_finale = "persa"
+        elif qualche_in_sospeso:
+            esito_finale = "in_attesa"
+        elif qualche_bloccata:
+            esito_finale = "in_attesa"   # non puo' diventare 'vinta' in automatico
+        else:
+            esito_finale = "vinta"       # tutte le gambe valutate e nessuna persa
+
+        if esito_finale == "in_attesa" and not cambiato_qualcosa:
+            # Nessun progresso rispetto all'ultimo controllo: non serve scrivere.
+            if qualche_bloccata:
+                riepilogo["non_valutabili"] += 1
+            else:
+                riepilogo["ancora_in_attesa"] += 1
             continue
-        if not tutte_finite:
-            riepilogo["ancora_in_attesa"] += 1
-            continue
 
-        esito_finale = "vinta" if all(esiti_gambe) else "persa"
-        selezioni_aggiornate = [
-            {**sel, "esito_gamba": "vinta" if eg else "persa"}
-            for sel, eg in zip(selezioni, esiti_gambe)
-        ]
         try:
             db.collection("schedine").document(doc.id).update({
                 "esito": esito_finale,
                 "selezioni": selezioni_aggiornate,
             })
-            riepilogo[esito_finale == "vinta" and "vinte" or "perse"] += 1
+            if esito_finale == "vinta":
+                riepilogo["vinte"] += 1
+            elif esito_finale == "persa":
+                riepilogo["perse"] += 1
+            elif qualche_bloccata:
+                riepilogo["non_valutabili"] += 1
+            else:
+                riepilogo["ancora_in_attesa"] += 1
         except Exception as e:
             print(f"[matrix_db] Errore aggiornamento esito/gambe per '{doc.id}': "
                   f"{type(e).__name__}: {e}", file=sys.stderr)
