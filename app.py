@@ -778,7 +778,13 @@ MASTER_LEAGUES["🇺🇸 MLS"]                     = _risolvi_id_per_nome("USA",
 # Rimuove le leghe la cui risoluzione ID è fallita (fallback None qui sopra):
 # meglio non mostrarle per un giorno che rischiare di duplicare/etichettare
 # male le partite di un'altra lega con lo stesso ID.
-MASTER_LEAGUES = {k: v for k, v in MASTER_LEAGUES.items() if v is not None}
+# NB: modifica il dict IN PLACE (non un semplice riassegnamento) perché
+# MASTER_LEAGUES è importato per riferimento anche da matrix_api.py
+# (get_active_leagues) -- un `MASTER_LEAGUES = {...}` qui creerebbe un
+# dict NUOVO visibile solo dentro app.py, lasciando matrix_api.py con la
+# vecchia versione non filtrata.
+for _lega_non_risolta in [k for k, v in MASTER_LEAGUES.items() if v is None]:
+    del MASTER_LEAGUES[_lega_non_risolta]
 
 # ==========================================
 # 🏆 AUTO-DISCOVERY COPPE NAZIONALI
