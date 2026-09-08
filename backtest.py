@@ -68,6 +68,11 @@ QUOTE_COLONNE_PRIORITA = [
     ("PSH", "PSD", "PSA"),
     ("AvgH", "AvgD", "AvgA"),
 ]
+QUOTE_OU25_COLONNE_PRIORITA = [
+    ("B365>2.5", "B365<2.5"),
+    ("P>2.5", "P<2.5"),
+    ("Avg>2.5", "Avg<2.5"),
+]
 
 
 def carica_csv(cartella: str) -> pd.DataFrame:
@@ -101,6 +106,13 @@ def trova_colonne_quote(df: pd.DataFrame):
     for h, d, a in QUOTE_COLONNE_PRIORITA:
         if {h, d, a}.issubset(df.columns):
             return h, d, a
+    return None
+
+
+def trova_colonne_quote_ou25(df: pd.DataFrame):
+    for over, under in QUOTE_OU25_COLONNE_PRIORITA:
+        if {over, under}.issubset(df.columns):
+            return over, under
     return None
 
 
@@ -181,37 +193,67 @@ def esegui_backtest(cartella: str):
             esito_ou25 = "O2.5" if (gf_c + gf_t) > 2.5 else "U2.5"
             esito_gg = "Goal" if (gf_c > 0 and gf_t > 0) else "NoGoal"
 
+            cols_quote = trova_colonne_quote(df)
+            quote_reali = {}
+            if cols_quote:
+                h, d, a = cols_quote
+                if pd.notna(riga.get(h)): quote_reali["1"] = float(riga[h])
+                if pd.notna(riga.get(d)): quote_reali["X"] = float(riga[d])
+                if pd.notna(riga.get(a)): quote_reali["2"] = float(riga[a])
+
+            cols_quote_ou25 = trova_colonne_quote_ou25(df)
+            quote_reali_ou = {}
+            if cols_quote_ou25:
+                over_c, under_c = cols_quote_ou25
+                if pd.notna(riga.get(over_c)): quote_reali_ou["O2.5"] = float(riga[over_c])
+                if pd.notna(riga.get(under_c)): quote_reali_ou["U2.5"] = float(riga[under_c])
+
             for mercato, esito_reale in [("1X2", esito_1x2), ("OU25", esito_ou25), ("GGNG", esito_gg)]:
                 opzioni = {"1X2": ["1", "X", "2"], "OU25": ["U2.5", "O2.5"],
                            "GGNG": ["Goal", "NoGoal"]}[mercato]
                 for opz in opzioni:
+                    avvenuto = 1 if opz == esito_reale else 0
+                    # Quota reale disponibile per 1X2 e OU25 nei CSV
+                    # football-data.co.uk standard (GGNG non ha colonne quote
+                    # in questo formato). Quando c'e', calcoliamo anche il P/L
+                    # "puntata alla cieca su questa fascia di probabilita',
+                    # quota reale, nessun calcolo di edge" -- serve a
+                    # rispondere separatamente da "il modello e' ben
+                    # calibrato?" alla domanda "avrebbe fatto guadagnare?".
+                    if mercato == "1X2":
+                        quota_r = quote_reali.get(opz)
+                    elif mercato == "OU25":
+                        quota_r = quote_reali_ou.get(opz)
+                    else:
+                        quota_r = None
+                    pl_flat_puro = ((quota_r - 1) if avvenuto else -1) if quota_r else None
                     valutazioni.append({
                         "mercato": mercato, "tip": opz,
                         "prob_modello": tips[opz],
-                        "avvenuto": 1 if opz == esito_reale else 0,
+                        "avvenuto": avvenuto,
+                        "quota_reale": quota_r,
+                        "pl_flat_puro": pl_flat_puro,
                     })
 
-            cols_quote = trova_colonne_quote(df)
-            if cols_quote:
-                h, d, a = cols_quote
-                quote_reali = {}
-                if pd.notna(riga.get(h)): quote_reali["1"] = float(riga[h])
-                if pd.notna(riga.get(d)): quote_reali["X"] = float(riga[d])
-                if pd.notna(riga.get(a)): quote_reali["2"] = float(riga[a])
-                for tip in ["1", "X", "2"]:
-                    if tip not in quote_reali:
+            for mercato_e, tips_quote, opzioni_e, esito_e in [
+                ("1X2", quote_reali, ["1", "X", "2"], esito_1x2),
+                ("OU25", quote_reali_ou, ["U2.5", "O2.5"], esito_ou25),
+            ]:
+                for tip in opzioni_e:
+                    if tip not in tips_quote:
                         continue
-                    quota = quote_reali[tip]
+                    quota = tips_quote[tip]
                     prob = tips[tip]
                     edge = calcola_edge_pct(prob, quota)
                     if edge > 0 and quota <= QUOTA_CAP:
-                        vinta = 1 if tip == esito_1x2 else 0
+                        vinta = 1 if tip == esito_e else 0
                         bilancio_flat += (quota - 1) if vinta else -1
                         k = kelly_fraction(prob, quota)
                         puntata_kelly = budget_kelly * k
                         bilancio_kelly += puntata_kelly * ((quota - 1) if vinta else -1)
                         puntate.append({
                             "data": riga["Date"], "match": f"{casa} vs {ospite}",
+                            "mercato": mercato_e,
                             "tip": tip, "prob": round(prob, 1), "quota": quota,
                             "edge_pct": round(edge, 1), "vinta": bool(vinta),
                         })
@@ -244,10 +286,34 @@ def report_calibrazione(val: pd.DataFrame):
     ).reset_index()
     tab["freq_reale"] = (tab["freq_reale"] * 100).round(1)
     tab["prob_media_modello"] = tab["prob_media_modello"].round(1)
+
+    # ROI "puntata pura per fascia di probabilita'" (quota reale, NESSUN
+    # calcolo di edge -- risponde a "punterei alla cieca sulla fascia X,
+    # avrei guadagnato?" separatamente dalla domanda "il modello e' ben
+    # calibrato?" sopra). Disponibile solo dove c'e' una quota reale nel
+    # CSV (oggi solo 1X2).
+    con_quota = val.dropna(subset=["pl_flat_puro"])
+    if not con_quota.empty:
+        roi_tab = con_quota.groupby(["mercato", "bin"]).agg(
+            n_con_quota=("pl_flat_puro", "size"),
+            roi_puro_pct=("pl_flat_puro", "mean"),
+        ).reset_index()
+        roi_tab["roi_puro_pct"] = (roi_tab["roi_puro_pct"] * 100).round(1)
+        tab = tab.merge(roi_tab, on=["mercato", "bin"], how="left")
+
     for mercato in tab["mercato"].unique():
         print(f"\n-- {mercato} --")
         sub = tab[tab["mercato"] == mercato].sort_values("bin")
-        print(sub[["bin", "n", "prob_media_modello", "freq_reale"]].to_string(index=False))
+        colonne = ["bin", "n", "prob_media_modello", "freq_reale"]
+        if "roi_puro_pct" in sub.columns:
+            colonne += ["n_con_quota", "roi_puro_pct"]
+        print(sub[colonne].to_string(index=False))
+    if "roi_puro_pct" in tab.columns:
+        print("\n'roi_puro_pct' = P/L medio per scommessa (%) puntando FLAT su ogni "
+              "partita di quella fascia con la quota reale del CSV, SENZA alcun filtro "
+              "di edge -- confrontalo con il ROI sui pick 'edge positivo' qui sotto per "
+              "vedere se il filtro edge aiuta o peggiora rispetto a puntare per pura "
+              "probabilita'.")
 
     brier = ((val["prob_modello"] / 100.0 - val["avvenuto"]) ** 2).mean()
     print(f"\nBrier score complessivo (0=perfetto, 0.25=indovinare a caso su binario "
@@ -256,7 +322,7 @@ def report_calibrazione(val: pd.DataFrame):
 
 def report_roi(bets: pd.DataFrame, bilancio_flat: float, bilancio_kelly: float, budget_kelly: float):
     print("\n" + "═" * 70)
-    print(f"ROI SUI PICK CON EDGE POSITIVO (1X2, quote reali del CSV, quota <= {QUOTA_CAP})")
+    print(f"ROI SUI PICK CON EDGE POSITIVO (1X2 + OU25, quote reali del CSV, quota <= {QUOTA_CAP})")
     print("═" * 70)
     if bets.empty:
         print("Nessuna scommessa con Edge>0 trovata (o quote non disponibili nei CSV).")
@@ -265,11 +331,45 @@ def report_roi(bets: pd.DataFrame, bilancio_flat: float, bilancio_kelly: float, 
     win_rate = bets["vinta"].mean() * 100
     print(f"Scommesse piazzate: {n}  |  Win rate: {win_rate:.1f}%  |  "
           f"Edge medio dichiarato: {bets['edge_pct'].mean():.1f}%")
+
+    if "mercato" in bets.columns:
+        for mercato in sorted(bets["mercato"].unique()):
+            sub_m = bets[bets["mercato"] == mercato]
+            pl_m = sub_m.apply(lambda r: (r["quota"] - 1) if r["vinta"] else -1, axis=1)
+            print(f"  {mercato}: {len(sub_m)} scommesse, win rate {sub_m['vinta'].mean()*100:.1f}%, "
+                  f"ROI flat {pl_m.mean()*100:+.1f}%")
     print(f"\nStake flat (1 unità a scommessa): P/L = {bilancio_flat:+.2f} unità "
           f"({bilancio_flat / n * 100:+.1f}% ROI per scommessa)")
     print(f"Stake Kelly (8%, bankroll iniziale {budget_kelly:.0f}): "
           f"P/L = {bilancio_kelly:+.2f}  "
           f"({bilancio_kelly / budget_kelly * 100:+.1f}% sul bankroll iniziale)")
+
+    # Dove si concentrano le perdite? Fascia di probabilità dichiarata SOLO
+    # sui pick edge-positivo (non su tutte le partite come la calibrazione
+    # sopra) -- risponde a "basterebbe alzare la soglia minima di
+    # probabilità per salvare il criterio edge, invece di buttarlo via?"
+    b = bets.copy()
+    b["pl"] = b.apply(lambda r: (r["quota"] - 1) if r["vinta"] else -1, axis=1)
+    b["bin"] = (b["prob"] // 10 * 10).clip(0, 90)
+    gruppo = ["mercato", "bin"] if "mercato" in b.columns else ["bin"]
+    sub = b.groupby(gruppo).agg(
+        n=("pl", "size"), win_rate_pct=("vinta", "mean"), roi_pct=("pl", "mean"),
+    ).reset_index()
+    sub["win_rate_pct"] = (sub["win_rate_pct"] * 100).round(1)
+    sub["roi_pct"] = (sub["roi_pct"] * 100).round(1)
+    print("\nDettaglio pick edge-positivo per fascia di probabilità dichiarata:")
+    print(sub.to_string(index=False))
+    for mercato in (sorted(bets["mercato"].unique()) if "mercato" in bets.columns else [None]):
+        base = bets[bets["mercato"] == mercato] if mercato else bets
+        etichetta = f" ({mercato})" if mercato else ""
+        for soglia in (40, 50, 60):
+            ristretto = base[base["prob"] >= soglia]
+            if ristretto.empty:
+                continue
+            pl_ristretto = ristretto.apply(lambda r: (r["quota"] - 1) if r["vinta"] else -1, axis=1)
+            print(f"  → Solo pick con prob >= {soglia}%{etichetta}: {len(ristretto)} scommesse, "
+                  f"win rate {ristretto['vinta'].mean()*100:.1f}%, "
+                  f"ROI flat {pl_ristretto.mean()*100:+.1f}%")
     print("\n⚠️  Su un solo campione storico limitato questi numeri sono indicativi, "
           "non una prova statistica — vanno letti come 'il segno è quello giusto?' "
           "più che come rendimento atteso garantito.")
