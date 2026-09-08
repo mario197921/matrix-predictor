@@ -623,3 +623,27 @@ def test_report_conta_override_esito_reale():
     ]
     report = costruisci_report_analitico(storico)
     assert report["riepilogo_reale"]["n_override_esito_reale"] == 1
+
+
+def test_report_saldo_attuale_somma_budget_iniziale_e_saldo():
+    # Budget iniziale di 10€, una schedina reale che ne perde 1 -> saldo
+    # P&L -1€, saldo attuale 10 - 1 = 9€.
+    storico = [
+        _schedina("SAFETY", "2026-09-01", "persa", [_sel("1", 1.3, "Serie A")],
+                  reale=True, puntata=1.0),
+    ]
+    report = costruisci_report_analitico(storico, budget_iniziale=10.0)
+    riep = report["riepilogo_reale"]
+    assert riep["budget_iniziale"] == 10.0
+    assert riep["saldo_reale_tot"] == -1.0
+    assert riep["saldo_attuale"] == 9.0
+
+
+def test_report_budget_iniziale_default_zero_non_rompe_i_test_precedenti():
+    storico = [
+        _schedina("SAFETY", "2026-09-01", "vinta", [_sel("1", 2.0, "Serie A")],
+                  reale=True, puntata=2.0, vincita=8.49),
+    ]
+    report = costruisci_report_analitico(storico)
+    assert report["riepilogo_reale"]["budget_iniziale"] == 0.0
+    assert report["riepilogo_reale"]["saldo_attuale"] == pytest.approx(6.49, abs=0.01)

@@ -487,7 +487,7 @@ def _esito_reale_effettivo_record(r: dict):
     return r.get("esito_reale") or r.get("esito")
 
 
-def costruisci_report_analitico(storico: list) -> dict:
+def costruisci_report_analitico(storico: list, budget_iniziale: float = 0.0) -> dict:
     """Funzione pura (nessuna chiamata di rete): riceve la lista di schedine
     gia' lette da Firestore (leggi_storico_schedine) e produce un unico
     dizionario con tutti gli incroci utili a capire se/dove la Matrix ha un
@@ -509,8 +509,14 @@ def costruisci_report_analitico(storico: list) -> dict:
     - andamento_giornaliero: lista ordinata per data con vinte/perse
       (calcolo Matrix) e saldo reale del giorno.
     - riepilogo_reale: puntato/saldo/ROI complessivi sulle scommesse reali,
-      e quante schedine hanno un esito_reale diverso da quello calcolato
-      (indicatore di quanto spesso l'esecuzione reale diverge dal tip).
+      saldo attuale (budget_iniziale + saldo), e quante schedine hanno un
+      esito_reale diverso da quello calcolato (indicatore di quanto spesso
+      l'esecuzione reale diverge dal tip).
+
+    'budget_iniziale' e' il capitale di partenza (soldi reali messi nel
+    conto prima di iniziare a giocare, non il budget di ripartizione
+    60/30/10 tra le schedine): di default 0.0 cosi' la funzione resta
+    utilizzabile anche senza saperlo (es. nei test).
     """
     fascia_stats = {}
     famiglia_stats = {}
@@ -601,8 +607,10 @@ def costruisci_report_analitico(storico: list) -> dict:
         ],
         "riepilogo_reale": {
             "n_schedine_reali": n_schedine_reali,
+            "budget_iniziale": round(budget_iniziale, 2),
             "puntato_reale_tot": round(puntato_reale_tot, 2),
             "saldo_reale_tot": round(saldo_reale_tot, 2),
+            "saldo_attuale": round(budget_iniziale + saldo_reale_tot, 2),
             "roi_%": round(saldo_reale_tot / puntato_reale_tot * 100, 1) if puntato_reale_tot else None,
             "n_override_esito_reale": n_override_esito_reale,
         },

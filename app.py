@@ -740,6 +740,13 @@ from matrix_db import (
     aggiorna_puntata_reale, aggiorna_vincita_reale, aggiorna_esito_reale,
 )
 
+# Budget con cui si e' cominciato a giocare (soldi reali, non il budget di
+# ripartizione 60/30/10 tra le schedine). Serve per calcolare il saldo
+# ATTUALE (budget iniziale + P&L delle scommesse reali), non solo il
+# guadagno/perdita netta -- fisso qui perche' non cambia mai a meno di
+# aggiungere altri soldi al conto, nel qual caso va aggiornato a mano.
+BUDGET_INIZIALE = 10.0
+
 # ==========================================
 # 🔒 PAGINA NASCOSTA: REPORT ANALITICO (per l'analisi strategica, non per
 # l'uso quotidiano) -- raggiungibile solo con lo specifico parametro nella
@@ -760,7 +767,7 @@ if st.query_params.get("vista") == "report_analitico_interno":
     if not _storico_report:
         st.warning("Nessuna schedina trovata su Firebase (o connessione non raggiungibile).")
     else:
-        _report = costruisci_report_analitico(_storico_report)
+        _report = costruisci_report_analitico(_storico_report, budget_iniziale=BUDGET_INIZIALE)
         _report_json = _json.dumps(_report, ensure_ascii=False, indent=2)
         st.success(f"Report generato su {_report['n_schedine_totali']} schedine.")
         st.download_button("📥 Scarica report analitico (JSON)", data=_report_json,
@@ -1624,12 +1631,15 @@ with st.expander("📊 Storico Schedine", expanded=False):
                             saldo += p * (r.get("quota_totale") or 0) - p
                     elif _esito_reale_effettivo(r) == "persa":
                         saldo -= p
+                saldo_attuale = BUDGET_INIZIALE + saldo
                 colore = "#22c55e" if saldo >= 0 else "#ef4444"
                 segno = "+" if saldo >= 0 else ""
                 st.markdown(
                     f'<div style="font-size:0.85rem;margin-top:2px;">'
                     f'💰 Puntato: <b>{puntato:.2f}€</b> &nbsp;·&nbsp; '
-                    f'Saldo: <b style="color:{colore};">{segno}{saldo:.2f}€</b></div>',
+                    f'P&L: <b style="color:{colore};">{segno}{saldo:.2f}€</b> &nbsp;·&nbsp; '
+                    f'Saldo attuale: <b>{saldo_attuale:.2f}€</b> '
+                    f'<span style="color:var(--text2);">(partito da {BUDGET_INIZIALE:.2f}€)</span></div>',
                     unsafe_allow_html=True)
 
         mcol1, mcol2 = st.columns(2)
