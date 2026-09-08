@@ -10,12 +10,14 @@ Uso:
 
 import math
 
+import pytest
+
 from matrix_modello import (
     calcola_prob_poisson, calcola_tutti_i_mercati, get_quota_finale,
     calcola_edge_pct, kelly_fraction, semplifica_nome, get_family,
     costruisci_schedina_dinamica, devig_1x2, blend_prob_mercato,
     applica_blend_mercato_1x2, blend_prior_stagione,
-    costruisci_record_schedina, valuta_esito_tip,
+    costruisci_record_schedina, valuta_esito_tip, costruisci_report_analitico,
 )
 
 
@@ -537,3 +539,87 @@ if __name__ == "__main__":
             print(f"ERROR {t.__name__}: {type(e).__name__}: {e}")
     print(f"\n{ok} passati, {fail} falliti su {ok + fail} test totali.")
     raise SystemExit(1 if fail else 0)
+
+
+# ── costruisci_report_analitico ─────────────────────────────────────────────
+
+def _sel(tip, quota, league, esito_gamba=None):
+    s = {"match": "A vs B", "tip": tip, "prob_dichiarata": 50.0,
+         "quota": quota, "edge": 5.0, "league": league, "fixture_id": 1}
+    if esito_gamba is not None:
+        s["esito_gamba"] = esito_gamba
+    return s
+
+
+def _schedina(nome, data, esito, selezioni, reale=False, puntata=None, vincita=None,
+              esito_reale=None):
+    r = {"nome": nome, "data": data, "esito": esito, "selezioni": selezioni,
+         "quota_totale": 2.0}
+    if reale:
+        r["giocata_reale"] = True
+    if puntata is not None:
+        r["puntata_reale"] = puntata
+    if vincita is not None:
+        r["vincita_reale"] = vincita
+    if esito_reale is not None:
+        r["esito_reale"] = esito_reale
+    return r
+
+
+def test_report_fascia_quota_calcola_win_rate_e_edge_vs_implicita():
+    # 2 gambe a quota 1.30 (fascia "1.30 - 1.49"): 1 vinta, 1 persa -> win
+    # rate 50%, quota implicita media = 1/1.30 = 76.9%, quindi edge molto
+    # negativo (il modello NON batte la quota in questa fascia nel campione).
+    storico = [
+        _schedina("SAFETY", "2026-09-01", "vinta",
+                  [_sel("1", 1.30, "Serie A", esito_gamba="vinta")]),
+        _schedina("SAFETY", "2026-09-02", "persa",
+                  [_sel("2", 1.30, "Serie A", esito_gamba="persa")]),
+    ]
+    report = costruisci_report_analitico(storico)
+    fascia = report["per_fascia_quota"]["1.30 - 1.49"]
+    assert fascia["vinte"] == 1 and fascia["perse"] == 1
+    assert fascia["win_rate_%"] == 50.0
+    assert fascia["prob_implicita_media_%"] == 76.9
+    assert fascia["edge_vs_implicita_%"] == pytest.approx(-26.9, abs=0.1)
+
+
+def test_report_numero_gambe_distingue_singole_da_multiple():
+    # 1 schedina da 1 gamba vinta, 2 schedine da 3 gambe (una vinta, una
+    # persa) -- il conteggio per numero di gambe deve tenerle separate.
+    storico = [
+        _schedina("SAFETY", "2026-09-01", "vinta", [_sel("1", 1.30, "Serie A")]),
+        _schedina("PERFORMANCE", "2026-09-01", "vinta",
+                  [_sel("1", 1.5, "L"), _sel("2", 1.5, "L"), _sel("3", 1.5, "L")]),
+        _schedina("PERFORMANCE", "2026-09-02", "persa",
+                  [_sel("1", 1.5, "L"), _sel("2", 1.5, "L"), _sel("3", 1.5, "L")]),
+    ]
+    report = costruisci_report_analitico(storico)
+    assert report["per_numero_gambe"]["1"]["vinte"] == 1
+    assert report["per_numero_gambe"]["1"]["win_rate_%"] == 100.0
+    assert report["per_numero_gambe"]["3"]["vinte"] == 1
+    assert report["per_numero_gambe"]["3"]["perse"] == 1
+    assert report["per_numero_gambe"]["3"]["win_rate_%"] == 50.0
+
+
+def test_report_saldo_reale_usa_vincita_reale_quando_presente():
+    # Una schedina reale vinta con vincita_reale registrata (bonus bet365
+    # incluso) deve usare quella per il saldo, non la quota teorica.
+    storico = [
+        _schedina("SAFETY", "2026-09-01", "vinta", [_sel("1", 2.0, "Serie A")],
+                  reale=True, puntata=2.0, vincita=8.49),
+    ]
+    report = costruisci_report_analitico(storico)
+    assert report["riepilogo_reale"]["puntato_reale_tot"] == 2.0
+    assert report["riepilogo_reale"]["saldo_reale_tot"] == pytest.approx(6.49, abs=0.01)
+    assert report["per_tier"]["SAFETY"]["saldo_reale"] == pytest.approx(6.49, abs=0.01)
+
+
+def test_report_conta_override_esito_reale():
+    storico = [
+        _schedina("PERFORMANCE", "2026-09-01", "persa", [_sel("U2.5", 2.0, "Serie B")],
+                  reale=True, puntata=1.0, esito_reale="vinta", vincita=8.49),
+        _schedina("SAFETY", "2026-09-01", "vinta", [_sel("1", 1.3, "Serie A")]),
+    ]
+    report = costruisci_report_analitico(storico)
+    assert report["riepilogo_reale"]["n_override_esito_reale"] == 1

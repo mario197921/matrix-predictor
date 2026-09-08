@@ -732,13 +732,43 @@ from matrix_modello import (
     calcola_tutti_i_mercati, get_quota_finale,
     calcola_edge_pct, kelly_fraction, semplifica_nome,
     costruisci_schedina_dinamica, applica_blend_mercato_1x2, blend_prior_stagione,
-    get_family,
+    get_family, costruisci_report_analitico,
 )
 from matrix_db import (
     salva_schedina, leggi_storico_schedine, aggiorna_esito_schedina,
     controlla_e_aggiorna_risultati, aggiorna_giocata_reale,
     aggiorna_puntata_reale, aggiorna_vincita_reale, aggiorna_esito_reale,
 )
+
+# ==========================================
+# 🔒 PAGINA NASCOSTA: REPORT ANALITICO (per l'analisi strategica, non per
+# l'uso quotidiano) -- raggiungibile solo con lo specifico parametro nella
+# URL, non compare in nessun menu/link dell'app. Scarica un unico JSON con
+# tutti gli incroci (win rate per fascia di quota, per mercato, per numero
+# di gambe, per lega, andamento giornaliero, P&L reale) cosi' non serve
+# ragionare a mano sullo storico ogni volta -- basta scaricare il file e
+# passarlo per l'analisi. Interrompe l'esecuzione qui (st.stop()) PRIMA
+# della sezione pesante sotto (auto-discovery leghe, chiamate API) per
+# essere veloce e non consumare quota API quando si vuole solo il report.
+# ==========================================
+if st.query_params.get("vista") == "report_analitico_interno":
+    import json as _json
+    st.title("📊 Report analitico interno")
+    st.caption("Pagina non collegata al resto dell'app: usala solo per scaricare i dati "
+               "aggregati da passare per l'analisi della strategia.")
+    _storico_report = leggi_storico_schedine(giorni=365)
+    if not _storico_report:
+        st.warning("Nessuna schedina trovata su Firebase (o connessione non raggiungibile).")
+    else:
+        _report = costruisci_report_analitico(_storico_report)
+        _report_json = _json.dumps(_report, ensure_ascii=False, indent=2)
+        st.success(f"Report generato su {_report['n_schedine_totali']} schedine.")
+        st.download_button("📥 Scarica report analitico (JSON)", data=_report_json,
+                            file_name=f"report_analitico_{_oggi.strftime('%Y-%m-%d')}.json",
+                            mime="application/json")
+        with st.expander("Mostra/copia JSON grezzo"):
+            st.text_area("report", value=_report_json, height=400, label_visibility="collapsed")
+    st.stop()
 
 # ==========================================
 # 🕵️ AUTO-DISCOVERY ID LEGA (Risolve Norvegia e altri)

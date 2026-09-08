@@ -422,3 +422,189 @@ def valuta_esito_tip(tip: str, gol_c_ft: int, gol_t_ft: int,
         return all(esiti)
 
     return None   # mercato non riconosciuto/non valutabile automaticamente
+
+
+# -- Report analitico aggregato (per uso "silenzioso": nessuna UI pensata ----
+# per essere letta a occhio, serve a dare a chi valuta la strategia (umano o
+# assistente) tutti i numeri gia' incrociati, senza dover ragionare a mano
+# sulle centinaia di gambe salvate) ------------------------------------------
+FASCE_QUOTA = [
+    (0.0, 1.30, "< 1.30"),
+    (1.30, 1.50, "1.30 - 1.49"),
+    (1.50, 2.00, "1.50 - 1.99"),
+    (2.00, 3.00, "2.00 - 2.99"),
+    (3.00, 5.00, "3.00 - 4.99"),
+    (5.00, float("inf"), "5.00+"),
+]
+
+
+def _fascia_quota(q: float) -> str:
+    for lo, hi, nome in FASCE_QUOTA:
+        if lo <= q < hi:
+            return nome
+    return FASCE_QUOTA[-1][2]
+
+
+def _nuova_stat():
+    return {"vinte": 0, "perse": 0, "attesa": 0, "_quota_sum": 0.0, "_quota_n": 0}
+
+
+def _registra_gamba(stat: dict, esito_gamba, quota) -> None:
+    if esito_gamba == "vinta":
+        stat["vinte"] += 1
+    elif esito_gamba == "persa":
+        stat["perse"] += 1
+    else:
+        stat["attesa"] += 1
+        return
+    if quota:
+        stat["_quota_sum"] += float(quota)
+        stat["_quota_n"] += 1
+
+
+def _finalizza_stat(stat: dict) -> dict:
+    concluse = stat["vinte"] + stat["perse"]
+    win_rate = round(stat["vinte"] / concluse * 100, 1) if concluse else None
+    quota_media = round(stat["_quota_sum"] / stat["_quota_n"], 3) if stat["_quota_n"] else None
+    prob_implicita = round(100.0 / quota_media, 1) if quota_media else None
+    edge_vs_implicita = round(win_rate - prob_implicita, 1) if (win_rate is not None and prob_implicita is not None) else None
+    return {
+        "vinte": stat["vinte"], "perse": stat["perse"], "attesa": stat["attesa"],
+        "concluse": concluse, "win_rate_%": win_rate,
+        "quota_media_concluse": quota_media,
+        "prob_implicita_media_%": prob_implicita,
+        "edge_vs_implicita_%": edge_vs_implicita,
+    }
+
+
+def _e_reale_record(r: dict) -> bool:
+    return (r.get("fonte") == "bet365_manuale"
+            or str(r.get("nome", "")).startswith("PERSONALE_")
+            or bool(r.get("giocata_reale")))
+
+
+def _esito_reale_effettivo_record(r: dict):
+    return r.get("esito_reale") or r.get("esito")
+
+
+def costruisci_report_analitico(storico: list) -> dict:
+    """Funzione pura (nessuna chiamata di rete): riceve la lista di schedine
+    gia' lette da Firestore (leggi_storico_schedine) e produce un unico
+    dizionario con tutti gli incroci utili a capire se/dove la Matrix ha un
+    vantaggio reale, pensato per essere passato cosi' com'e' (es. in JSON) a
+    chi deve decidere la strategia, non per essere mostrato in una UI:
+
+    - per_fascia_quota: win rate per gamba, per fascia di quota, confrontato
+      con la probabilita' implicita dalla quota stessa (1/quota) -- risponde
+      alla domanda "conviene puntare singole ad alta probabilita'?".
+    - per_famiglia_mercato: win rate per gamba, per tipo di mercato (1X2,
+      Under/Over, ecc.), come la tabella gia' in app ma qui in dati grezzi.
+    - per_numero_gambe: win rate a livello di SCHEDINA (tutte le proposte
+      Matrix, non solo quelle giocate) raggruppato per quante gambe la
+      compongono -- risponde alla domanda "le multiple con piu' gambe
+      vincono davvero meno spesso?".
+    - per_tier: win rate a livello di schedina per SAFETY/PERFORMANCE/
+      AZZARDO/ALTRO, con P&L reale (puntato/saldo) quando disponibile.
+    - per_lega: win rate per gamba raggruppato per campionato.
+    - andamento_giornaliero: lista ordinata per data con vinte/perse
+      (calcolo Matrix) e saldo reale del giorno.
+    - riepilogo_reale: puntato/saldo/ROI complessivi sulle scommesse reali,
+      e quante schedine hanno un esito_reale diverso da quello calcolato
+      (indicatore di quanto spesso l'esecuzione reale diverge dal tip).
+    """
+    fascia_stats = {}
+    famiglia_stats = {}
+    lega_stats = {}
+    numero_gambe_stats = {}
+    tier_stats = {}
+    giorno_stats = {}
+
+    puntato_reale_tot = 0.0
+    saldo_reale_tot = 0.0
+    n_override_esito_reale = 0
+    n_schedine_reali = 0
+
+    for r in storico:
+        selezioni = r.get("selezioni", [])
+        for s in selezioni:
+            q = s.get("quota")
+            eg = s.get("esito_gamba")
+            if q is not None:
+                _registra_gamba(fascia_stats.setdefault(_fascia_quota(float(q)), _nuova_stat()), eg, q)
+            tip_s = s.get("tip") or s.get("Tip") or ""
+            if tip_s:
+                _registra_gamba(famiglia_stats.setdefault(get_family(tip_s), _nuova_stat()), eg, q)
+            lega_s = s.get("league") or "?"
+            _registra_gamba(lega_stats.setdefault(lega_s, _nuova_stat()), eg, q)
+
+        n_gambe = len(selezioni)
+        chiave_n = str(n_gambe) if n_gambe < 6 else "6+"
+        esito_calc = r.get("esito")
+        stat_n = numero_gambe_stats.setdefault(chiave_n, {"vinte": 0, "perse": 0, "attesa": 0})
+        if esito_calc == "vinta": stat_n["vinte"] += 1
+        elif esito_calc == "persa": stat_n["perse"] += 1
+        else: stat_n["attesa"] += 1
+
+        nome_r = r.get("nome", "")
+        tier = nome_r if nome_r in ("SAFETY", "PERFORMANCE", "AZZARDO") else "ALTRO"
+        stat_t = tier_stats.setdefault(tier, {"vinte": 0, "perse": 0, "attesa": 0, "puntato": 0.0, "saldo": 0.0})
+        if esito_calc == "vinta": stat_t["vinte"] += 1
+        elif esito_calc == "persa": stat_t["perse"] += 1
+        else: stat_t["attesa"] += 1
+
+        if r.get("esito_reale"):
+            n_override_esito_reale += 1
+
+        data_r = r.get("data", "?")
+        g = giorno_stats.setdefault(data_r, {"vinte": 0, "perse": 0, "attesa": 0, "saldo": 0.0})
+        if esito_calc == "vinta": g["vinte"] += 1
+        elif esito_calc == "persa": g["perse"] += 1
+        else: g["attesa"] += 1
+
+        if _e_reale_record(r):
+            n_schedine_reali += 1
+            p = r.get("puntata_reale")
+            if p is not None:
+                p = float(p)
+                stat_t["puntato"] += p
+                puntato_reale_tot += p
+                esito_eff = _esito_reale_effettivo_record(r)
+                saldo_riga = 0.0
+                if esito_eff == "vinta":
+                    vincita_reg = r.get("vincita_reale")
+                    saldo_riga = (float(vincita_reg) - p) if vincita_reg is not None else (p * (r.get("quota_totale") or 0) - p)
+                elif esito_eff == "persa":
+                    saldo_riga = -p
+                stat_t["saldo"] += saldo_riga
+                saldo_reale_tot += saldo_riga
+                g["saldo"] += saldo_riga
+
+    return {
+        "per_fascia_quota": {k: _finalizza_stat(v) for k, v in fascia_stats.items()},
+        "per_famiglia_mercato": {k: _finalizza_stat(v) for k, v in famiglia_stats.items()},
+        "per_lega": {k: _finalizza_stat(v) for k, v in lega_stats.items() if (v["vinte"] + v["perse"]) >= 3},
+        "per_numero_gambe": {
+            k: {**v, "concluse": v["vinte"] + v["perse"],
+                "win_rate_%": round(v["vinte"] / (v["vinte"] + v["perse"]) * 100, 1) if (v["vinte"] + v["perse"]) else None}
+            for k, v in numero_gambe_stats.items()
+        },
+        "per_tier": {
+            k: {"vinte": v["vinte"], "perse": v["perse"], "attesa": v["attesa"],
+                "concluse": v["vinte"] + v["perse"],
+                "win_rate_%": round(v["vinte"] / (v["vinte"] + v["perse"]) * 100, 1) if (v["vinte"] + v["perse"]) else None,
+                "puntato_reale": round(v["puntato"], 2), "saldo_reale": round(v["saldo"], 2)}
+            for k, v in tier_stats.items()
+        },
+        "andamento_giornaliero": [
+            {"data": data, **stat, "saldo": round(stat["saldo"], 2)}
+            for data, stat in sorted(giorno_stats.items())
+        ],
+        "riepilogo_reale": {
+            "n_schedine_reali": n_schedine_reali,
+            "puntato_reale_tot": round(puntato_reale_tot, 2),
+            "saldo_reale_tot": round(saldo_reale_tot, 2),
+            "roi_%": round(saldo_reale_tot / puntato_reale_tot * 100, 1) if puntato_reale_tot else None,
+            "n_override_esito_reale": n_override_esito_reale,
+        },
+        "n_schedine_totali": len(storico),
+    }
