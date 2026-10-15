@@ -770,6 +770,23 @@ if st.query_params.get("vista") == "report_analitico_interno":
         _report = costruisci_report_analitico(_storico_report, budget_iniziale=BUDGET_INIZIALE)
         _report_json = _json.dumps(_report, ensure_ascii=False, indent=2)
         st.success(f"Report generato su {_report['n_schedine_totali']} schedine.")
+        _sim = _report["simulazione_virtuale"]
+        st.markdown(f"**Simulazione virtuale** — {_sim['puntata']:.2f}€ fissi su ognuna delle "
+                    f"{_sim['n_schedine_concluse']} schedine concluse, dalla prima in memoria")
+        _s1, _s2, _s3, _s4 = st.columns(4)
+        _s1.metric("P&L totale", f"{_sim['pl_totale']:+.2f}€")
+        _s2.metric("ROI", f"{_sim['roi_%']:+.1f}%" if _sim["roi_%"] is not None else "—")
+        _s3.metric("Max drawdown", f"{_sim['max_drawdown']:.2f}€")
+        _bl = _sim["bankroll_limitato"]
+        _s4.metric(f"Bankroll da {_sim['bankroll_iniziale']:.0f}€",
+                   f"{_bl['saldo_finale']:.2f}€",
+                   (f"finito alla schedina n.{_bl['fermato_alla_schedina_n']}"
+                    if _bl["fermato_alla_schedina_n"] else "mai finito"))
+        if _sim["per_gruppo"]:
+            st.dataframe(pd.DataFrame([{"gruppo": k, **v} for k, v in _sim["per_gruppo"].items()]),
+                         hide_index=True, use_container_width=True)
+        if _sim["curva"]:
+            st.line_chart(pd.DataFrame({"P&L cumulato (€)": [x["pl_cumulato"] for x in _sim["curva"]]}))
         st.download_button("📥 Scarica report analitico (JSON)", data=_report_json,
                             file_name=f"report_analitico_{_oggi.strftime('%Y-%m-%d')}.json",
                             mime="application/json")
@@ -1642,12 +1659,20 @@ with st.expander("📊 Storico Schedine", expanded=False):
                     f'<span style="color:var(--text2);">(partito da {BUDGET_INIZIALE:.2f}€)</span></div>',
                     unsafe_allow_html=True)
 
+        # Le proposte Matrix sono ora due serie confrontabili: metodo
+        # Probabilita' (quello che si gioca) e metodo Edge (solo tracking).
+        # I record vecchi senza campo 'metodo' sono tutti del metodo Edge.
+        storico_matrix_prob = [r for r in storico_matrix if (r.get("metodo") or "edge") == "prob"]
+        storico_matrix_edge = [r for r in storico_matrix if (r.get("metodo") or "edge") != "prob"]
         mcol1, mcol2 = st.columns(2)
         with mcol1:
-            _mostra_metriche(storico_matrix, "🤖 Proposte Matrix (se il modello predice bene)")
+            _mostra_metriche(storico_matrix_prob, "🎯 Matrix — metodo Probabilità")
         with mcol2:
             _mostra_metriche(storico_reale, "💶 Scommesse reali (soldi effettivamente giocati)",
                               mostra_pnl=True)
+        mcol3, _mcol4 = st.columns(2)
+        with mcol3:
+            _mostra_metriche(storico_matrix_edge, "🤖 Matrix — metodo Edge (confronto, storico completo)")
 
         # ─── PERFORMANCE PER TIPO DI MERCATO ───────────────────────────
         # Traccia, gamba per gamba (su TUTTE le proposte Matrix, non solo
@@ -1733,7 +1758,8 @@ with st.expander("📊 Storico Schedine", expanded=False):
 
         conteggio_txt = f" · {n_corrette}/{n_valutate} corrette" if n_valutate else ""
 
-        tag = "💶 Reale" if _e_reale(r) else "🤖 Matrix"
+        tag = ("💶 Reale" if _e_reale(r)
+               else ("🎯 Prob" if (r.get("metodo") or "edge") == "prob" else "🤖 Matrix"))
         quota_tot = r.get('quota_totale') or 0
         nota_override = " · 🎯 esito reale diverso dal calcolato" if r.get("esito_reale") else ""
         label = (f"{EMOJI_ESITO.get(esito_effettivo,'⏳')} {r.get('data','?')} — {r.get('nome','?')} "
@@ -2208,7 +2234,7 @@ if st.session_state.data_master:
     # ─── TAB 3 ──────────────────────────────────────────────────────────────────
     with t3:
         st.header("🏆 Generatore Automatico Ottimizzato V90")
-        st.caption("💡 Budget per fascia allocato con Kelly Criterion (8% frazionato).")
+        st.caption("💡 Budget per fascia: ripartizione fissa 60/30/10. Metodo Probabilità = le gambe più sicure per il modello (quelle che si giocano); metodo Edge = solo confronto.")
 
         if len(st.session_state.all_tips_global) >= 4:
             testo_export = f"=== MATRIX V90: SCHEDINE ===\nPeriodo: {start_str}/{end_str}\n\n"
@@ -2232,7 +2258,7 @@ if st.session_state.data_master:
                 ("AZZARDO",     "🔴", "risk-bg",        "#1f0a0a", "#ef4444",
                  "Quote alte — max 10% del capitale."),
             ]
-            SCHEDINE_PARAMS = [
+            SCHEDINE_PARAMS_EDGE = [
                 # campi: pool, min_q, max_q, target_mult, max_match_q, max_quota_hard,
                 # budget, max_righe, ordina_per, min_prob, max_prob.
                 # Safety: torna alla composizione FLESSIBILE (ordina_per="edge",
@@ -2263,144 +2289,186 @@ if st.session_state.data_master:
                 (kp,   2.21, 4.50, 30.0, 4.50, 50.0,  bud_a, 12, "edge", None, None),
             ]
 
-            escludi_prev = set()
-            for idx, (nome, emoji, cls, bg_col, acc_col, nota) in enumerate(SCHEDINE_CFG):
-                (pool_f, min_q, max_q, target, mq, max_quota_hard, budget, max_righe_f,
-                 ordina_per_f, min_prob_f, max_prob_f) = SCHEDINE_PARAMS[idx]
-                escludi = escludi_prev
+            # Metodo a PROBABILITA' PURA (quello che si gioca): stesse fasce di
+            # quota e stessi target del metodo edge, ma le gambe sono ordinate
+            # per probabilita' del modello, senza filtro edge e senza Kelly, e
+            # solo su quote reali bet365 (una quota ricostruita dal modello non
+            # e' giocabile e, senza il filtro edge, entrerebbe nel pool).
+            SCHEDINE_PARAMS_PROB = [
+                (kp,   1.12, 1.50, 2.0,  2.0,  None,  bud_s, 3,  "prob", None, None),
+                (kp,   1.51, 2.20, 5.0,  2.20, None,  bud_p, 12, "prob", None, None),
+                (kp,   2.21, 4.50, 30.0, 4.50, 50.0,  bud_a, 12, "prob", None, None),
+            ]
+            METODI_SCHEDINE = [
+                ("prob", "PROB_", SCHEDINE_PARAMS_PROB,
+                 "🎯 Metodo Probabilità — le schedine da giocare", False),
+                ("edge", "", SCHEDINE_PARAMS_EDGE,
+                 "📎 Confronto: metodo Edge (solo tracking, senza soldi veri)", True),
+            ]
 
-                slip, q_tot, prob, usate = costruisci_schedina_dinamica(
-                    pool_f, min_q, max_q, target, escludi_match=escludi, max_match_q=mq,
-                    max_righe=max_righe_f, ordina_per=ordina_per_f,
-                    min_prob_congiunta=min_prob_f, max_prob_congiunta=max_prob_f,
-                    max_quota_finale=max_quota_hard)
-                escludi_prev = usate
-                vincita_tot = budget * q_tot
+            for metodo_key, prefisso_nome, SCHEDINE_PARAMS, titolo_metodo, in_expander in METODI_SCHEDINE:
+                escludi_prev = set()
+                if in_expander:
+                    _ctx_metodo = st.expander(titolo_metodo, expanded=False)
+                else:
+                    st.markdown(f"### {titolo_metodo}")
+                    _ctx_metodo = st.container()
+                with _ctx_metodo:
+                    for idx, (nome, emoji, cls, bg_col, acc_col, nota) in enumerate(SCHEDINE_CFG):
+                        (pool_f, min_q, max_q, target, mq, max_quota_hard, budget, max_righe_f,
+                         ordina_per_f, min_prob_f, max_prob_f) = SCHEDINE_PARAMS[idx]
+                        if metodo_key == "prob":
+                            nota = ({0: "Le gambe più probabili per il modello, quote reali bet365, max 3 gambe",
+                                     1: "Le gambe più probabili, quote medie, max un evento per partita",
+                                     2: "Le gambe più probabili tra le quote alte — max 10% del capitale"}[idx]
+                                    + f" (quota per gamba {min_q:.2f}–{max_q:.2f}).")
+                        escludi = escludi_prev
 
-                # Diagnostica: quante selezioni erano davvero disponibili in
-                # questa fascia di quota/edge oggi (a prescindere da quante ne
-                # sono poi entrate nella combo) -- utile per capire "perche' solo
-                # una gamba" senza dover chiedere ogni volta.
-                candidati_f = [x for x in pool_f
-                               if min_q <= float(x['Quota']) <= max_q
-                               and float(x['Quota']) <= mq
-                               and float(x.get('Edge', 0)) > 0
-                               and x['Match'] not in escludi]
-                n_candidati = len(candidati_f)
-                n_match_candidati = len({x['Match'] for x in candidati_f})
+                        slip, q_tot, prob, usate = costruisci_schedina_dinamica(
+                            pool_f, min_q, max_q, target, escludi_match=escludi, max_match_q=mq,
+                            max_righe=max_righe_f, ordina_per=ordina_per_f,
+                            min_prob_congiunta=min_prob_f, max_prob_congiunta=max_prob_f,
+                            max_quota_finale=max_quota_hard,
+                            solo_edge_positivo=(metodo_key == "edge"),
+                            solo_quote_reali=(metodo_key == "prob"))
+                        escludi_prev = usate
+                        vincita_tot = budget * q_tot
 
-                # Salva su Firebase la schedina generata (per tracciare nel
-                # tempo probabilita' dichiarate vs esiti reali). Fallisce in
-                # silenzio se Firebase non e' configurato o raggiungibile --
-                # non deve mai bloccare la generazione delle schedine.
-                if slip:
-                    salva_schedina(nome, _oggi.strftime("%Y-%m-%d"), slip, q_tot, prob, budget)
+                        # Diagnostica: quante selezioni erano davvero disponibili in
+                        # questa fascia di quota/edge oggi (a prescindere da quante ne
+                        # sono poi entrate nella combo) -- utile per capire "perche' solo
+                        # una gamba" senza dover chiedere ogni volta.
+                        candidati_f = [x for x in pool_f
+                                       if min_q <= float(x['Quota']) <= max_q
+                                       and float(x['Quota']) <= mq
+                                       and (metodo_key != "edge" or float(x.get('Edge', 0)) > 0)
+                                       and (metodo_key != "prob" or bool(x.get('Real', False)))
+                                       and x['Match'] not in escludi]
+                        n_candidati = len(candidati_f)
+                        n_match_candidati = len({x['Match'] for x in candidati_f})
 
-                # Guardia specifica per Safety: se non ci sono abbastanza selezioni
-                # idonee per completare la combo da 2 gambe, salta la schedina
-                # invece di proporne una incompleta con l'etichetta "safety".
-                if idx == 0 and not slip:
-                    motivo_skip = (
-                        f"{n_candidati} selezioni idonee disponibili oggi (quota 1.12-1.50, "
-                        f"edge positivo) su {n_match_candidati} partite diverse — non bastano "
-                        f"per comporre nemmeno una combinazione minima"
-                    )
-                    st.markdown(f"""
-<div class="strategy-box {cls}" style="padding:0;overflow:hidden;">
-  <div style="background:linear-gradient(135deg,{bg_col},{bg_col}dd);
-    padding:18px 24px;border-bottom:1px solid rgba(255,255,255,0.06);">
-    <div style="font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:800;color:{acc_col};">
-      {emoji} Schedina {nome}
-    </div>
-    <div style="font-size:0.75rem;color:var(--text2);margin-top:3px;">{nota}</div>
-  </div>
-  <div style="padding:16px 24px;color:var(--text2);font-size:0.9rem;">
-    Nessuna combinazione trovata oggi ({motivo_skip}) — meglio saltare
-    la Safety oggi piuttosto che proporre una combo incompleta.
-  </div>
-</div>
-""", unsafe_allow_html=True)
-                    testo_export += f"Schedina {nome}: saltata, {motivo_skip}.\n\n"
-                    continue
+                        # Salva su Firebase la schedina generata (per tracciare nel
+                        # tempo probabilita' dichiarate vs esiti reali). Fallisce in
+                        # silenzio se Firebase non e' configurato o raggiungibile --
+                        # non deve mai bloccare la generazione delle schedine.
+                        if slip:
+                            salva_schedina(f"{prefisso_nome}{nome}", _oggi.strftime("%Y-%m-%d"),
+                                           slip, q_tot, prob, budget, metodo=metodo_key)
 
-                txt = f"Schedina {nome} ({budget:.2f}€)\n"
-
-                # Header integrato nel banner
-                st.markdown(f"""
-<div class="strategy-box {cls}" style="padding:0;overflow:hidden;">
-  <div style="background:linear-gradient(135deg,{bg_col},{bg_col}dd);
-    padding:18px 24px 14px;border-bottom:1px solid rgba(255,255,255,0.06);">
-    <div style="display:flex;align-items:center;justify-content:space-between;">
-      <div>
-        <div style="font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:800;color:{acc_col};">
-          {emoji} Schedina {nome}
+                        # Guardia specifica per Safety: se non ci sono abbastanza selezioni
+                        # idonee per completare la combo da 2 gambe, salta la schedina
+                        # invece di proporne una incompleta con l'etichetta "safety".
+                        if idx == 0 and not slip:
+                            motivo_skip = (
+                                f"{n_candidati} selezioni idonee disponibili oggi (quota 1.12-1.50, "
+                                f"{'edge positivo' if metodo_key == 'edge' else 'quote reali'}) su {n_match_candidati} partite diverse — non bastano "
+                                f"per comporre nemmeno una combinazione minima"
+                            )
+                            st.markdown(f"""
+        <div class="strategy-box {cls}" style="padding:0;overflow:hidden;">
+          <div style="background:linear-gradient(135deg,{bg_col},{bg_col}dd);
+            padding:18px 24px;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <div style="font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:800;color:{acc_col};">
+              {emoji} Schedina {nome}
+            </div>
+            <div style="font-size:0.75rem;color:var(--text2);margin-top:3px;">{nota}</div>
+          </div>
+          <div style="padding:16px 24px;color:var(--text2);font-size:0.9rem;">
+            Nessuna combinazione trovata oggi ({motivo_skip}) — meglio saltare
+            la Safety oggi piuttosto che proporre una combo incompleta.
+          </div>
         </div>
-        <div style="font-size:0.75rem;color:var(--text2);margin-top:3px;">{nota}</div>
-        <div style="font-size:0.7rem;color:var(--text2);margin-top:2px;opacity:0.7;">
-          ℹ️ {n_candidati} selezioni idonee oggi su {n_match_candidati} partite — usate {len(slip)}
-        </div>
-      </div>
-      <div style="text-align:right;">
-        <div style="font-size:0.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Budget</div>
-        <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;color:var(--text);">
-          {budget:.2f}€
-        </div>
-      </div>
-    </div>
-  </div>
-  <div style="padding:16px 24px;">
-""", unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+                            testo_export += f"Schedina {nome}: saltata, {motivo_skip}.\n\n"
+                            continue
 
-                for x in slip:
-                    bc     = "quota-real" if x['Real'] else "quota-calc"
-                    ed     = x.get('Edge', 0)
-                    # Kelly% e puntata calcolati sempre sul budget TOTALE
-                    # per essere coerenti con le tabelle Top 10
-                    kl     = x.get('Kelly', 0) * 100
-                    pt     = budget_totale * x.get('Kelly', 0)
-                    ec_cls = "edge-positive" if ed > 0 else "edge-negative"
-                    st.markdown(
-                        f"<div class='schedina-row'>"
-                        f"<div><div style='font-weight:600;color:var(--text);'>"
-                        f"<span style='color:var(--orange);font-family:DM Mono,monospace;font-size:0.8rem;'>[{x['Time']}]</span> "
-                        f" {x['Match']} → <strong>{x['Tip']}</strong></div>"
-                        f"<div class='schedina-match'>{x['League']}</div></div>"
-                        f"<div style='text-align:right;white-space:nowrap;'>"
-                        f"<span class='{bc}'>Q {x['Quota']}</span> "
-                        f"<span class='{ec_cls}'>{ed:+.0f}%</span> "
-                        f"<span class='kelly-pill'>{kl:.1f}% → {pt:.2f}€</span>"
-                        f"</div></div>",
-                        unsafe_allow_html=True)
-                    txt += f"  [{x['Time']}] {x['Match']} -> {x['Tip']} @ {x['Quota']:.2f} | Edge:{ed:+.1f}% | Kelly:{kl:.1f}% ({pt:.2f}€)\n"
+                        txt = f"[{metodo_key}] Schedina {nome} ({budget:.2f}€)\n"
 
-                # Totale finale compatto dentro il banner
-                st.markdown(f"""
-    <div style="margin-top:14px;padding:14px 16px;
-      background:rgba(255,255,255,0.04);border-radius:var(--radius-sm);
-      border:1px solid rgba(255,255,255,0.07);
-      display:flex;align-items:center;justify-content:space-between;">
-      <div style="display:flex;align-items:center;gap:20px;">
-        <div>
-          <div style="font-size:0.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Moltiplicatore</div>
-          <div style="font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;color:{acc_col};">x{q_tot:.2f}</div>
-        </div>
-        <div>
-          <div style="font-size:0.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Prob. congiunta</div>
-          <div style="font-family:'DM Mono',monospace;font-size:1rem;font-weight:600;color:var(--text);">{prob*100:.1f}%</div>
-        </div>
-      </div>
-      <div style="text-align:right;">
-        <div style="font-size:0.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Vincita stimata</div>
-        <div style="font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;color:var(--green);">~{vincita_tot:.2f}€</div>
-      </div>
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
-                txt += f"Quota:{q_tot:.2f} | Prob:{prob*100:.2f}% | Vincita:~{vincita_tot:.2f}€\n\n"
-                testo_export += txt
+                        # Header integrato nel banner
+                        st.markdown(f"""
+        <div class="strategy-box {cls}" style="padding:0;overflow:hidden;">
+          <div style="background:linear-gradient(135deg,{bg_col},{bg_col}dd);
+            padding:18px 24px 14px;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <div style="font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:800;color:{acc_col};">
+                  {emoji} Schedina {nome}
+                </div>
+                <div style="font-size:0.75rem;color:var(--text2);margin-top:3px;">{nota}</div>
+                <div style="font-size:0.7rem;color:var(--text2);margin-top:2px;opacity:0.7;">
+                  ℹ️ {n_candidati} selezioni idonee oggi su {n_match_candidati} partite — usate {len(slip)}
+                </div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:0.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Budget</div>
+                <div style="font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;color:var(--text);">
+                  {budget:.2f}€
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="padding:16px 24px;">
+        """, unsafe_allow_html=True)
 
-            st.download_button("💾 SCARICA TUTTE LE 3 SCHEDINE (TXT)",
+                        for x in slip:
+                            bc     = "quota-real" if x['Real'] else "quota-calc"
+                            ed     = x.get('Edge', 0)
+                            # Kelly% e puntata calcolati sempre sul budget TOTALE
+                            # per essere coerenti con le tabelle Top 10
+                            kl     = x.get('Kelly', 0) * 100
+                            pt     = budget_totale * x.get('Kelly', 0)
+                            ec_cls = "edge-positive" if ed > 0 else "edge-negative"
+                            if metodo_key == "prob":
+                                # Metodo probabilita': si guarda quanto il modello e' sicuro,
+                                # non l'edge ne' il Kelly (che qui non servono).
+                                pill_valore = f"<span class='edge-positive'>P {x['Prob']:.0f}%</span>"
+                            else:
+                                pill_valore = (f"<span class='{ec_cls}'>{ed:+.0f}%</span> "
+                                               f"<span class='kelly-pill'>{kl:.1f}% → {pt:.2f}€</span>")
+                            st.markdown(
+                                f"<div class='schedina-row'>"
+                                f"<div><div style='font-weight:600;color:var(--text);'>"
+                                f"<span style='color:var(--orange);font-family:DM Mono,monospace;font-size:0.8rem;'>[{x['Time']}]</span> "
+                                f" {x['Match']} → <strong>{x['Tip']}</strong></div>"
+                                f"<div class='schedina-match'>{x['League']}</div></div>"
+                                f"<div style='text-align:right;white-space:nowrap;'>"
+                                f"<span class='{bc}'>Q {x['Quota']}</span> "
+                                f"{pill_valore}"
+                                f"</div></div>",
+                                unsafe_allow_html=True)
+                            if metodo_key == "prob":
+                                txt += f"  [{x['Time']}] {x['Match']} -> {x['Tip']} @ {x['Quota']:.2f} | Prob:{x['Prob']:.1f}%\n"
+                            else:
+                                txt += f"  [{x['Time']}] {x['Match']} -> {x['Tip']} @ {x['Quota']:.2f} | Edge:{ed:+.1f}% | Kelly:{kl:.1f}% ({pt:.2f}€)\n"
+
+                        # Totale finale compatto dentro il banner
+                        st.markdown(f"""
+            <div style="margin-top:14px;padding:14px 16px;
+              background:rgba(255,255,255,0.04);border-radius:var(--radius-sm);
+              border:1px solid rgba(255,255,255,0.07);
+              display:flex;align-items:center;justify-content:space-between;">
+              <div style="display:flex;align-items:center;gap:20px;">
+                <div>
+                  <div style="font-size:0.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Moltiplicatore</div>
+                  <div style="font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;color:{acc_col};">x{q_tot:.2f}</div>
+                </div>
+                <div>
+                  <div style="font-size:0.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Prob. congiunta</div>
+                  <div style="font-family:'DM Mono',monospace;font-size:1rem;font-weight:600;color:var(--text);">{prob*100:.1f}%</div>
+                </div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:0.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:0.08em;">Vincita stimata</div>
+                <div style="font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;color:var(--green);">~{vincita_tot:.2f}€</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+                        txt += f"Quota:{q_tot:.2f} | Prob:{prob*100:.2f}% | Vincita:~{vincita_tot:.2f}€\n\n"
+                        testo_export += txt
+
+            st.download_button("💾 SCARICA TUTTE LE SCHEDINE (TXT)",
                                data=testo_export,
                                file_name=f"Matrix_V90_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                                mime="text/plain")

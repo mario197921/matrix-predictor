@@ -18,6 +18,7 @@ from matrix_modello import (
     costruisci_schedina_dinamica, devig_1x2, blend_prob_mercato,
     applica_blend_mercato_1x2, blend_prior_stagione,
     costruisci_record_schedina, valuta_esito_tip, costruisci_report_analitico,
+    simula_bankroll_virtuale,
 )
 
 
@@ -647,3 +648,102 @@ def test_report_budget_iniziale_default_zero_non_rompe_i_test_precedenti():
     report = costruisci_report_analitico(storico)
     assert report["riepilogo_reale"]["budget_iniziale"] == 0.0
     assert report["riepilogo_reale"]["saldo_attuale"] == pytest.approx(6.49, abs=0.01)
+
+
+# ── metodo "probabilita' pura" in costruisci_schedina_dinamica ──────────────
+
+def _pool_prob_pura():
+    # M0: prob alta ma edge NEGATIVO (quota bassa) -- il metodo edge la scarta,
+    # quello a probabilita' pura la vuole per prima.
+    # M1: prob media con edge positivo.
+    # M2: prob altissima, edge negativo, quota SINTETICA (Real=False).
+    return [
+        {"Match": "M0", "Tip": "1",    "Prob": 80.0, "Quota": 1.20, "Edge": -4.0, "Real": True},
+        {"Match": "M1", "Tip": "O2.5", "Prob": 60.0, "Quota": 1.80, "Edge": 8.0,  "Real": True},
+        {"Match": "M2", "Tip": "Goal", "Prob": 90.0, "Quota": 1.15, "Edge": -3.5, "Real": False},
+    ]
+
+
+def test_prob_pura_ignora_edge_e_ordina_per_probabilita():
+    sel, q_tot, prob_tot, usati = costruisci_schedina_dinamica(
+        _pool_prob_pura(), min_q=1.10, max_q=2.0, target_mult=100.0,
+        max_righe=5, ordina_per="prob", solo_edge_positivo=False)
+    assert [x["Match"] for x in sel] == ["M2", "M0", "M1"]   # per Prob decrescente
+
+
+def test_prob_pura_con_solo_quote_reali_scarta_quote_sintetiche():
+    sel, q_tot, prob_tot, usati = costruisci_schedina_dinamica(
+        _pool_prob_pura(), min_q=1.10, max_q=2.0, target_mult=100.0,
+        max_righe=5, ordina_per="prob", solo_edge_positivo=False,
+        solo_quote_reali=True)
+    assert [x["Match"] for x in sel] == ["M0", "M1"]
+
+
+def test_default_resta_edge_positivo_come_prima():
+    sel, q_tot, prob_tot, usati = costruisci_schedina_dinamica(
+        _pool_prob_pura(), min_q=1.10, max_q=2.0, target_mult=100.0,
+        max_righe=5, ordina_per="edge")
+    assert [x["Match"] for x in sel] == ["M1"]   # unica con edge > 0
+
+
+def test_record_schedina_ha_campo_metodo():
+    rec = costruisci_record_schedina("PROB_SAFETY", "2026-10-16", [], 1.0, 1.0, 1.0, metodo="prob")
+    assert rec["metodo"] == "prob"
+    assert costruisci_record_schedina("SAFETY", "2026-10-16", [], 1.0, 1.0, 1.0)["metodo"] == "edge"
+
+
+# ── simula_bankroll_virtuale ────────────────────────────────────────────────
+
+def _rec(nome, data, esito, quota, metodo=None):
+    r = {"nome": nome, "data": data, "esito": esito, "quota_totale": quota, "selezioni": []}
+    if metodo:
+        r["metodo"] = metodo
+    return r
+
+
+def test_simulazione_puntata_fissa_pl_e_ordine_cronologico():
+    storico = [
+        _rec("SAFETY", "2026-09-02", "vinta", 2.0),     # +1
+        _rec("X", "storico_02", "persa", 3.0),            # -1 (vecchia, ordine NN)
+        _rec("Y", "storico_01", "vinta", 5.0),            # +4 (piu' vecchia di tutte)
+        _rec("PERFORMANCE", "2026-09-01", "persa", 5.0),   # -1
+        _rec("AZZARDO", "2026-09-03", "in_attesa", 30.0),  # esclusa
+    ]
+    sim = simula_bankroll_virtuale(storico, puntata=1.0, bankroll_iniziale=10.0)
+    assert [x["n"] for x in sim["curva"]] == [1, 2, 3, 4]
+    assert [x["data"] for x in sim["curva"]] == ["storico_01", "storico_02", "2026-09-01", "2026-09-02"]
+    assert sim["n_schedine_concluse"] == 4 and sim["n_in_attesa_escluse"] == 1
+    assert sim["pl_totale"] == 3.0          # +4 -1 -1 +1
+    assert sim["roi_%"] == 75.0
+    assert sim["per_gruppo"]["manuali_personali"]["concluse"] == 2
+
+
+def test_simulazione_bankroll_limitato_si_ferma_quando_non_copre_la_puntata():
+    # 3 perse di fila con bankroll 2 e puntata 1: due giocate, poi non copre piu'.
+    storico = [_rec("SAFETY", f"2026-09-0{i}", "persa", 2.0) for i in (1, 2, 3)]
+    sim = simula_bankroll_virtuale(storico, puntata=1.0, bankroll_iniziale=2.0)
+    assert sim["pl_totale"] == -3.0                       # senza limite: tutte e 3
+    assert sim["bankroll_limitato"]["giocate_effettive"] == 2
+    assert sim["bankroll_limitato"]["saldo_finale"] == 0.0
+    assert sim["bankroll_limitato"]["fermato_alla_schedina_n"] == 3
+
+
+def test_simulazione_separa_metodi_nei_gruppi_e_riconosce_prefisso_prob():
+    storico = [
+        _rec("SAFETY", "2026-09-01", "vinta", 2.0),                  # edge (record vecchio, senza metodo)
+        _rec("PROB_SAFETY", "2026-09-01", "persa", 1.5, "prob"),
+    ]
+    sim = simula_bankroll_virtuale(storico)
+    assert set(sim["per_gruppo"]) == {"edge/SAFETY", "prob/SAFETY"}
+
+
+def test_report_include_per_metodo_e_simulazione():
+    storico = [
+        _rec("SAFETY", "2026-09-01", "vinta", 2.0),
+        _rec("PROB_SAFETY", "2026-09-01", "persa", 1.5, "prob"),
+    ]
+    report = costruisci_report_analitico(storico, budget_iniziale=10.0)
+    assert report["per_metodo"]["edge"]["vinte"] == 1
+    assert report["per_metodo"]["prob"]["perse"] == 1
+    assert report["per_tier"]["SAFETY"]["concluse"] == 2   # PROB_SAFETY conta come SAFETY
+    assert report["simulazione_virtuale"]["bankroll_iniziale"] == 10.0

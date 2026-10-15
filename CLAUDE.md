@@ -23,3 +23,20 @@ passerà da 1€ fisso a una puntata calcolata in percentuale).
   (ImportError su funzioni che in realtà esistono già su GitHub): in quel
   caso serve un "Reboot app" completo da Manage app, non basta aspettare
   il redeploy automatico.
+
+## Metodi di selezione e analisi (ottobre 2026)
+
+- Le schedine giornaliere sono generate con DUE metodi, salvati su Firestore
+  col campo `metodo`: **"prob"** (probabilità pura: gambe ordinate per
+  probabilità del modello, nessun filtro edge, nessun Kelly, solo quote reali
+  bet365; nomi `PROB_SAFETY/PROB_PERFORMANCE/PROB_AZZARDO`) è quello che si
+  gioca con soldi veri; **"edge"** (storico, nomi `SAFETY/...`) resta solo come
+  confronto/tracking. I record vecchi senza `metodo` sono "edge".
+- Pagina nascosta di analisi: `<url-app>/?vista=report_analitico_interno` —
+  scarica un JSON con calibrazione per fascia di quota/mercato/lega/numero
+  gambe, confronto fra metodi e la **simulazione virtuale** (1€ fisso su ogni
+  schedina conclusa dalla prima in memoria, bankroll di prova da 10€).
+- Contesto: i dati live (163 gambe) e il backtest (`backtest.py`) non mostrano
+  un vantaggio del modello sul bookmaker; nessun tuning della selezione crea
+  edge dove non c'è. Prima di cambiare strategia guardare il report, non una
+  singola giornata.

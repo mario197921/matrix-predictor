@@ -40,7 +40,8 @@ def get_firestore_client():
 
 
 def salva_schedina(nome: str, data_str: str, selezioni: list,
-                    q_tot: float, prob_tot: float, budget: float) -> bool:
+                    q_tot: float, prob_tot: float, budget: float,
+                    metodo: str = "edge") -> bool:
     """Salva su Firestore la schedina generata (collezione 'schedine').
     Usa come id documento 'data_nome' (es. '2026-08-28_SAFETY'): se l'app
     rigenera le stesse schedine piu' volte nello stesso giorno (Streamlit
@@ -55,7 +56,7 @@ def salva_schedina(nome: str, data_str: str, selezioni: list,
         return False
     try:
         doc_id = f"{data_str}_{nome}"
-        record = costruisci_record_schedina(nome, data_str, selezioni, q_tot, prob_tot, budget)
+        record = costruisci_record_schedina(nome, data_str, selezioni, q_tot, prob_tot, budget, metodo=metodo)
         db.collection("schedine").document(doc_id).set(record, merge=False)
         return True
     except Exception as e:

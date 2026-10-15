@@ -207,7 +207,9 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
                                   ordina_per: str = "edge",
                                   min_prob_congiunta: float = None,
                                   max_prob_congiunta: float = None,
-                                  max_quota_finale: float = None):
+                                  max_quota_finale: float = None,
+                                  solo_edge_positivo: bool = True,
+                                  solo_quote_reali: bool = False):
     """max_instabili: numero massimo di selezioni "instabili" (coppe/playoff/
     inter-lega/squadre con poche partite giocate — vedi flag 'Instabile' in
     app.py) che possono finire nella STESSA schedina combo. In una multipla
@@ -233,7 +235,19 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
     101 con una sola gamba a quota 4). Se impostato, una gamba candidata
     che farebbe superare questo tetto viene scartata (si prova la prossima
     in ordine di edge/prob) invece di essere comunque aggiunta -- cosi' la
-    quota totale finale resta sotto controllo invece di poter esplodere."""
+    quota totale finale resta sotto controllo invece di poter esplodere.
+
+    solo_edge_positivo (default True = comportamento storico): se False la
+    selezione NON filtra piu' sull'edge -- serve per il metodo a "probabilita'
+    pura" (ordina_per="prob"), che sceglie in base a quanto il modello e'
+    sicuro e non a quanto dissente dal prezzo del bookmaker.
+
+    solo_quote_reali (default False): se True scarta le gambe la cui quota e'
+    stata ricostruita dal modello (flag 'Real' assente/False) invece che
+    letta dal bookmaker. Indispensabile quando si toglie il filtro edge:
+    una quota sintetica ha per costruzione edge negativo (margine del 7%) e
+    quindi finora non entrava mai nelle schedine, ma senza il filtro
+    entrerebbe e non sarebbe giocabile su bet365."""
     if escludi_match is None: escludi_match = set()
 
     if ordina_per == "prob_range":
@@ -284,7 +298,8 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
     valid = [x for x in pool
              if min_q <= float(x['Quota']) <= max_q
              and float(x['Quota']) <= max_match_q
-             and float(x.get('Edge', 0)) > 0]   # solo scommesse con edge positivo reale
+             and (not solo_edge_positivo or float(x.get('Edge', 0)) > 0)   # edge positivo reale (metodo storico)
+             and (not solo_quote_reali or bool(x.get('Real', False)))]
     if ordina_per == "prob":
         pool_ord = sorted(valid, key=lambda x: float(x['Prob']), reverse=True)
     else:
@@ -316,7 +331,7 @@ def costruisci_schedina_dinamica(pool: list, min_q: float, max_q: float,
 
 def costruisci_record_schedina(nome: str, data_str: str, selezioni: list,
                                 q_tot: float, prob_tot: float, budget: float,
-                                creato_il: str = None) -> dict:
+                                creato_il: str = None, metodo: str = "edge") -> dict:
     """Funzione pura: prepara il dizionario da salvare su Firestore per una
     schedina generata dall'app. Nessuna chiamata di rete qui -- separata da
     matrix_db.py per essere testabile senza credenziali Firebase.
@@ -333,6 +348,7 @@ def costruisci_record_schedina(nome: str, data_str: str, selezioni: list,
         "quota_totale": round(float(q_tot), 4),
         "probabilita_congiunta": round(float(prob_tot), 4),
         "budget": round(float(budget), 2),
+        "metodo": metodo,   # "edge" (storico) | "prob" (probabilita' pura)
         "selezioni": [
             {
                 "match": s["Match"],
@@ -487,6 +503,128 @@ def _esito_reale_effettivo_record(r: dict):
     return r.get("esito_reale") or r.get("esito")
 
 
+def _metodo_record(r: dict) -> str:
+    """'edge' (storico, anche per i record vecchi senza campo) | 'prob'."""
+    return r.get("metodo") or "edge"
+
+
+def _tier_record(r: dict) -> str:
+    """SAFETY/PERFORMANCE/AZZARDO anche per le schedine del metodo
+    probabilita' (nome con prefisso 'PROB_'); ALTRO per manuali/personali."""
+    nome = str(r.get("nome", ""))
+    if nome.startswith("PROB_"):
+        nome = nome[len("PROB_"):]
+    return nome if nome in ("SAFETY", "PERFORMANCE", "AZZARDO") else "ALTRO"
+
+
+def _chiave_cronologica(r: dict):
+    """Ordine dalla PIU' VECCHIA alla piu' recente. Le bet365 caricate a mano
+    hanno data fittizia 'storico_NN' (date esatte ignote): le mettiamo per
+    prime, in ordine di NN; poi le date vere 'YYYY-MM-DD'."""
+    d = str(r.get("data", ""))
+    if len(d) == 10 and d[4] == "-" and d[7] == "-" and d[:4].isdigit():
+        return (1, d, str(r.get("nome", "")))
+    if d.startswith("storico_") and d[len("storico_"):].isdigit():
+        return (0, f"{int(d[len('storico_'):]):06d}", str(r.get("nome", "")))
+    return (0, d, str(r.get("nome", "")))
+
+
+def simula_bankroll_virtuale(storico: list, puntata: float = 1.0,
+                              bankroll_iniziale: float = 10.0) -> dict:
+    """Funzione pura. Simula uno scommettitore virtuale che, partendo dalla
+    PRIMA schedina in memoria, punta sempre la stessa cifra (default 1€, il
+    minimo di bet365) su OGNI schedina conclusa, seguendo esattamente i tip
+    della Matrix (campo 'esito', mai 'esito_reale') e incassando alla quota
+    totale teorica (quindi senza i bonus bet365). Le schedine ancora in
+    attesa sono escluse.
+
+    Due letture del risultato:
+    - pl_totale: P&L cumulato SENZA limite di bankroll (e' il numero da
+      guardare per giudicare il metodo: ROI per euro puntato).
+    - bankroll_limitato: lo stesso scommettitore ma con un bankroll di
+      partenza reale (default 10€): si ferma alla prima schedina che non
+      riesce piu' a coprire con la puntata -- mostra se e quando il
+      bankroll sarebbe finito.
+    """
+    ordinate = sorted(storico, key=_chiave_cronologica)
+    curva = []
+    per_gruppo = {}
+    n_attesa = n_senza_quota = 0
+    pl_cum = 0.0
+    picco = 0.0
+    max_dd = 0.0
+    bank = float(bankroll_iniziale)
+    fermato_alla = None
+    giocate_bank = 0
+    n_concluse = 0
+
+    for r in ordinate:
+        esito = r.get("esito")
+        if esito not in ("vinta", "persa"):
+            n_attesa += 1
+            continue
+        q = r.get("quota_totale")
+        if not q or float(q) <= 1.0:
+            n_senza_quota += 1
+            continue
+        q = float(q)
+        n_concluse += 1
+        pl = puntata * (q - 1.0) if esito == "vinta" else -puntata
+        pl_cum += pl
+        picco = max(picco, pl_cum)
+        max_dd = max(max_dd, picco - pl_cum)
+
+        tier = _tier_record(r)
+        gruppo = f"{_metodo_record(r)}/{tier}" if tier != "ALTRO" else "manuali_personali"
+        g = per_gruppo.setdefault(gruppo, {"concluse": 0, "vinte": 0, "puntato": 0.0, "pl": 0.0})
+        g["concluse"] += 1
+        g["vinte"] += 1 if esito == "vinta" else 0
+        g["puntato"] += puntata
+        g["pl"] += pl
+
+        if fermato_alla is None:
+            if bank + 1e-9 >= puntata:
+                bank += pl
+                giocate_bank += 1
+            else:
+                fermato_alla = n_concluse
+        curva.append({
+            "n": n_concluse, "data": r.get("data"), "nome": r.get("nome"),
+            "metodo": _metodo_record(r), "quota": round(q, 2), "esito": esito,
+            "pl": round(pl, 2), "pl_cumulato": round(pl_cum, 2),
+            "bankroll_limitato": round(bank, 2),
+        })
+
+    n_vinte = sum(1 for x in curva if x["esito"] == "vinta")
+    puntato_tot = puntata * n_concluse
+    return {
+        "puntata": puntata,
+        "bankroll_iniziale": bankroll_iniziale,
+        "n_schedine_concluse": n_concluse,
+        "n_vinte": n_vinte,
+        "n_perse": n_concluse - n_vinte,
+        "n_in_attesa_escluse": n_attesa,
+        "n_senza_quota_escluse": n_senza_quota,
+        "puntato_totale": round(puntato_tot, 2),
+        "pl_totale": round(pl_cum, 2),
+        "roi_%": round(pl_cum / puntato_tot * 100, 1) if puntato_tot else None,
+        "max_drawdown": round(max_dd, 2),
+        "bankroll_limitato": {
+            "saldo_finale": round(bank, 2),
+            "giocate_effettive": giocate_bank,
+            "fermato_alla_schedina_n": fermato_alla,
+        },
+        "per_gruppo": {
+            k: {"concluse": v["concluse"], "vinte": v["vinte"],
+                "win_rate_%": round(v["vinte"] / v["concluse"] * 100, 1),
+                "puntato": round(v["puntato"], 2), "pl": round(v["pl"], 2),
+                "roi_%": round(v["pl"] / v["puntato"] * 100, 1)}
+            for k, v in per_gruppo.items()
+        },
+        "curva": curva,
+    }
+
+
 def costruisci_report_analitico(storico: list, budget_iniziale: float = 0.0) -> dict:
     """Funzione pura (nessuna chiamata di rete): riceve la lista di schedine
     gia' lette da Firestore (leggi_storico_schedine) e produce un unico
@@ -523,6 +661,7 @@ def costruisci_report_analitico(storico: list, budget_iniziale: float = 0.0) -> 
     lega_stats = {}
     numero_gambe_stats = {}
     tier_stats = {}
+    metodo_stats = {}
     giorno_stats = {}
 
     puntato_reale_tot = 0.0
@@ -551,8 +690,12 @@ def costruisci_report_analitico(storico: list, budget_iniziale: float = 0.0) -> 
         elif esito_calc == "persa": stat_n["perse"] += 1
         else: stat_n["attesa"] += 1
 
-        nome_r = r.get("nome", "")
-        tier = nome_r if nome_r in ("SAFETY", "PERFORMANCE", "AZZARDO") else "ALTRO"
+        tier = _tier_record(r)
+        stat_m = metodo_stats.setdefault(_metodo_record(r) if tier != "ALTRO" else "manuali_personali",
+                                         {"vinte": 0, "perse": 0, "attesa": 0})
+        if esito_calc == "vinta": stat_m["vinte"] += 1
+        elif esito_calc == "persa": stat_m["perse"] += 1
+        else: stat_m["attesa"] += 1
         stat_t = tier_stats.setdefault(tier, {"vinte": 0, "perse": 0, "attesa": 0, "puntato": 0.0, "saldo": 0.0})
         if esito_calc == "vinta": stat_t["vinte"] += 1
         elif esito_calc == "persa": stat_t["perse"] += 1
@@ -601,6 +744,13 @@ def costruisci_report_analitico(storico: list, budget_iniziale: float = 0.0) -> 
                 "puntato_reale": round(v["puntato"], 2), "saldo_reale": round(v["saldo"], 2)}
             for k, v in tier_stats.items()
         },
+        "per_metodo": {
+            k: {**v, "concluse": v["vinte"] + v["perse"],
+                "win_rate_%": round(v["vinte"] / (v["vinte"] + v["perse"]) * 100, 1) if (v["vinte"] + v["perse"]) else None}
+            for k, v in metodo_stats.items()
+        },
+        "simulazione_virtuale": simula_bankroll_virtuale(storico, puntata=1.0,
+                                                 bankroll_iniziale=budget_iniziale if budget_iniziale > 0 else 10.0),
         "andamento_giornaliero": [
             {"data": data, **stat, "saldo": round(stat["saldo"], 2)}
             for data, stat in sorted(giorno_stats.items())
