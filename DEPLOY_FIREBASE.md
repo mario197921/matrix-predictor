@@ -13,7 +13,7 @@ mdc.mtapp.it). Il database Firestore resta quello di sempre.
 ## 1. Container su Cloud Run
 ```
 gcloud auth login
-gcloud config set project <PROJECT_ID>
+gcloud config set project matrix-bet-v90
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
 gcloud run deploy matrix-bet --source . --region europe-west1 --allow-unauthenticated ^
   --memory 1Gi --min-instances 0 --max-instances 1 --timeout 3600 --session-affinity ^
@@ -30,10 +30,10 @@ gcloud run deploy matrix-bet --source . --region europe-west1 --allow-unauthenti
 
 ## 2. Firebase Hosting davanti al servizio
 ```
-firebase use <PROJECT_ID>
+firebase use matrix-bet-v90
 firebase deploy --only hosting
 ```
-Apri l'indirizzo `https://<PROJECT_ID>.web.app`.
+Apri l'indirizzo `https://matrix-bet-v90.web.app`.
 
 **Controllo WebSocket (importante):** Streamlit funziona solo con i WebSocket e
 non ho potuto verificare che Firebase Hosting li inoltri. Se la pagina resta su
