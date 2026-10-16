@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Matrix Bet V90</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="css/matrix.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="login" class="login hidden">
+    <div class="login-box">
+      <div class="sidebar-logo-title">MATRIX BET V90</div>
+      <div class="sidebar-logo-sub">Predictive Analytics Engine</div>
+      <button id="btn-login" class="btn">Accedi con Google</button>
+      <div id="login-msg" class="muted small"></div>
+    </div>
+  </div>
+
+  <div id="app" class="hidden">
+    <aside id="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-title">MATRIX BET V90</div>
+        <div class="sidebar-logo-sub">Predictive Analytics Engine</div>
+      </div>
+      <label class="lbl">📅 Periodo di analisi</label>
+      <div class="row2"><input type="date" id="data-da"><input type="date" id="data-a"></div>
+      <label class="lbl">💰 Budget (€)</label>
+      <input type="number" id="budget" min="5" step="5" value="50">
+      <div class="row2">
+        <button class="btn btn-sec" id="btn-reset" title="Svuota memoria V90 (hard reset)">🗑️ Reset</button>
+        <button class="btn btn-sec" id="btn-scan" title="Trova campionati attivi nel periodo">🔍 Scansiona</button>
+      </div>
+      <details id="filtri" class="exp"><summary>🎯 Filtri &amp; Campionati</summary>
+        <div class="exp-body">
+          <div class="lbl">Affidabilità dati</div>
+          <div id="filtro-aff" class="checks"></div>
+          <div class="lbl">Campionati <a href="#" id="sel-tutti">tutti</a> · <a href="#" id="sel-nessuno">nessuno</a></div>
+          <div id="lista-leghe" class="checks scroll"></div>
+        </div>
+      </details>
+      <div id="conta-leghe" class="muted small"></div>
+      <button class="btn" id="btn-genera">⚡ ESTRAI MATRIX V90</button>
+      <div id="progresso" class="progress hidden"><div class="progress-bar"></div><div class="progress-txt"></div></div>
+      <div class="sidebar-foot">
+        <span id="utente" class="muted small"></span>
+        <a href="#" id="btn-esci" class="small">Esci</a>
+      </div>
+    </aside>
+
+    <main id="main">
+      <div id="avvisi"></div>
+      <div id="vista-principale">
+        <h1>🎯 Matrix Bet V90</h1>
+        <div id="box-oggi"></div>
+        <div id="box-storico"></div>
+        <hr>
+        <div id="box-estrazione"></div>
+      </div>
+      <div id="vista-report" class="hidden"></div>
+    </main>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="/__/firebase/init.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

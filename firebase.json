@@ -1,9 +1,16 @@
 {
   "hosting": {
-    "public": "hosting_public",
+    "public": "web",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
-      { "source": "**", "run": { "serviceId": "matrix-bet", "region": "europe-west1" } }
+      { "source": "/api/**", "function": { "functionId": "api", "region": "europe-west1" } }
+    ],
+    "headers": [
+      { "source": "**/*.@(js|css|html)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
     ]
-  }
+  },
+  "functions": [
+    { "source": "functions", "codebase": "default", "ignore": ["node_modules", ".git"] }
+  ],
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" }
 }

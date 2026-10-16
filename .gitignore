@@ -38,3 +38,6 @@ Matrix_*.txt
 # ── Backtest: CSV storici scaricati (voluminosi, rigenerabili) e risultati ────
 backtest_data/*.csv
 backtest_risultati.csv
+node_modules/
+functions/node_modules/
+.firebase/
