@@ -1,3 +1,5 @@
+import hmac
+import os
 import streamlit as st
 import requests
 import math
@@ -746,6 +748,26 @@ from matrix_db import (
 # guadagno/perdita netta -- fisso qui perche' non cambia mai a meno di
 # aggiungere altri soldi al conto, nel qual caso va aggiornato a mano.
 BUDGET_INIZIALE = 10.0
+
+# ==========================================
+# 🔑 PASSWORD OPZIONALE: se e' impostata MATRIX_PASSWORD (variabile d'ambiente
+# o secret) l'intera app, pagina nascosta compresa, chiede la password prima
+# di mostrare qualsiasi cosa. Se non e' impostata (es. oggi su Streamlit
+# Cloud) non cambia nulla. Utile quando l'app e' raggiungibile da un dominio
+# pubblico e mostra i tuoi dati di gioco.
+# ==========================================
+try:
+    _password_app = os.getenv("MATRIX_PASSWORD") or st.secrets.get("MATRIX_PASSWORD", "")
+except Exception:
+    _password_app = os.getenv("MATRIX_PASSWORD", "")
+if _password_app and not st.session_state.get("_auth_ok"):
+    _pw_inserita = st.text_input("🔑 Password", type="password")
+    if _pw_inserita and hmac.compare_digest(_pw_inserita.encode(), str(_password_app).encode()):
+        st.session_state["_auth_ok"] = True
+        st.rerun()
+    elif _pw_inserita:
+        st.error("Password errata.")
+    st.stop()
 
 # ==========================================
 # 🔒 PAGINA NASCOSTA: REPORT ANALITICO (per l'analisi strategica, non per

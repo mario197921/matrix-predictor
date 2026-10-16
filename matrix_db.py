@@ -24,14 +24,23 @@ from matrix_api import scarica_risultato_partita
 def get_firestore_client():
     """Inizializza (una sola volta per sessione, grazie alla cache di
     Streamlit) la connessione a Firestore usando le credenziali del service
-    account salvate in st.secrets['firebase']. Ritorna None se le credenziali
-    non sono configurate o la connessione fallisce (errore stampato su
+    account salvate in st.secrets['firebase'] (oppure, se assenti, le
+    Application Default Credentials del servizio su cui gira l'app). Ritorna
+    None se le credenziali non sono configurate o la connessione fallisce (errore stampato su
     stderr per diagnosi)."""
     try:
         if not firebase_admin._apps:
-            cred_dict = dict(st.secrets["firebase"])
-            cred = credentials.Certificate(cred_dict)
-            firebase_admin.initialize_app(cred)
+            try:
+                cred_dict = dict(st.secrets["firebase"])
+            except Exception:
+                cred_dict = None
+            if cred_dict:
+                firebase_admin.initialize_app(credentials.Certificate(cred_dict))
+            else:
+                # Nessuna chiave nei secrets (es. app su Cloud Run): usa le
+                # credenziali del service account assegnato al servizio
+                # (Application Default Credentials), senza chiavi in giro.
+                firebase_admin.initialize_app()
         return firestore.client()
     except Exception as e:
         print(f"[matrix_db] Impossibile connettersi a Firestore: {type(e).__name__}: {e}",

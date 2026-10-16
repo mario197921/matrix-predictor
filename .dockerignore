@@ -1,0 +1,12 @@
+.git
+.venv
+.env
+.env.*
+.streamlit/secrets.toml
+*firebase-adminsdk*.json
+__pycache__
+.pytest_cache
+backtest_data
+backtest_risultati.csv
+hosting_public
+.devcontainer

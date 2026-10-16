@@ -1,0 +1,9 @@
+{
+  "hosting": {
+    "public": "hosting_public",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "**", "run": { "serviceId": "matrix-bet", "region": "europe-west1" } }
+    ]
+  }
+}
