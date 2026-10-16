@@ -1,1 +1,0 @@
-Matrix Bet: l'app e' servita da Cloud Run tramite Firebase Hosting.
